@@ -93,7 +93,12 @@ function cliCommand() {
 // Child processes and terminals see the bundled CLI as `video-agent`, so agents and shells can run it too.
 function childEnv(extra = {}) {
   const env = { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1', ...extra };
-  if (bundledCli()) env.PATH = `${path.dirname(bundledCli())};${env.PATH || env.Path || ''}`;
+  if (bundledCli()) {
+    // The copy is a plain object with Windows' own spelling (usually `Path`); adding `PATH` beside it would give the
+    // child two entries, and node-pty's terminal would read the old one.
+    const key = Object.keys(env).find((name) => name.toUpperCase() === 'PATH') || 'PATH';
+    env[key] = `${path.dirname(bundledCli())};${env[key] || ''}`;
+  }
   return env;
 }
 
