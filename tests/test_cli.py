@@ -124,6 +124,8 @@ def test_download_saves_subtitles_and_passes_cookies(fake_yt_dlp, tmp_path, monk
   command = next(command for command in seen if '--no-simulate' in command)  # run() goes through Popen as well
   assert command[command.index('--sub-langs') + 1] == 'all,-danmaku,-live_chat'
   assert command[command.index('--cookies') + 1] == str(cookies.resolve())
+  fixes = [command[index + 2 : index + 4] for index, arg in enumerate(command) if arg == '--replace-in-metadata']
+  assert fixes == [['/', '／'], ['\\\\', '＼']]  # a regex for one backslash
 
   with pytest.raises(download.DownloadError):
     download.download_urls(['https://example.com/video'], tmp_path / 'out', cookies_path=tmp_path / 'missing.txt')

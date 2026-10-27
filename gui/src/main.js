@@ -59,6 +59,7 @@ function defaults() {
     checkUpdates: true,
     updateMirror: '',
     limits: DEFAULT_LIMITS, // tasks of each kind that may run at once (see tasks.js)
+    processAfterDownload: true, // downloaded files are processed, so their subtitles are imported at once
   };
 }
 
