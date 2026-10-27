@@ -314,7 +314,9 @@ function renderProcess(video) {
       const source = sources[transcript.source] || transcript.source.replace(/^sidecar:/, '字幕文件：').replace(/^embedded:/, '内嵌字幕：');
       facts.push(['字幕', `${transcript.segments} 段 · ${source}`]);
       if (transcript.error) facts.push(['字幕问题', transcript.error]);
-      facts.push(['代表画面', `${manifest.representative_frames.length} 张，补截 ${info.extra_frames.length} 张`]);
+      if (manifest.layout) facts.push(['布局', LAYOUT_TEXT[manifest.layout.kind] + (manifest.layout.given ? '（手动指定）' : '')]);
+      if (manifest.screen_pages) facts.push(['屏幕页', `${manifest.screen_pages.length} 页`]);
+      facts.push(['整幅画面', `${manifest.representative_frames.length} 张，补截 ${info.extra_frames.length} 张`]);
       if (manifest.slide_extraction.enabled) facts.push(['PPT', `${manifest.slide_extraction.slides.length} 张`]);
       facts.push(['总结', info.summary ? '已生成' : '还没有']);
       facts.push(['处理结果', info.folder, 'wide']);
@@ -322,6 +324,7 @@ function renderProcess(video) {
     $('process-state').textContent = info.processed ? '已处理过；再次处理会重新抽取画面，已有字幕保留。' : '';
     $('run-process').textContent = info.processed ? '重新处理' : '开始处理';
   }
+  renderLayout(video);
   $('facts').replaceChildren(
     ...facts.map(([label, value, size]) =>
       element('div', { className: 'fact' + (size ? ' ' + size : '') }, [
@@ -332,7 +335,61 @@ function renderProcess(video) {
   );
 }
 
-$('run-process').onclick = async () => {
+// ---------- layout ----------
+// The CLI finds the screen region; when it is wrong the user drags the right one on the layout picture.
+
+const LAYOUT_TEXT = { screen: '整个画面是屏幕', split: '屏幕和摄像头分开', inset: '屏幕里嵌着摄像头', camera: '只有摄像头，没有屏幕页' };
+
+function renderLayout(video) {
+  const found = video.info?.manifest?.layout;
+  $('layout-card').hidden = !found?.picture;
+  if (!found?.picture) return;
+  const [width, height] = found.size;
+  const where = found.screen && found.kind !== 'camera' ? `屏幕区域 ${found.screen[2]}×${found.screen[3]}，位于 ${found.screen[0]},${found.screen[1]}` : '';
+  $('layout-text').textContent = `${LAYOUT_TEXT[found.kind]}。${where}（画面 ${width}×${height}）。绿框是屏幕区域，红框是摄像头。认错了就在图上拖出屏幕那块，再重新处理。`;
+  $('layout-image').src = fileUrl(joinPath(video.info.folder, found.picture));
+  $('layout-box').hidden = true;
+  $('layout-region').value = found.screen && found.kind !== 'camera' ? found.screen.join(',') : '';
+}
+
+// Dragging works in the picture's own pixels, which are the video's.
+(() => {
+  const image = $('layout-image');
+  let start = null;
+  const point = (event) => {
+    const box = image.getBoundingClientRect();
+    const scale = image.naturalWidth / box.width;
+    const clamp = (value, limit) => Math.max(0, Math.min(limit, Math.round(value * scale)));
+    return { x: clamp(event.clientX - box.left, image.naturalWidth), y: clamp(event.clientY - box.top, image.naturalHeight), scale };
+  };
+  const draw = (a, b) => {
+    const [x, y, w, h] = [Math.min(a.x, b.x), Math.min(a.y, b.y), Math.abs(a.x - b.x), Math.abs(a.y - b.y)];
+    Object.assign($('layout-box').style, { left: `${x / a.scale}px`, top: `${y / a.scale}px`, width: `${w / a.scale}px`, height: `${h / a.scale}px` });
+    $('layout-box').hidden = false;
+    return [x, y, w, h];
+  };
+  image.addEventListener('mousedown', (event) => {
+    event.preventDefault();
+    start = point(event);
+  });
+  window.addEventListener('mousemove', (event) => start && draw(start, point(event)));
+  window.addEventListener('mouseup', (event) => {
+    if (!start) return;
+    const [x, y, w, h] = draw(start, point(event));
+    start = null;
+    if (w > 8 && h > 8) $('layout-region').value = [x, y, w, h].join(',');
+  });
+})();
+
+$('layout-apply').onclick = () => {
+  const region = $('layout-region').value.replace(/\s+/g, '');
+  if (!/^\d+,\d+,\d+,\d+$/.test(region)) return alert('屏幕区域要写成 x,y,宽,高 四个整数，或者在图上拖出来。');
+  startProcess({ screenRegion: region });
+};
+
+$('run-process').onclick = () => startProcess();
+
+async function startProcess(extra = {}) {
   const video = current();
   const interval = Number($('opt-interval').value) || 60;
   const maxFrames = Number($('opt-max-frames').value) || null; // empty: as many as the video has
@@ -345,9 +402,10 @@ $('run-process').onclick = async () => {
     maxFrames,
     bcut: $('opt-bcut').checked,
     slides: $('opt-slides').checked,
+    ...extra,
   });
   if (added) $('opt-bcut').checked = false; // consent covers one run only
-};
+}
 
 async function renderTranscript(video) {
   const box = $('transcript');
@@ -373,9 +431,25 @@ async function renderTranscript(video) {
 }
 $('transcript-filter').oninput = () => renderTranscript(current());
 
+function frameCard(item) {
+  const card = element('div', { className: 'frame' + (item.extra ? ' extra' : '') }, [
+    element('img', { src: fileUrl(item.file), alt: '', loading: 'lazy' }),
+    element('div', { textContent: clock(item.time) }),
+  ]);
+  card.onclick = () => showImage(item.file, clock(item.time));
+  return card;
+}
+
 function renderFrames(video) {
   const box = $('frames');
   const manifest = video.info?.manifest;
+  const pages = manifest?.screen_pages || [];
+  $('pages-title').hidden = !pages.length;
+  $('pages-title').textContent = `屏幕页（${pages.length}）`;
+  $('pages').replaceChildren(
+    ...pages.map((page) => frameCard({ time: page.time_s, file: joinPath(video.info.folder, page.path) })),
+  );
+  $('frames-title').hidden = !manifest;
   if (!manifest) {
     box.replaceChildren(element('p', { className: 'muted', textContent: '还没有画面。先在「处理」里处理这个视频。' }));
     return;
@@ -390,16 +464,8 @@ function renderFrames(video) {
     if (match) items.push({ time: +match[1] * 3600 + +match[2] * 60 + +match[3], file, extra: true });
   }
   items.sort((a, b) => a.time - b.time);
-  box.replaceChildren(
-    ...items.map((item) => {
-      const card = element('div', { className: 'frame' + (item.extra ? ' extra' : '') }, [
-        element('img', { src: fileUrl(item.file), alt: '' }),
-        element('div', { textContent: clock(item.time) }),
-      ]);
-      card.onclick = () => showImage(item.file, clock(item.time));
-      return card;
-    }),
-  );
+  $('frames-title').textContent = `整幅画面（${items.length}）`;
+  box.replaceChildren(...items.map(frameCard));
 }
 
 $('frame-form').onsubmit = (event) => {

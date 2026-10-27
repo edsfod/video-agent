@@ -355,6 +355,34 @@ def merge_similar(pages, work_dir):
   return merged
 
 
+# Contact sheets of screen pages for models and chat AIs that take a limited number of images. Anthropic scales larger
+# images down to about this width, so the tiles stay near the size of a typical screen region.
+SHEET_WIDTH = 1568
+
+
+def sheets(paths, side, output_dir, width=SHEET_WIDTH):
+  """Pictures with `side` x `side` pages each, left to right then top to bottom; the last may have blank cells."""
+  output_dir = Path(output_dir)
+  output_dir.mkdir(parents=True, exist_ok=True)
+  listing = output_dir / 'sheets.txt'
+  listing.write_text(''.join(f"file '{Path(path).as_posix()}'\n" for path in paths), encoding='utf-8')
+  tile = (width - 6 * (side + 1)) // side // 2 * 2
+  graph = f'scale={tile}:-2,tile={side}x{side}:padding=6:margin=6:color=white'
+  command = [tool('ffmpeg'), '-y', '-v', 'error', '-f', 'concat', '-safe', '0', '-i', str(listing)]
+  result = subprocess.run(
+    [*command, '-vf', graph, '-q:v', '3', str(output_dir / 'sheet-%03d.jpg')],
+    capture_output=True,
+    text=True,
+    encoding='utf-8',
+    errors='replace',
+    check=False,
+  )
+  found = sorted(output_dir.glob('sheet-*.jpg'))
+  if result.returncode or len(found) != -(-len(paths) // (side * side)):
+    raise MediaError(f'FFmpeg could not make contact sheets: {result.stderr.strip() or result.returncode}')
+  return found
+
+
 def layout_picture(video, second, layout, output):
   """A frame with the screen region outlined in green and the camera picture in red, to check the layout."""
   boxes = [(layout.screen, 'green'), (layout.camera, 'red')]

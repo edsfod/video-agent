@@ -80,6 +80,18 @@
               </div>
             </div>
             <div id="facts" class="facts"></div>
+            <div id="layout-card" class="card layout-card" hidden>
+              <h2>画面布局</h2>
+              <p id="layout-text" class="muted"></p>
+              <div class="layout-view">
+                <img id="layout-image" alt="识别出的布局：绿框是屏幕区域，红框是摄像头" draggable="false" />
+                <div id="layout-box" class="layout-box" hidden></div>
+              </div>
+              <div class="row">
+                <label class="grow">屏幕区域（x,y,宽,高，像素）<input id="layout-region" type="text" spellcheck="false" placeholder="在上面的图上拖出屏幕区域" /></label>
+                <button id="layout-apply">用这个区域重新处理</button>
+              </div>
+            </div>
           </div>
 
           <div class="panel" data-panel="transcript" hidden>
@@ -94,8 +106,11 @@
             <form id="frame-form" class="toolbar">
               <input id="frame-times" type="text" placeholder="补截画面的时间，如 1:10 4:49" />
               <button type="submit">截取</button>
-              <span class="muted">代表画面按间隔和场景变化抽取；需要时按时间补截。</span>
+              <span class="muted">屏幕页是屏幕区域里出现过的每一页；整幅画面按间隔和场景变化抽取，需要时按时间补截。</span>
             </form>
+            <h3 id="pages-title" class="frames-title" hidden></h3>
+            <div id="pages" class="frames pages"></div>
+            <h3 id="frames-title" class="frames-title">整幅画面</h3>
             <div id="frames" class="frames"></div>
           </div>
 

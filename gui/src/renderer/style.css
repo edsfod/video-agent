@@ -181,6 +181,12 @@ main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 .frame img { width: 100%; display: block; aspect-ratio: 16 / 9; object-fit: cover; background: #000; }
 .frame div { padding: 4px 10px; font-family: var(--mono); font-size: 12px; color: var(--text-muted); }
 .frame.extra div::after { content: ' · 补截'; font-family: inherit; }
+.frames-title { font-size: 13px; color: var(--text-muted); margin: 16px 0 8px; font-weight: 600; }
+.pages .frame img { object-fit: contain; }
+.layout-card { margin-top: 12px; }
+.layout-view { position: relative; display: inline-block; max-width: 100%; cursor: crosshair; user-select: none; }
+.layout-view img { display: block; max-width: 100%; }
+.layout-box { position: absolute; border: 2px dashed #f5c518; background: rgba(245, 197, 24, 0.15); pointer-events: none; }
 
 .routes { display: flex; gap: 18px; flex-wrap: wrap; margin-bottom: 4px; }
 .routes label { display: flex; gap: 6px; align-items: center; cursor: pointer; }

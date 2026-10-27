@@ -210,6 +210,7 @@ function cliArgs(task) {
       if (task.maxFrames) args.push('--max-frames', String(task.maxFrames));
       if (task.bcut) args.push('--asr', 'bcut', '--allow-remote-asr'); // consent given for this one task
       if (task.slides) args.push('--extract-slides');
+      if (task.screenRegion) args.push('--screen-region', task.screenRegion);
       return args;
     }
     case 'frame':

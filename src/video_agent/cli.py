@@ -142,7 +142,10 @@ def build_parser():
   summarize.add_argument('--base-url', help='API base URL, such as http://127.0.0.1:11434/v1 for Ollama')
   summarize.add_argument('--request', default='', help="the user's wishes for this summary, passed to the model")
   summarize.add_argument(
-    '--max-images', type=positive_int, default=40, help='frames sent with the first request (default: 40)'
+    '--max-images',
+    type=positive_int,
+    default=60,
+    help='images sent with the first request; screen pages go on contact sheets when they need more (default: 60)',
   )
   summarize.add_argument(
     '--max-extra-frames',
@@ -172,7 +175,12 @@ def build_parser():
   )
   packing.add_argument('--request', default='', help="the user's wishes for this summary")
   packing.add_argument('--zip', type=Path, help='write 提示词.md and the frames into this zip file')
-  packing.add_argument('--max-images', type=positive_int, default=40, help='frames put into the zip (default: 40)')
+  packing.add_argument(
+    '--max-images',
+    type=positive_int,
+    default=40,
+    help='whole frames put into the zip besides every screen page (default: 40)',
+  )
 
   config = commands.add_parser('config', help='show or change the summarize provider, model, base URL and API key')
   config.add_argument('--provider', choices=tuple(settings.PROVIDERS), help='choose the provider to use and edit')
@@ -328,7 +336,7 @@ def run(args):
   if args.command == 'pack':
     if args.zip:
       target, count = pack(args.video, args.output, args.zip, request=args.request, max_images=args.max_images)
-      print(f'{target} ({count} frames)')
+      print(f'{target} ({count} pictures)')
     else:
       sys.stdout.write(material(args.video, args.output, request=args.request)[0])
     return 0

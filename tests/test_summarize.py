@@ -7,7 +7,7 @@ import zipfile
 import pytest
 
 from video_agent.processor import asset_folder, process_video
-from video_agent.summarize import SummaryError, summarize_video, template, video_line
+from video_agent.summarize import SummaryError, evidence_images, summarize_video, template, video_line
 
 SUMMARY = '# 测试视频\n\n## 概要\n\n一段测试视频，`00:00:03` 展示图表。[画面](frames/extra/frame-00-00-03.jpg)\n'
 
@@ -177,10 +177,17 @@ def test_pack_zips_the_prompt_with_frames_at_their_folder_paths(processed, capsy
   with zipfile.ZipFile(target) as archive:
     names = archive.namelist()
     prompt = archive.read('提示词.md').decode('utf-8')
-  frames = [name for name in names if name != '提示词.md']
+  manifest = json.loads((asset / 'manifest.json').read_text(encoding='utf-8'))
+  pages = [page['path'] for page in manifest['screen_pages']]
+  sheets = [name for name in names if name.startswith('总图/')]
+  frames = [name for name in names if name != '提示词.md' and name not in sheets]
+  assert pages and set(pages) <= set(frames), 'every screen page goes into the zip'
   assert 'frames/extra/frame-00-00-03.jpg' in frames
   assert all((asset / name).is_file() for name in frames), 'zip paths are the folder paths the evidence links'
-  assert f'附上了这个视频的 {len(frames)} 张画面' in prompt
+  assert f'附上了这个视频的 {len(pages)} 张屏幕页' in prompt
+  assert sheets == [f'总图/总图-{index:03d}.jpg' for index in range(1, -(-len(pages) // 4) + 1)]
+  first = manifest['screen_pages'][0]
+  assert f'- 总图/总图-001.jpg：00:00:{round(first["time_s"]):02d} {first["path"]}' in prompt
   assert '我的要求：写短一点' in prompt
   assert '「视频」那一行的开头照抄：视频：sample clip [test] · [打开视频]' in prompt
   assert '我们看看这张图表' in prompt and '# Writing a video summary' in prompt
@@ -188,3 +195,38 @@ def test_pack_zips_the_prompt_with_frames_at_their_folder_paths(processed, capsy
   capsys.readouterr()
   assert cli.main(['pack', str(video), '-o', str(workspace)]) == 0
   assert '这次没有附上画面' in capsys.readouterr().out
+
+
+def test_screen_pages_go_on_contact_sheets_when_they_exceed_the_budget(tmp_path):
+  import subprocess
+
+  from video_agent import media
+
+  screen = tmp_path / 'frames' / 'run' / 'screen'
+  screen.mkdir(parents=True)
+  subprocess.run(
+    [
+      media.tool('ffmpeg'),
+      '-v',
+      'error',
+      '-f',
+      'lavfi',
+      '-i',
+      'testsrc=s=320x180:r=1:d=30',
+      str(screen / 'p-%03d.jpg'),
+    ],
+    check=True,
+  )
+  pages = [{'time_s': float(index * 10), 'path': f'frames/run/screen/p-{index + 1:03d}.jpg'} for index in range(30)]
+  manifest = {'screen_pages': pages, 'representative_frames': []}
+
+  alone, dropped = evidence_images(tmp_path, manifest, 40, tmp_path / 'a')
+  assert len(alone) == 30 and dropped == 0 and alone[0][0].startswith('Screen page at 00:00:00')
+
+  sheets, dropped = evidence_images(tmp_path, manifest, 12, tmp_path / 'b')
+  assert len(sheets) == 8 and dropped == 0
+  assert sheets[0][0].startswith('Screen pages 1-4 on one sheet, 2 per row')
+  assert sheets[-1][0].startswith('Screen pages 29-30 on one sheet')
+
+  squeezed, dropped = evidence_images(tmp_path, manifest, 3, tmp_path / 'c')
+  assert len(squeezed) == 3 and dropped == 3 and '3 per row' in squeezed[0][0]

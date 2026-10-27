@@ -1,12 +1,15 @@
 """Write 总结.md from a processed video's evidence with a model API; the Agent skill is the other route.
 
-The model sees the transcript and the representative frames. Where the provider supports tool calling it can ask for
-more frames: the `frame` tool saves one into `frames/extra/` and sends the image back, up to a limit.
+The model sees the transcript, every screen page and the representative frames, within an image budget: pages go one
+per image, or several on a contact sheet when there are too many. Where the provider supports tool calling it can ask
+for more frames: the `frame` tool saves one into `frames/extra/` and sends the image back, up to a limit.
 """
 
 import base64
 import json
+import math
 import re
+import tempfile
 import zipfile
 from importlib import resources
 from pathlib import Path
@@ -85,6 +88,41 @@ def _evidence_frames(asset, manifest, limit):
     step = len(frames) / limit
     frames = [frames[int(index * step)] for index in range(limit)]
   return frames
+
+
+SHEET_SIDES = (1, 2, 3)  # pages per row on a contact sheet; 1 sends each page alone
+MIN_FRAMES = 8  # representative frames kept beside the pages, for the speaker and the room
+
+
+def evidence_images(asset, manifest, budget, work_dir):
+  """(label, file) pairs within `budget` images: every screen page, alone or on 2x2 or 3x3 contact sheets when
+  there are too many, then representative and extra frames in the room left (at least MIN_FRAMES where there are).
+  Pages are dropped, evenly, only when even 3x3 sheets do not fit. Returns the pairs and the number of pages left out."""
+  pages = [(item['time_s'], item['path']) for item in manifest.get('screen_pages') or []]
+  frames = _evidence_frames(asset, manifest, 10**6)
+  room = max(1, budget - min(len(frames), MIN_FRAMES))
+  side = next((value for value in SHEET_SIDES if math.ceil(len(pages) / value**2) <= room), SHEET_SIDES[-1])
+  per = side * side
+  dropped = 0
+  if math.ceil(len(pages) / per) > room:
+    dropped = len(pages) - room * per
+    step = len(pages) / (room * per)
+    pages = [pages[int(index * step)] for index in range(room * per)]
+  images = []
+  if side == 1:
+    images = [(f'Screen page at {_clock(second)}, file {relative}:', asset / relative) for second, relative in pages]
+  elif pages:
+    for index, sheet in enumerate(media.sheets([asset / relative for _, relative in pages], side, work_dir)):
+      group = pages[index * per : (index + 1) * per]
+      listing = '; '.join(f'{_clock(second)} {relative}' for second, relative in group)
+      first, last = index * per + 1, index * per + len(group)
+      label = f'Screen pages {first}-{last} on one sheet, {side} per row, left to right then top to bottom: {listing}'
+      images.append((label, sheet))
+  left = max(0, budget - len(images))
+  if len(frames) > left:
+    frames = [frames[int(index * len(frames) / left)] for index in range(left)] if left else []
+  images += [(f'Frame at {_clock(second)}, file {relative}:', asset / relative) for second, relative in frames]
+  return images, dropped
 
 
 class _Tools:
@@ -231,7 +269,7 @@ def summarize_video(
   key,
   *,
   request='',
-  max_images=40,
+  max_images=60,
   max_extra_frames=8,
   use_tools=True,
   overwrite=False,
@@ -259,8 +297,18 @@ def _summarize_locked(
     raise SummaryError(f'{target} already exists; pass --overwrite to replace it')
   manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
 
-  frames = _evidence_frames(asset, manifest, max_images)
-  images = [(f'Frame at {_clock(second)}, file {relative}:', asset / relative) for second, relative in frames]
+  with tempfile.TemporaryDirectory(prefix='video-agent-') as work_dir:
+    images, dropped = evidence_images(asset, manifest, max_images, Path(work_dir))
+    if dropped:
+      status(
+        f'{video.name}: {dropped} screen pages do not fit in {max_images} images even on sheets; pass --max-images'
+      )
+    return _ask(
+      video, info, asset, config, key, request, images, max_extra_frames, use_tools, context_path, target, status
+    )
+
+
+def _ask(video, info, asset, config, key, request, images, max_extra_frames, use_tools, context_path, target, status):
   tools = _Tools(video, asset, media.duration(info), max_extra_frames, status) if use_tools else None
   intro = '\n\n'.join(
     part
@@ -272,14 +320,14 @@ def _summarize_locked(
       ),
       _TOOL_HINT if tools else '',
       f'The user asked: {request}' if request else '',
-      'The evidence prepared by Video Agent follows: summary-context.md, then the frames.',
+      'The evidence prepared by Video Agent follows: summary-context.md, then the screen pages and the frames.',
       context_path.read_text(encoding='utf-8'),
     )
     if part
   )
 
   status(
-    f'{video.name}: asking {config["provider"]} model {config["model"]} with {len(images)} frames'
+    f'{video.name}: asking {config["provider"]} model {config["model"]} with {len(images)} images'
     + ('' if use_tools else ' (no tool calling)')
   )
   call = _anthropic if config['provider'] == 'anthropic' else _openai
@@ -316,25 +364,45 @@ def import_summary(video, workspace, text, *, overwrite=False):
 PROMPT_NAME = '提示词.md'
 
 
-def material(video, workspace, *, request='', max_images=40, with_images=False):
-  """The prompt for a chat AI: rules, template and the evidence. Returns it with the frames that go along when
-  `with_images` (relative path, file); they keep their paths from the video's folder, so the links the AI writes from
-  the evidence still work once its summary is imported there."""
+SHEET_FOLDER = '总图'
+
+
+def material(video, workspace, *, request='', max_images=40, work_dir=None):
+  """The prompt for a chat AI: rules, template and the evidence. With `work_dir`, also the files that go along as
+  (path in the zip, file): every screen page and up to `max_images` other frames, at their paths in the video's folder
+  (so links written from the evidence still work once the summary is imported there), and 2x2 contact sheets of the
+  pages in SHEET_FOLDER for chat AIs that take few images."""
   video, info, asset, manifest = _processed(video, workspace)
-  frames = [(relative, asset / relative) for _, relative in _evidence_frames(asset, manifest, max_images)]
-  if with_images:
-    note = (
-      f'我附上了这个视频的 {len(frames)} 张画面，文件名里带时间点。下面材料引用画面时写的是 frames/… 的相对路径：'
-      '看图时按文件名对应，写总结时照材料里的相对路径链接画面，不要只写文件名。没有附上的画面不要链接。'
-    )
+  pages = [(item['time_s'], item['path']) for item in manifest.get('screen_pages') or []]
+  frames = _evidence_frames(asset, manifest, max_images)
+  entries, notes = [], []
+  if work_dir is None:
+    notes.append('这次没有附上画面，材料里列出的屏幕页和画面你看不到：不要描述画面内容，也不要链接画面。')
   else:
-    note = '这次没有附上画面，材料里列出的画面你看不到：不要描述画面内容，也不要链接画面。'
+    entries = [(relative, asset / relative) for _, relative in pages + frames]
+    notes.append(
+      f'我附上了这个视频的 {len(pages)} 张屏幕页（幻灯片、代码、文档，每页一张）和 {len(frames)} 张整幅画面，'
+      '文件名里带时间点。下面材料引用它们时写的是 frames/… 的相对路径：看图时按文件名对应，写总结时照材料里的相对'
+      '路径链接，不要只写文件名。没有附上的画面不要链接。'
+    )
+    if pages:
+      sheets = media.sheets([asset / relative for _, relative in pages], 2, Path(work_dir))
+      lines = []
+      for index, sheet in enumerate(sheets, 1):
+        name = f'{SHEET_FOLDER}/{SHEET_FOLDER}-{index:03d}.jpg'
+        entries.append((name, sheet))
+        group = pages[(index - 1) * 4 : index * 4]
+        lines.append(f'- {name}：' + '、'.join(f'{_clock(second)} {relative}' for second, relative in group))
+      notes.append(
+        f'如果一次收不了这么多图片，就看 {SHEET_FOLDER}/ 里的 {len(sheets)} 张总图：每张拼了 4 页屏幕页，从左到右、'
+        '从上到下，对应下表。链接时仍写原来的屏幕页路径。\n\n' + '\n'.join(lines)
+      )
   text = '\n\n'.join(
     part
     for part in (
       f'请按下面的规则和模板，为这个视频写 {SUMMARY_NAME}（Markdown）。只输出文件内容，前后不要加说明。',
       f'我的要求：{request}' if request else '',
-      note,
+      *notes,
       f'「视频」那一行的开头照抄：{video_line(video, media.duration(info))}',
       template(),
       '---',
@@ -342,21 +410,23 @@ def material(video, workspace, *, request='', max_images=40, with_images=False):
     )
     if part
   )
-  return text, (frames if with_images else [])
+  return text, entries
 
 
 def pack(video, workspace, target, *, request='', max_images=40):
-  """Writes a zip with 提示词.md and the frames, for chat AIs that take files. Returns the zip and the frame count."""
-  text, frames = material(video, workspace, request=request, max_images=max_images, with_images=True)
+  """Writes a zip with 提示词.md, the screen pages, frames and contact sheets, for chat AIs that take files. Returns
+  the zip and the number of pictures in it."""
   target = Path(target)
   target.parent.mkdir(parents=True, exist_ok=True)
   temporary = files.temporary_beside(target)
   try:
-    with zipfile.ZipFile(temporary, 'w') as archive:
-      archive.writestr(PROMPT_NAME, text, compress_type=zipfile.ZIP_DEFLATED)
-      for relative, path in frames:
-        archive.write(path, relative)  # JPEG does not compress further
+    with tempfile.TemporaryDirectory(prefix='video-agent-') as work_dir:
+      text, entries = material(video, workspace, request=request, max_images=max_images, work_dir=work_dir)
+      with zipfile.ZipFile(temporary, 'w') as archive:
+        archive.writestr(PROMPT_NAME, text, compress_type=zipfile.ZIP_DEFLATED)
+        for name, path in entries:
+          archive.write(path, name)  # JPEG does not compress further
     files.replace(temporary, target)
   finally:
     temporary.unlink(missing_ok=True)
-  return target, len(frames)
+  return target, len(entries)

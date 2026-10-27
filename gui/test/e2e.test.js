@@ -91,6 +91,8 @@ test('process the video from the window', async () => {
   await page.waitForSelector('.video-item .badge:text("已处理")', { timeout: 60_000 });
   const facts = await page.textContent('#facts');
   assert.match(facts, /2 段 · 字幕文件：sample clip \[e2e\]\.srt/);
+  assert.match(facts, /布局整个画面是屏幕/);
+  await page.waitForSelector('#layout-card:not([hidden]) #layout-image');
   assert.match(await page.textContent('#log-text'), /完成/);
 });
 
