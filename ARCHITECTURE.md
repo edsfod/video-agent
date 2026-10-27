@@ -29,13 +29,37 @@ Use yt-dlp as the optional download backend. Its official project is a command-l
 
 Do not use Media Downloader as the backend. Its repository describes it as a Qt/C++ GUI front end whose default engine is yt-dlp; it is useful as a standalone graphical downloader, but it is a second interface rather than the download engine this CLI needs. The new project will keep its own planned GUI over the shared processing modules.
 
-This choice adds one optional `download` subcommand and an external yt-dlp requirement. It does not change `process` input: `process` continues to accept local paths only. Downloads are never chained automatically into transcription or summarization. The current Media Downloader-managed executable is auto-detected from the user's AppData directory; Video Agent does not install or update it. Since 0.1.1 yt-dlp is also a Python dependency (see "Distribution"), so `download` works out of the box; a yt-dlp on `PATH` or Media Downloader's copy still comes first.
+This choice adds one optional `download` subcommand and an external yt-dlp requirement. It does not change `process` input: `process` continues to accept local paths only. The CLI never chains a download into transcription or summarization; the GUI can queue processing after a download when the user ticks 下载完自动处理 (off by default; see "Concurrent jobs"). The current Media Downloader-managed executable is auto-detected from the user's AppData directory; Video Agent does not install or update it. Since 0.1.1 yt-dlp is also a Python dependency (see "Distribution"), so `download` works out of the box; a yt-dlp on `PATH` or Media Downloader's copy still comes first.
 
 ## Site subtitles and Bilibili login — user decision (2026-10-27)
 
 The user expected a downloaded Bilibili video to come with the platform's subtitles. `download` now saves the site's subtitle tracks beside the video (`--write-subs --sub-langs all,-danmaku,-live_chat`; `--no-subs` turns this off), and `process` takes `clip.<language>.srt`/`.vtt` as well as `clip.srt`, preferring the plain file, then Chinese, then other human tracks, then AI tracks (`ai-*`). Only language-like parts count, so `clip.part2.srt`, which belongs to `clip.part2.mp4`, is not taken. A failed subtitle request makes yt-dlp drop the whole video, so the download is retried once without subtitles.
 
 Bilibili lists subtitles, AI ones included, only to a logged-in account. `--cookies-from-browser edge` failed on the user's machine with Edge running (locked cookie database), and yt-dlp cannot decrypt the app-bound encrypted cookies of Chromium 127 and later even with the browser closed. The user chose a login inside the GUI: the 设置 dialog and a hint under the download box open Bilibili's login page in a window of the app's own, whose cookies live in a separate persistent partition. The packaged app turns on Electron's `enableCookieEncryption` fuse, so they are stored encrypted with DPAPI; in development (`electron .`) they are not. For each Bilibili download the main process writes the partition's `bilibili.com` cookies to a Netscape file under `<userData>/cookies/`, passes it as `download --cookies`, and deletes it when the job ends and at start. The CLI only accepts `--cookies FILE`; it never reads a browser.
+
+## Concurrent jobs — user decision (2026-10-27), modelled on AutoSlides
+
+Until 0.2.0 the window ran one job at a time and refused a second one, even a download while another video was being processed. The user asked for the rules to be worked out from what each job reads and writes, and pointed to AutoSlides (its download queue, `renderer/shared/services/downloadService.ts`, and its serial extraction worker) as a model. Jobs are separate processes, so what they share is files:
+
+| Job | Writes | Reads |
+| --- | --- | --- |
+| `download` | `<workspace>/下载/<title> [<id>].<ext>` and its subtitles (yt-dlp writes `.part` files first) | the network |
+| `process` | in the video's folder: `frames/<run>/` and `slide-extraction/<run>/` (new per run), `transcript.*`, `summary-context.md`, `manifest.json`, temporary `.embedded-subtitle.srt` and `.audio-for-bcut.m4a` | the source video, the previous manifest and transcript |
+| `frame` | `frames/extra/frame-HH-MM-SS.jpg` | the source video |
+| `summarize`, Agent summaries | `总结.md`, sometimes extra frames | manifest, `summary-context.md`, frames |
+| `show`, the window's views | nothing | the files above |
+
+Folders are named after a hash of the video's path, so different videos never share files. The rules that follow:
+
+- **May overlap:** downloads with anything (except the same URL); any jobs on different videos; `frame` with anything.
+- **Must not overlap:** `process` and summaries on the same video (fixed temporary names, half-written context read by a summary, two `总结.md` writers); two downloads of the same URL (the same `.part` file); changing the workspace while jobs run (results land where the window no longer looks).
+- **May overlap but costs:** several `process` runs share the CPU (FFmpeg uses all of it); several Agent summaries each spend the subscription.
+
+How this is enforced:
+
+- **CLI (all front ends).** `process` and `summarize` hold an OS lock on `<folder>/.lock` (`src/video_agent/files.py`); a second writer fails at once with a message, the lock goes away with the process even when it is killed. `transcript.*`, `summary-context.md`, `manifest.json` and `总结.md` are written to a unique temporary file and renamed, so readers never see half a file; `frame` saves through a unique temporary file and takes no lock, since an Agent calls it while writing a summary. The skill tells the Agent to report the lock message rather than retry.
+- **GUI queue (`gui/src/tasks.js`, in the main process).** Like AutoSlides, nothing is refused for being busy: tasks wait in a queue with the states 排队中, 运行中, 完成, 未完成 and 已停止. Each kind has a pool, set in 设置 (defaults: 3 downloads, 1 processing, 2 summaries; AutoSlides runs its extraction serially for the same CPU reason); frame captures have no limit. At most one processing or summary task runs per video; this also covers the Agent routes, which write `总结.md` without the CLI. The same work (same kind and target) is not queued twice while queued or running. Tasks start in the order they were added, and one that has to wait does not hold back later ones. The panel at the bottom lists the tasks, shows any task's output, and stops or retries them; the tray shows running and queued counts. The workspace cannot be changed while tasks are queued or running. The rules are a pure function tested without Electron (`gui/test/tasks.test.js`). **Claude judgment:** the queue lives in the main process rather than the page (AutoSlides keeps it in the page), so it survives a reload and keeps running in the tray; queued tasks are not kept across a restart.
+- **下载完自动处理** (off by default; the choice is remembered) queues processing for each saved file with the window's frame settings, never with BCut (consent is per run) or slides.
 
 ## Interface sequence — user decision
 
@@ -110,4 +134,4 @@ Open:
 - Check the Codex route after 2026-11-25.
 - Code signing postponed (user decision, 2026-10-27): the SignPath application form at signpath.org/apply did not work for the user. Preparation notes are in `notes/` (local); the update signature on `latest.yml` does not depend on it.
 - Representative frames can include black frames (fade-ins); detecting them needs image analysis.
-- Bilibili login is checked by unit-level tests only (cookie export in the end-to-end test); a real login and a subtitle download need the user's account.
+- Bilibili login: only the cookie export is tested (end-to-end test); a real login and a subtitle download need the user's account.

@@ -9,6 +9,7 @@ const pty = require('node-pty');
 const { Logs } = require('./logs');
 const { createUpdater } = require('./updater');
 const bilibili = require('./bilibili');
+const { TaskQueue, DEFAULT_LIMITS } = require('./tasks');
 
 const VERSION = app.getVersion(); // package.json, kept equal to the CLI version
 // Last resort in development when no CLI is installed: the release wheel through uvx (needs uv, not git).
@@ -20,7 +21,8 @@ const UVX_CLI = [
 const settingsFile = () => path.join(app.getPath('userData'), 'settings.json');
 // Cookies exported for one download at a time; removed when the download ends and at start (after a crash).
 const cookiesDir = () => path.join(app.getPath('userData'), 'cookies');
-const jobs = new Map();
+const jobs = new Map(); // running child processes by task id
+let queue;
 const terminals = new Map();
 const ICONS = path.join(__dirname, '..', 'assets');
 let win;
@@ -56,6 +58,7 @@ function defaults() {
     closeToTray: true,
     checkUpdates: true,
     updateMirror: '',
+    limits: DEFAULT_LIMITS, // tasks of each kind that may run at once (see tasks.js)
   };
 }
 
@@ -160,25 +163,25 @@ function startJob(id, command, args, { cwd, stdin, env, title = id, prompt, onCl
     stdio: [stdin === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'],
   });
   jobs.set(id, { child, title });
-  updateTray();
   if (stdin !== undefined) child.stdin.end(stdin);
   const relay = (stream) => (chunk) => {
     const text = chunk.toString('utf8');
     log.write(text);
+    queue.output(id, stream, text);
     send('job:output', { id, stream, text });
   };
   child.stdout.on('data', relay('stdout'));
   child.stderr.on('data', relay('stderr'));
   child.on('error', (error) => {
     log.write(`${error.message}\n`);
+    queue.output(id, 'stderr', `${error.message}\n`);
     send('job:output', { id, stream: 'stderr', text: `${error.message}\n` });
   });
   child.on('close', (code) => {
     onClose?.();
     jobs.delete(id);
     log.close(code);
-    updateTray();
-    send('job:exit', { id, code });
+    queue.exited(id, code);
   });
 }
 
@@ -187,7 +190,113 @@ function stopJob(id) {
   if (job) spawn('taskkill', ['/PID', String(job.child.pid), '/T', '/F'], { windowsHide: true });
 }
 
+// ---------- tasks ----------
 
+// Matches the window's check in app.js, which shows the login hint.
+const isBilibili = (url) => /(^|[/.])(bilibili\.com|b23\.tv)([/:?#]|$)/i.test(url);
+
+// The CLI arguments of each kind of task. The workspace is fixed when the task is added.
+function cliArgs(task) {
+  const out = ['-o', task.workspace];
+  switch (task.kind) {
+    case 'download':
+      return ['download', task.url, '-o', path.join(task.workspace, '下载'), '--json'];
+    case 'process': {
+      const args = ['process', task.video, ...out, '--json', '--frame-interval', String(task.interval), '--max-frames', String(task.maxFrames)];
+      if (task.bcut) args.push('--asr', 'bcut', '--allow-remote-asr'); // consent given for this one task
+      if (task.slides) args.push('--extract-slides');
+      return args;
+    }
+    case 'frame':
+      return ['frame', task.video, ...task.times, ...out];
+    case 'summary': {
+      const args = ['summarize', task.video, ...out];
+      if (task.request) args.push('--request', task.request);
+      if (task.overwrite) args.push('--overwrite');
+      return args;
+    }
+    default:
+      throw new Error(`unknown task kind: ${task.kind}`);
+  }
+}
+
+function startTask(task) {
+  if (task.kind === 'summary' && task.route !== 'api') return startAgent(task);
+  const [command, ...prefix] = cliCommand();
+  const args = [...prefix, ...cliArgs(task)];
+  const options = { cwd: task.workspace, title: task.title };
+  if (task.kind !== 'download' || !isBilibili(task.url)) return startJob(task.id, command, args, options);
+  // The Bilibili login goes to yt-dlp as a cookies file that lives as long as the download.
+  bilibili
+    .writeCookies(path.join(cookiesDir(), `${task.id}.txt`))
+    .then((cookies) => {
+      if (task.stopping) return queue.exited(task.id, -1);
+      startJob(task.id, command, [...args, ...(cookies ? ['--cookies', cookies] : [])], {
+        ...options,
+        onClose: () => cookies && fs.rmSync(cookies, { force: true }),
+      });
+    })
+    .catch((error) => {
+      queue.output(task.id, 'stderr', `${error.message}\n`);
+      queue.exited(task.id, -1);
+    });
+}
+
+// Agent route: Claude Code with the plugin, or Codex told to follow the skill file.
+function startAgent(task) {
+  const { agent, video, folder, request, overwrite, workspace, title } = task;
+  const skill = path.join(pluginRoot(), 'skills', 'video-agent', 'SKILL.md');
+  const text = [
+    `总结这个视频：${video}`,
+    `工作区是 ${workspace}，这个视频已经用 process 处理过，处理结果在 ${folder}。直接用这个文件夹，不要再运行 process，也不要上传音频。`,
+    overwrite ? '已有的 总结.md 按要求重写。' : '',
+    request ? `用户的要求：${request}` : '',
+  ].filter(Boolean).join('\n');
+  if (agent === 'claude') {
+    const prompt = `用 video-agent skill 完成下面的任务。\n${text}`;
+    startJob(task.id, 'claude', [
+      '-p',
+      '--plugin-dir', pluginRoot(),
+      '--add-dir', workspace,
+      '--permission-mode', 'acceptEdits',
+      '--allowedTools', 'Bash(video-agent *)', 'Read', 'Write', 'Edit', 'Skill',
+      '--output-format', 'stream-json', '--verbose',
+    ], { cwd: workspace, stdin: prompt, title, prompt });
+  } else {
+    const prompt = `先读 ${skill} 并照它做，<video-agent> 用 video-agent 命令。\n${text}`;
+    startJob(task.id, 'codex', [
+      'exec', '--skip-git-repo-check', '--cd', workspace, '--sandbox', 'workspace-write', '--json', '-',
+    ], { cwd: workspace, stdin: prompt, title, prompt });
+  }
+}
+
+// "Process after download": the saved files are processed with the window's frame settings, without BCut (which
+// needs consent per run) or slides; a video without subtitles is then processed again by hand if wanted.
+function followUp(task) {
+  if (task.kind !== 'download' || task.then !== 'process') return [];
+  const { frameInterval, maxFrames } = loadSettings();
+  return task.paths.map((video) => ({
+    kind: 'process',
+    title: `处理：${path.basename(video)}`,
+    video,
+    workspace: task.workspace,
+    interval: frameInterval,
+    maxFrames,
+  }));
+}
+
+function createQueue() {
+  queue = new TaskQueue({
+    start: startTask,
+    stop: (task) => stopJob(task.id),
+    changed: () => {
+      updateTray();
+      send('tasks:changed', queue.list());
+    },
+    limits: () => ({ ...DEFAULT_LIMITS, ...loadSettings().limits }),
+    followUp,
+  });
+}
 
 // cmd.exe quoting for .cmd shims. cmd.exe still expands %NAME% inside quotes; such arguments are not supported.
 function quote(value) {
@@ -303,18 +412,16 @@ function registerIpc() {
     return result.canceled ? null : result.filePaths[0];
   });
 
-  // Video Agent CLI: streamed jobs and one-shot JSON queries.
-  // bilibiliCookies: pass the Bilibili login to a download as a temporary cookies file (only the path is logged).
-  ipcMain.handle('cli:start', async (_, { id, args, stdin, title, bilibiliCookies }) => {
-    const [command, ...prefix] = cliCommand();
-    const cookies = bilibiliCookies ? await bilibili.writeCookies(path.join(cookiesDir(), `${id}.txt`)) : null;
-    startJob(id, command, [...prefix, ...args, ...(cookies ? ['--cookies', cookies] : [])], {
-      cwd: loadSettings().workspace,
-      stdin,
-      title,
-      onClose: () => cookies && fs.rmSync(cookies, { force: true }),
-    });
+  // Tasks (queued jobs) and one-shot CLI queries.
+  ipcMain.handle('tasks:add', (_, spec) => queue.add({ ...spec, workspace: loadSettings().workspace }));
+  ipcMain.handle('tasks:list', () => queue.list());
+  ipcMain.handle('tasks:output', (_, id) => queue.get(id)?.output ?? []);
+  ipcMain.handle('tasks:cancel', (_, id) => {
+    logs.line('info', `task ${id} stopped by the user`);
+    queue.cancel(id);
   });
+  ipcMain.handle('tasks:retry', (_, id) => queue.retry(id));
+  ipcMain.handle('tasks:clear', () => queue.clearFinished());
   ipcMain.handle('cli:json', async (_, args) => {
     const [command, ...prefix] = cliCommand();
     const { code, out, err } = await runToEnd(command, [...prefix, ...args]);
@@ -329,39 +436,6 @@ function registerIpc() {
     const [command, ...prefix] = cliCommand();
     return runToEnd(command, [...prefix, ...args], stdin);
   });
-  ipcMain.handle('job:cancel', (_, id) => {
-    logs.line('info', `job ${id} stopped by the user`);
-    stopJob(id);
-  });
-
-  // Agent route: Claude Code with the plugin, or Codex told to follow the skill file.
-  ipcMain.handle('agent:start', (_, { id, agent, video, folder, request, overwrite, title }) => {
-    const workspace = loadSettings().workspace;
-    const skill = path.join(pluginRoot(), 'skills', 'video-agent', 'SKILL.md');
-    const task = [
-      `总结这个视频：${video}`,
-      `工作区是 ${workspace}，这个视频已经用 process 处理过，处理结果在 ${folder}。直接用这个文件夹，不要再运行 process，也不要上传音频。`,
-      overwrite ? '已有的 总结.md 按要求重写。' : '',
-      request ? `用户的要求：${request}` : '',
-    ].filter(Boolean).join('\n');
-    if (agent === 'claude') {
-      const prompt = `用 video-agent skill 完成下面的任务。\n${task}`;
-      startJob(id, 'claude', [
-        '-p',
-        '--plugin-dir', pluginRoot(),
-        '--add-dir', workspace,
-        '--permission-mode', 'acceptEdits',
-        '--allowedTools', 'Bash(video-agent *)', 'Read', 'Write', 'Edit', 'Skill',
-        '--output-format', 'stream-json', '--verbose',
-      ], { cwd: workspace, stdin: prompt, title, prompt });
-    } else {
-      const prompt = `先读 ${skill} 并照它做，<video-agent> 用 video-agent 命令。\n${task}`;
-      startJob(id, 'codex', [
-        'exec', '--skip-git-repo-check', '--cd', workspace, '--sandbox', 'workspace-write', '--json', '-',
-      ], { cwd: workspace, stdin: prompt, title, prompt });
-    }
-  });
-
   // Files inside the workspace only.
   ipcMain.handle('fs:read', (_, file) => {
     if (!insideWorkspace(file)) throw new Error('只能读取工作区里的文件');
@@ -468,7 +542,8 @@ function showWindow() {
 
 function updateTray() {
   if (!tray) return;
-  const running = [...jobs.values()].map((job) => job.title);
+  const running = queue.list().filter((task) => task.status === 'running').map((task) => task.title);
+  const waiting = queue.list().filter((task) => task.status === 'queued').length;
   trayState.tooltip = running.length ? `Video Agent · 正在运行：${running.join('；')}` : 'Video Agent';
   tray.setToolTip(trayState.tooltip);
   tray.setContextMenu(
@@ -476,8 +551,8 @@ function updateTray() {
       { label: '显示窗口', click: showWindow },
       { label: '添加本地视频…', click: () => (showWindow(), send('tray:add-videos')) },
       { type: 'separator' },
-      { label: running.length ? `正在运行 ${running.length} 个任务` : '没有运行中的任务', enabled: false },
-      { label: '停止所有任务', enabled: running.length > 0, click: () => [...jobs.keys()].forEach(stopJob) },
+      { label: running.length ? `正在运行 ${running.length} 个任务${waiting ? `，排队 ${waiting} 个` : ''}` : '没有运行中的任务', enabled: false },
+      { label: '停止所有任务', enabled: running.length + waiting > 0, click: () => queue.cancelAll() },
       { type: 'separator' },
       { label: '打开工作区', click: () => shell.openPath(loadSettings().workspace) },
       { label: '打开日志文件夹', click: () => shell.openPath(logs.dir) },
@@ -507,7 +582,8 @@ if (!app.requestSingleInstanceLock()) {
     process.on('uncaughtException', (error) => logs.line('error', error.stack || String(error)));
     fs.mkdirSync(loadSettings().workspace, { recursive: true });
     fs.rmSync(cookiesDir(), { recursive: true, force: true });
-    updater = createUpdater({ logs, send, settings: loadSettings, running: () => jobs.size });
+    createQueue();
+    updater = createUpdater({ logs, send, settings: loadSettings, running: () => queue.active().length });
     registerIpc();
     createTray();
     createWindow();
@@ -521,7 +597,7 @@ if (!app.requestSingleInstanceLock()) {
 
 app.on('before-quit', () => (quitting = true));
 app.on('will-quit', () => {
-  for (const id of jobs.keys()) stopJob(id);
+  queue?.cancelAll();
   for (const term of terminals.values()) term.kill();
   logs?.line('info', 'quit');
 });

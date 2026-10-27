@@ -94,6 +94,14 @@ test('process the video from the window', async () => {
   assert.match(await page.textContent('#log-text'), /完成/);
 });
 
+test('the same processing is queued once, and the queue empties when it ends', async () => {
+  await Promise.all([page.click('#run-process'), page.click('#run-process')]);
+  await page.waitForFunction(() => document.querySelector('#task-note').textContent.includes('已经在队列里'));
+  assert.equal(await page.locator('.task-item', { hasText: '处理：' }).count(), 2); // the first run and this one
+  await page.waitForFunction(() => document.querySelector('#open-tasks').textContent === '任务', null, { timeout: 60_000 });
+  await page.waitForSelector('.video-item .badge:text("已处理")');
+});
+
 test('transcript tab lists the lines', async () => {
   await page.click('.tabs button[data-tab=transcript]');
   await page.waitForSelector('#transcript .line');
@@ -170,7 +178,7 @@ test('logs record every job and never the API key', async () => {
   const dir = path.join(ROOT, 'gui-data', 'logs');
   const files = [path.join(dir, 'main.log'), ...fs.readdirSync(path.join(dir, 'jobs')).map((name) => path.join(dir, 'jobs', name))];
   const all = files.map((file) => fs.readFileSync(file, 'utf8')).join('\n');
-  assert.match(all, /job job-\d+ started: 处理/);
+  assert.match(all, /job task-[\w-]+ started: 处理/);
   assert.doesNotMatch(all, /e2e-test-key/);
 });
 

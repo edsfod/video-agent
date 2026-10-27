@@ -4,15 +4,16 @@ const $ = (id) => document.getElementById(id);
 const state = {
   settings: null,
   env: null,
-  videos: [], // { path, info, busy, error }
+  videos: [], // { path, info, error }
   current: null,
   tab: 'process',
   route: 'claude',
-  job: null, // { id, title, handlers }
+  tasks: [], // the queue in the main process (tasks.js), without output
+  shown: null, // { id, buffer, loading }: the task whose output the panel shows
   term: null,
   bilibili: { loggedIn: false }, // { loggedIn, name? }
 };
-let jobCounter = 0;
+let ptyCounter = 0;
 
 // ---------- helpers ----------
 
@@ -46,14 +47,13 @@ function element(tag, props = {}, children = []) {
   return node;
 }
 
-// ---------- jobs and log ----------
+// ---------- tasks ----------
+// The queue runs in the main process, so it survives a reload of this page and keeps going in the tray. This page adds
+// tasks, shows them, and refreshes a video when one of its tasks ends.
 
-function logShow(title) {
-  $('log').hidden = false;
-  $('log-title').textContent = title;
-  $('log-text').textContent = '';
-  $('cancel-job').hidden = false;
-}
+const STATUS = { queued: '排队中', running: '运行中', done: '完成', failed: '未完成', stopped: '已停止' };
+const ACTIVE = new Set(['queued', 'running']);
+const sameVideo = (a, b) => !!a && !!b && a.replace(/\//g, '\\').toLowerCase() === b.replace(/\//g, '\\').toLowerCase();
 
 function logAppend(text) {
   const pre = $('log-text');
@@ -62,43 +62,137 @@ function logAppend(text) {
   if (atBottom) pre.scrollTop = pre.scrollHeight;
 }
 
-// Runs one job at a time. `start(id)` starts it; handlers see stdout lines and the exit code.
-function runJob(title, start, { onLine, onExit, showStdout = true } = {}) {
-  if (state.job) {
-    alert('还有任务在运行，请等它结束或先停止。');
-    return false;
+// Adds a task, or shows the same one already in the queue. Resolves to true when a new task was added.
+async function addTask(spec) {
+  const result = await window.va.addTask(spec);
+  const task = result.added ? result.task : result.existing;
+  await showTask(task.id);
+  note(result.added ? '' : '同样的任务已经在队列里了。');
+  return result.added;
+}
+
+function note(text) {
+  $('task-note').textContent = text;
+  clearTimeout(note.timer);
+  if (text) note.timer = setTimeout(() => ($('task-note').textContent = ''), 6000);
+}
+
+// Shows a task's output so far, then follows it live.
+async function showTask(id) {
+  $('log').hidden = false;
+  state.shown = { id, buffer: '', loading: true };
+  $('log-text').textContent = '';
+  renderTasks();
+  const chunks = await window.va.taskOutput(id);
+  if (state.shown?.id !== id) return;
+  const task = state.tasks.find((item) => item.id === id);
+  // Output sent before this reply is in `chunks`; live output arrives after it, so nothing is lost or doubled.
+  for (const [stream, text] of chunks) taskOutput(task, stream, text);
+  state.shown.loading = false;
+  if (task && !ACTIVE.has(task.status)) taskEnd(task);
+}
+
+function taskOutput(task, stream, text) {
+  if (!task) return;
+  if (stream !== 'stdout') return logAppend(text);
+  const lines = (state.shown.buffer + text).split(/\r?\n/);
+  state.shown.buffer = lines.pop();
+  for (const line of lines) if (line.trim()) taskLine(task, line);
+}
+
+// stdout of each kind: result JSON for process and download, the Agent's event stream for summaries.
+function taskLine(task, line) {
+  if (task.kind === 'summary' && task.route === 'claude') return claudeLine(line);
+  if (task.kind === 'summary' && task.route === 'codex') return codexLine(line);
+  let result;
+  try {
+    result = JSON.parse(line);
+  } catch {
+    return logAppend(line + '\n');
   }
-  const id = `job-${++jobCounter}`;
-  state.job = { id, title, buffer: '', onLine, onExit, showStdout };
-  logShow(title);
-  start(id, title);
-  return true;
+  if (task.kind === 'download' && result.path) logAppend(`已保存：${result.path}\n`);
+  else if (result.error) logAppend(`错误：${result.error}\n`);
+  else if (result.transcript_error) logAppend(`字幕没有拿到：${result.transcript_error}\n`);
+}
+
+function taskEnd(task) {
+  if (state.shown.buffer.trim()) taskLine(task, state.shown.buffer);
+  state.shown.buffer = '';
+  const end = { done: '完成', stopped: '已停止' }[task.status] || `结束（退出码 ${task.code}）`;
+  logAppend(`\n${end}\n`);
 }
 
 window.va.onJobOutput(({ id, stream, text }) => {
-  const job = state.job;
-  if (!job || job.id !== id) return;
-  if (stream === 'stderr' || job.showStdout) logAppend(text);
-  if (stream !== 'stdout' || !job.onLine) return;
-  job.buffer += text;
-  const lines = job.buffer.split(/\r?\n/);
-  job.buffer = lines.pop();
-  for (const line of lines) if (line.trim()) job.onLine(line);
+  if (state.shown?.id !== id || state.shown.loading) return;
+  taskOutput(state.tasks.find((task) => task.id === id), stream, text);
 });
 
-window.va.onJobExit(({ id, code }) => {
-  const job = state.job;
-  if (!job || job.id !== id) return;
-  if (job.buffer.trim() && job.onLine) job.onLine(job.buffer);
-  state.job = null;
-  $('cancel-job').hidden = true;
-  logAppend(`\n${code === 0 ? '完成' : `结束（退出码 ${code}）`}\n`);
-  $('log-title').textContent = `${job.title} · ${code === 0 ? '完成' : '未完成'}`;
-  job.onExit?.(code);
+window.va.onTasks((tasks) => {
+  const before = new Map(state.tasks.map((task) => [task.id, task.status]));
+  state.tasks = tasks;
+  for (const task of tasks) {
+    if (!ACTIVE.has(before.get(task.id)) || ACTIVE.has(task.status)) continue;
+    if (state.shown?.id === task.id && !state.shown.loading) taskEnd(task);
+    taskFinished(task);
+  }
+  renderTasks();
+  renderList();
+  if ($('settings').open) renderWorkspaceLock();
 });
 
-$('cancel-job').onclick = () => state.job && window.va.cancel(state.job.id);
+async function taskFinished(task) {
+  if (task.kind === 'download') {
+    if (task.paths.length && $('download-url').value.trim() === task.url) $('download-url').value = '';
+    if (task.paths.length) await addVideos(task.paths);
+    return;
+  }
+  const video = state.videos.find((item) => sameVideo(item.path, task.video));
+  if (video) await refresh(video);
+}
+
+function videoTask(video) {
+  const tasks = state.tasks.filter((task) => ACTIVE.has(task.status) && sameVideo(task.video, video.path));
+  return tasks.find((task) => task.status === 'running') || tasks[0];
+}
+
+function renderTasks() {
+  const tasks = state.tasks;
+  const active = tasks.filter((task) => ACTIVE.has(task.status)).length;
+  $('open-tasks').textContent = active ? `任务（${active}）` : '任务';
+  const shown = tasks.find((task) => task.id === state.shown?.id);
+  $('log-title').textContent = shown ? `${shown.title} · ${STATUS[shown.status]}` : '任务';
+  $('cancel-job').hidden = !shown || !ACTIVE.has(shown.status);
+  $('clear-tasks').disabled = tasks.length === active;
+  $('task-list').replaceChildren(
+    ...[...tasks].reverse().map((task) => {
+      const item = element('div', { className: `task-item ${task.status}` + (task.id === state.shown?.id ? ' active' : '') }, [
+        element('span', { className: 'name', textContent: task.title, title: task.title }),
+        element('span', { className: `badge ${task.status}`, textContent: STATUS[task.status] }),
+      ]);
+      if (!ACTIVE.has(task.status) && task.status !== 'done') {
+        const retry = element('button', { className: 'ghost small', textContent: '重试', title: '用同样的设置再排一次' });
+        retry.onclick = async (event) => {
+          event.stopPropagation();
+          const result = await window.va.retryTask(task.id);
+          if (result) showTask((result.task || result.existing).id);
+        };
+        item.append(retry);
+      }
+      item.onclick = () => showTask(task.id);
+      return item;
+    }),
+  );
+}
+
+$('cancel-job').onclick = () => state.shown && window.va.cancelTask(state.shown.id);
+$('clear-tasks').onclick = () => window.va.clearTasks();
 $('close-log').onclick = () => ($('log').hidden = true);
+$('open-tasks').onclick = () => {
+  if (!$('log').hidden) return ($('log').hidden = true);
+  const latest = state.tasks.at(-1);
+  if (latest) showTask(state.shown?.id || latest.id);
+  else ($('log').hidden = false), renderTasks();
+};
 
 // ---------- video list ----------
 
@@ -119,7 +213,11 @@ async function persistList() {
 }
 
 function badge(video) {
-  if (video.busy) return element('span', { className: 'badge busy', textContent: video.busy });
+  const task = videoTask(video);
+  if (task) {
+    const doing = task.status === 'queued' ? '排队中' : { process: '处理中', summary: '总结中', frame: '补截中' }[task.kind];
+    return element('span', { className: 'badge busy', textContent: doing });
+  }
   if (video.error) return element('span', { className: 'badge error', textContent: '无法读取' });
   if (!video.info) return element('span', { className: 'badge', textContent: '…' });
   if (video.info.summary) return element('span', { className: 'badge done', textContent: '已总结' });
@@ -239,31 +337,16 @@ $('run-process').onclick = async () => {
   const interval = Number($('opt-interval').value) || 60;
   const maxFrames = Number($('opt-max-frames').value) || 36;
   state.settings = await window.va.saveSettings({ frameInterval: interval, maxFrames });
-  const args = ['process', video.path, '-o', state.settings.workspace, '--json'];
-  args.push('--frame-interval', String(interval), '--max-frames', String(maxFrames));
-  if ($('opt-bcut').checked) args.push('--asr', 'bcut', '--allow-remote-asr');
-  if ($('opt-slides').checked) args.push('--extract-slides');
-  const started = runJob(`处理：${baseName(video.path)}`, (id, title) => window.va.startCli(id, args, undefined, title), {
-    showStdout: false,
-    onLine(line) {
-      try {
-        const result = JSON.parse(line);
-        if (result.error) logAppend(`错误：${result.error}\n`);
-        else if (result.transcript_error) logAppend(`字幕没有拿到：${result.transcript_error}\n`);
-      } catch {
-        logAppend(line + '\n');
-      }
-    },
-    async onExit() {
-      video.busy = null;
-      $('opt-bcut').checked = false; // consent covers one run only
-      await refresh(video);
-    },
+  const added = await addTask({
+    kind: 'process',
+    title: `处理：${baseName(video.path)}`,
+    video: video.path,
+    interval,
+    maxFrames,
+    bcut: $('opt-bcut').checked,
+    slides: $('opt-slides').checked,
   });
-  if (started) {
-    video.busy = '处理中';
-    renderList();
-  }
+  if (added) $('opt-bcut').checked = false; // consent covers one run only
 };
 
 async function renderTranscript(video) {
@@ -324,9 +407,7 @@ $('frame-form').onsubmit = (event) => {
   const video = current();
   const times = $('frame-times').value.trim().split(/[\s,，]+/).filter(Boolean);
   if (!times.length || !video.info?.processed) return;
-  runJob(`补截画面：${times.join(' ')}`, (id, title) =>
-    window.va.startCli(id, ['frame', video.path, ...times, '-o', state.settings.workspace], undefined, title),
-  { onExit: () => refresh(video) });
+  addTask({ kind: 'frame', title: `补截画面：${times.join(' ')}`, video: video.path, times });
   $('frame-times').value = '';
 };
 
@@ -399,31 +480,17 @@ $('run-summary').onclick = async () => {
   const request = $('summary-request').value.trim();
   if (state.route === 'copy') return copyMaterial(info);
   if (info.summary && !confirm('已经有总结了，要重新生成并覆盖吗？')) return;
-  const done = async () => {
-    video.busy = null;
-    await refresh(video);
-  };
-  let started;
-  if (state.route === 'api') {
-    const args = ['summarize', video.path, '-o', state.settings.workspace];
-    if (request) args.push('--request', request);
-    if (info.summary) args.push('--overwrite');
-    started = runJob(`总结（模型 API）：${baseName(video.path)}`, (id, title) => window.va.startCli(id, args, undefined, title), {
-      onExit: done,
-    });
-  } else {
-    const agent = state.route;
-    started = runJob(
-      `总结（${agent === 'claude' ? 'Claude Code' : 'Codex'}）：${baseName(video.path)}`,
-      (id, title) =>
-        window.va.startAgent({ id, title, agent, video: video.path, folder: info.folder, request, overwrite: !!info.summary }),
-      { showStdout: false, onLine: agent === 'claude' ? claudeLine : codexLine, onExit: done },
-    );
-  }
-  if (started) {
-    video.busy = '总结中';
-    renderList();
-  }
+  const name = { api: '模型 API', claude: 'Claude Code', codex: 'Codex' }[state.route];
+  addTask({
+    kind: 'summary',
+    title: `总结（${name}）：${baseName(video.path)}`,
+    route: state.route,
+    agent: state.route === 'api' ? undefined : state.route,
+    video: video.path,
+    folder: info.folder,
+    request,
+    overwrite: !!info.summary,
+  });
 };
 
 // Claude Code stream-json: show text and tool calls; skip the rest.
@@ -510,7 +577,7 @@ async function newTerminal(video) {
   xterm.loadAddon(fit);
   xterm.open($('terminal'));
   fit.fit();
-  const id = `pty-${++jobCounter}`;
+  const id = `pty-${++ptyCounter}`;
   state.term = { id, xterm, fit };
   xterm.onData((data) => window.va.ptyWrite(id, data));
   xterm.onResize(({ cols, rows }) => window.va.ptyResize(id, cols, rows));
@@ -560,26 +627,11 @@ $('download-form').onsubmit = (event) => {
   event.preventDefault();
   const url = $('download-url').value.trim();
   if (!url) return;
-  const folder = joinPath(state.settings.workspace, '下载');
-  const saved = [];
-  const options = { bilibiliCookies: isBilibili(url) };
-  runJob(`下载：${url}`, (id, title) => window.va.startCli(id, ['download', url, '-o', folder, '--json'], undefined, title, options), {
-    showStdout: false,
-    onLine(line) {
-      try {
-        saved.push(JSON.parse(line).path);
-      } catch {
-        logAppend(line + '\n');
-      }
-    },
-    async onExit() {
-      if (saved.length) {
-        $('download-url').value = '';
-        await addVideos(saved);
-      }
-    },
-  });
+  const then = $('download-then-process').checked ? 'process' : undefined;
+  addTask({ kind: 'download', title: `下载：${url}`, url, then });
 };
+$('download-then-process').onchange = () =>
+  window.va.saveSettings({ processAfterDownload: $('download-then-process').checked }).then((next) => (state.settings = next));
 
 $('reveal-video').onclick = () => window.va.reveal(current().path);
 $('reveal-folder').onclick = () => current()?.info?.folder && window.va.open(current().info.folder);
@@ -606,6 +658,8 @@ $('open-settings').onclick = async () => {
   $('set-key').value = '';
   $('set-close-to-tray').checked = state.settings.closeToTray !== false;
   $('set-check-updates').checked = state.settings.checkUpdates !== false;
+  for (const kind of ['download', 'process', 'summary']) $(`set-limit-${kind}`).value = state.settings.limits[kind];
+  renderWorkspaceLock();
   $('set-update-mirror').value = state.settings.updateMirror || '';
   renderUpdate(await window.va.updateState());
   const cli = state.env.bundled ? '安装程序自带的 video-agent' : state.env.cli.join(' ');
@@ -637,6 +691,13 @@ for (const agent of ['claude', 'codex']) {
   };
 }
 
+// Tasks keep the workspace they were added with; changing it under them would hide their results.
+function renderWorkspaceLock() {
+  const active = state.tasks.filter((task) => ACTIVE.has(task.status)).length;
+  $('pick-workspace').disabled = active > 0;
+  $('workspace-lock').hidden = active === 0;
+}
+
 $('pick-workspace').onclick = async () => {
   const folder = await window.va.pickFolder('选择工作区');
   if (folder) $('set-workspace').value = folder;
@@ -665,6 +726,9 @@ $('settings').addEventListener('close', async () => {
     closeToTray: $('set-close-to-tray').checked,
     checkUpdates: $('set-check-updates').checked,
     updateMirror: $('set-update-mirror').value.trim(),
+    limits: Object.fromEntries(
+      ['download', 'process', 'summary'].map((kind) => [kind, Math.min(8, Math.max(1, Number($(`set-limit-${kind}`).value) || 1))]),
+    ),
   });
   const args = ['config', '--provider', $('set-provider').value];
   if ($('set-model').value.trim()) args.push('--model', $('set-model').value.trim());
@@ -769,6 +833,9 @@ async function init() {
   window.va.bilibiliStatus().then((status) => ((state.bilibili = status), renderBilibili()));
   state.route = state.env.claude ? 'claude' : state.env.codex ? 'codex' : 'api';
   state.videos = state.settings.videos.map((path) => ({ path, info: null }));
+  state.tasks = await window.va.tasks();
+  $('download-then-process').checked = !!state.settings.processAfterDownload;
+  renderTasks();
   renderList();
   if (state.videos.length) select(state.videos[0].path);
   else renderVideo();

@@ -19,10 +19,12 @@
           <input id="download-url" type="text" placeholder="或粘贴视频链接下载" spellcheck="false" />
           <button type="submit">下载</button>
         </form>
+        <label class="check download-then"><input id="download-then-process" type="checkbox" /><span>下载完自动处理</span></label>
         <div id="download-hint" class="download-hint" hidden>没有登录 B 站，只能下载视频，拿不到字幕。<a href="#" id="download-login">登录</a></div>
         <div class="list-title">视频</div>
         <div id="video-list" class="video-list"></div>
         <div class="sidebar-foot">
+          <button id="open-tasks" class="ghost">任务</button>
           <button id="open-logs" class="ghost">日志</button>
           <button id="open-settings" class="ghost">设置</button>
         </div>
@@ -129,11 +131,16 @@
         <section id="log" class="log" hidden>
           <header>
             <span id="log-title"></span>
+            <span id="task-note" class="task-note"></span>
             <span class="spacer"></span>
-            <button id="cancel-job" class="ghost small">停止</button>
+            <button id="cancel-job" class="ghost small" hidden>停止</button>
+            <button id="clear-tasks" class="ghost small">清除已结束</button>
             <button id="close-log" class="ghost small">收起</button>
           </header>
-          <pre id="log-text"></pre>
+          <div class="log-body">
+            <div id="task-list" class="task-list"></div>
+            <pre id="log-text"></pre>
+          </div>
         </section>
       </main>
     </div>
@@ -144,6 +151,14 @@
         <label>工作区（处理结果和下载的视频都放在这里）
           <span class="row"><input id="set-workspace" type="text" readonly /><button id="pick-workspace" type="button">选择…</button></span>
         </label>
+        <p id="workspace-lock" class="muted small-text" hidden>有任务在运行或排队，等它们结束后才能换工作区。</p>
+        <div class="limits">
+          <span class="small-text">同时运行的任务数</span>
+          <label>下载<input id="set-limit-download" type="number" min="1" max="8" /></label>
+          <label>处理<input id="set-limit-process" type="number" min="1" max="8" /></label>
+          <label>总结<input id="set-limit-summary" type="number" min="1" max="8" /></label>
+        </div>
+        <p class="muted small-text">处理很吃 CPU，同时处理几个视频只会一起变慢，所以默认一次一个；其余的排队。同一个视频的处理和总结不会同时进行。</p>
         <label>Video Agent 命令（留空自动查找）
           <input id="set-cli" type="text" placeholder="例如 C:\Users\me\.local\bin\video-agent.exe" spellcheck="false" />
         </label>
