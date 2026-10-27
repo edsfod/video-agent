@@ -237,10 +237,10 @@ def _process_locked(
     except media.MediaError:
       picture = None
 
-    pages, pages_found = [], 0
+    pages, pages_found, shown_s = [], 0, None
     if region:
       status(f'{video.name}: looking for screen pages')
-      page_candidates = media.screen_pages(video, temporary / 'pages', region)
+      page_candidates, shown_s = media.screen_pages(video, temporary / 'pages', region, duration_s=length)
       pages_found = len(page_candidates)
       if pages_found > MAX_PAGES:
         status(f'{video.name}: {pages_found} screen pages; keeping {MAX_PAGES} spread over the video')
@@ -329,6 +329,7 @@ def _process_locked(
       'frames_found': len(frame_candidates),
       'pages': MAX_PAGES,
       'pages_found': pages_found,
+      'page_shown_at_least_s': shown_s,  # tuned towards media.PAGES_PER_HOUR
     },
     'representative_frames': [
       {'time_s': item['time_s'], 'path': item['path'].relative_to(asset).as_posix()} for item in frames

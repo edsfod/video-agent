@@ -114,7 +114,7 @@ def _boxes(*boxes):
 def test_an_addition_to_a_page_keeps_the_fuller_picture(tmp_path):
   # A page, then a label added to it (under 2.5 % of the picture), then another page.
   graph = _boxes((20, 20, 200, 80, 0, 20), (230, 20, 40, 12, 8, 20), (60, 110, 220, 60, 20, 30))
-  pages = media.screen_pages(_video(tmp_path, 'addition', graph), tmp_path / 'pages', 'null')
+  pages, _ = media.screen_pages(_video(tmp_path, 'addition', graph), tmp_path / 'pages', 'null')
   assert [round(page['time_s']) for page in pages] == [0, 20]
   assert pages[0]['path'].name != 'page-00001.jpg', 'the later, more complete picture of the first page is kept'
 
@@ -127,5 +127,15 @@ def test_short_minor_changes_and_returns_are_not_new_pages(tmp_path):
     (100, 30, 200, 130, 13, 21),  # page B, 8 s
     (20, 20, 200, 80, 21, 30),  # back to A: a return, not a new page
   )
-  pages = media.screen_pages(_video(tmp_path, 'passing', graph), tmp_path / 'pages', 'null')
+  pages, _ = media.screen_pages(_video(tmp_path, 'passing', graph), tmp_path / 'pages', 'null')
   assert [round(page['time_s']) for page in pages] == [0, 13]
+
+
+def test_the_shown_time_is_tuned_towards_a_page_count_per_hour():
+  # Pretend each step up of LONG_S removes 40 pages from 300.
+  counts = dict(zip(media.LONG_STEPS, (380, 340, 300, 260, 220, 180, 140)))
+  assert media.tune_long(counts.get, 2) == 40.0  # 150 allowed in 2 h: raised to the last step, still above
+  assert media.tune_long(counts.get, 4) == 6.0  # 300 allowed: the default stays
+  assert media.tune_long(counts.get, 3.5) == 10.0  # 262 allowed: one step up is enough
+  assert media.tune_long(dict.fromkeys(media.LONG_STEPS, 5).get, 1) == 2.0  # too few at any value: lowered to the end
+  assert media.tune_long(dict.fromkeys(media.LONG_STEPS, 25).get, 0.2) == 6.0  # a short video may keep 30

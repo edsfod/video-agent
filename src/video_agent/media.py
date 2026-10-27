@@ -309,10 +309,11 @@ STILL = 0.0025
 FREEZE_EVENT = re.compile(r'lavfi\.freezedetect\.freeze_(start|end)=([0-9.]+)')
 
 
-def screen_pages(video, output_dir, region_filter, stable=PAGE_STABLE_S):
+def screen_pages(video, output_dir, region_filter, stable=PAGE_STABLE_S, duration_s=None):
   """Pages of the screen region at the source resolution, from one frame per second. FFmpeg's freezedetect compares
   each frame with the first frame of the current page and marks the frame at which the region has stayed within STILL
-  of it for `stable` seconds; only marked frames are kept, with the time the page first appeared. (mpdecimate, which
+  of it for `stable` seconds; only marked frames are kept, with the time the page first appeared, and then thinned by
+  merge_similar. Returns the pages and the LONG_S that thinning used. (mpdecimate, which
   did this before, is GPL-only and not in the LGPL FFmpeg the installer ships.)"""
   output_dir = Path(output_dir)
   output_dir.mkdir(parents=True, exist_ok=True)
@@ -337,7 +338,7 @@ def screen_pages(video, output_dir, region_filter, stable=PAGE_STABLE_S):
   # A page lasts until the next end event; the last one may run to the end of the video.
   ends = iter([value for kind, value in events if kind == 'end'] + [math.inf] * len(starts))
   pages = [{'time_s': start, 'path': path, 'stayed_s': next(ends) - start} for start, path in zip(starts, paths)]
-  return merge_similar(pages, output_dir)
+  return merge_similar(pages, output_dir, duration_s)
 
 
 # Pages whose small grey copies differ in fewer than this share of pixels show the same content: a pointer, a typed
@@ -391,19 +392,30 @@ def _scrolled(a, b, width, height):
   return False
 
 
-def merge_similar(pages, work_dir):
-  """Drops pages that add little to the ones kept, comparing small grey copies:
-  - the same page with small changes (bullets that appear one by one, a finished line of typing, a pop-up): the group
-    keeps its first time and its last picture, which is the most complete;
-  - the same text scrolled by less than SCROLL_NEW of the page, as a whole or in its left and right halves: the
-    group keeps its picture;
-  - a return to one of the last RECENT pages, as when switching between slides and a terminal: dropped;
-  - a page shown for less than LONG_S that is not mostly new: dropped as a passing state.
-  Comparing with the group's first page, not its latest, keeps slow typing and scrolling from drifting along."""
-  if len(pages) < 2:
-    return pages
-  work_dir = Path(work_dir)
-  listing = work_dir / 'thumbs.txt'
+# How many pages an hour of video should give; outside this band LONG_S is tuned, as Opencast's video segmenter tunes its
+# threshold towards a segment count. Wide on purpose: slides alone give 20-60 an hour, live coding more.
+PAGES_PER_HOUR = (15, 75)
+MIN_ALLOWED = 30  # a short video may always keep this many
+LONG_STEPS = (2.0, 4.0, 6.0, 10.0, 15.0, 25.0, 40.0)  # values LONG_S is tuned through; LONG_S is the starting point
+
+
+def tune_long(count_for, hours):
+  """The LONG_S to use: raised step by step while count_for(LONG_S) gives more pages than the band allows for `hours`,
+  lowered while it gives fewer, never beyond LONG_STEPS. Only short pages that are not mostly new respond to it, so a
+  slide that replaces the screen survives any value."""
+  low, high = PAGES_PER_HOUR[0] * hours, max(MIN_ALLOWED, PAGES_PER_HOUR[1] * hours)
+  index = LONG_STEPS.index(LONG_S)
+  count = count_for(LONG_STEPS[index])
+  step = 1 if count > high else -1 if count < low else 0
+  while step and 0 <= index + step < len(LONG_STEPS) and (count > high if step > 0 else count < low):
+    index += step
+    count = count_for(LONG_STEPS[index])
+  return LONG_STEPS[index]
+
+
+def _thumbnails(pages, work_dir):
+  """Small grey copies of the pages, or None when FFmpeg cannot make them (then nothing is merged)."""
+  listing = Path(work_dir) / 'thumbs.txt'
   listing.write_text(''.join(f"file '{page['path'].as_posix()}'\n" for page in pages), encoding='utf-8')
   width, height = THUMB
   command = [tool('ffmpeg'), '-v', 'error', '-f', 'concat', '-safe', '0', '-i', str(listing)]
@@ -411,9 +423,12 @@ def merge_similar(pages, work_dir):
   result = subprocess.run(command, capture_output=True, check=False)
   size = width * height
   if result.returncode or len(result.stdout) != size * len(pages):
-    return pages  # keep them all rather than lose any
-  thumbs = [result.stdout[index * size : (index + 1) * size] for index in range(len(pages))]
+    return None
+  return [result.stdout[index * size : (index + 1) * size] for index in range(len(pages))]
 
+
+def _merge(pages, thumbs, long_s):
+  width, height = THUMB
   merged, firsts = [], []  # kept pages, and the grey copy each group started with
   for page, thumb in zip(pages, thumbs):
     if firsts:
@@ -425,11 +440,37 @@ def merge_similar(pages, work_dir):
         continue
       if any(_differ(earlier, thumb, width, height) < SAME_PAGE for earlier in firsts[-RECENT - 1 : -1]):
         continue
-      if page.get('stayed_s', math.inf) < LONG_S and _differ(first, thumb, width, height) < NEW_SCREEN:
+      if page.get('stayed_s', math.inf) < long_s and _differ(first, thumb, width, height) < NEW_SCREEN:
         continue
     merged.append(dict(page))
     firsts.append(thumb)
   return merged
+
+
+def merge_similar(pages, work_dir, duration_s=None):
+  """Drops pages that add little to the ones kept, comparing small grey copies:
+  - the same page with small changes (bullets that appear one by one, a finished line of typing, a pop-up): the group
+    keeps its first time and its last picture, which is the most complete;
+  - the same text scrolled by less than SCROLL_NEW of the page, as a whole or in its left and right halves: the
+    group keeps its picture;
+  - a return to one of the last RECENT pages, as when switching between slides and a terminal: dropped;
+  - a page shown for less than LONG_S that is not mostly new: dropped as a passing state. With `duration_s`, LONG_S is
+    tuned so that the count falls within PAGES_PER_HOUR (tune_long).
+  Comparing with the group's first page, not its latest, keeps slow typing and scrolling from drifting along.
+  Returns the kept pages and the LONG_S used."""
+  thumbs = _thumbnails(pages, work_dir) if len(pages) > 1 else None
+  if thumbs is None:
+    return pages, LONG_S  # keep them all rather than lose any
+  if not duration_s:
+    return _merge(pages, thumbs, LONG_S), LONG_S
+  tried = {}
+
+  def count_for(long_s):
+    tried[long_s] = _merge(pages, thumbs, long_s)
+    return len(tried[long_s])
+
+  long_s = tune_long(count_for, duration_s / 3600)
+  return tried[long_s], long_s
 
 
 # Contact sheets of screen pages for models and chat AIs that take a limited number of images. Anthropic scales larger
