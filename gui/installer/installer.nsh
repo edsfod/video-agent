@@ -9,10 +9,20 @@
   SendMessage 0xFFFF 0x001A 0 "STR:Environment" /TIMEOUT=500
 !macroend
 
+; electron-builder keeps a copy of the installer (about 160 MB) in %LOCALAPPDATA%\<name>-updater for electron-updater,
+; which this app does not use, and the uninstaller leaves it behind.
+!macro videoAgentDropInstallerCopy
+  Delete "$LOCALAPPDATA\${APP_INSTALLER_STORE_FILE}"
+  ${GetParent} "$LOCALAPPDATA\${APP_INSTALLER_STORE_FILE}" $1
+  RMDir "$1"
+!macroend
+
 !macro customInstall
   !insertmacro videoAgentPath add
+  !insertmacro videoAgentDropInstallerCopy
 !macroend
 
 !macro customUnInstall
   !insertmacro videoAgentPath remove
+  !insertmacro videoAgentDropInstallerCopy
 !macroend
