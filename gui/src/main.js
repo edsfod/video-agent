@@ -98,22 +98,31 @@ function bundledCli() {
   return app.isPackaged && fs.existsSync(file) ? file : null;
 }
 
-// Settings first, then the bundled CLI, then one on PATH.
+// In development, the CLI of this checkout (uv's editable install in .venv), so the window and the code it calls
+// match; an installed Video Agent's CLI on PATH may be older. CI has no .venv and installs the checkout on PATH.
+function sourceCli() {
+  const file = path.resolve(__dirname, '..', '..', '.venv', 'Scripts', 'video-agent.exe');
+  return !app.isPackaged && fs.existsSync(file) ? file : null;
+}
+
+// Settings first, then the bundled CLI (packaged) or this checkout's (development), then one on PATH.
 function cliCommand() {
   const custom = loadSettings().cli.trim();
   if (custom) return splitCommand(custom);
-  if (bundledCli()) return [bundledCli()];
+  const own = bundledCli() || sourceCli();
+  if (own) return [own];
   return which('video-agent') ? ['video-agent'] : UVX_CLI;
 }
 
-// Child processes and terminals see the bundled CLI as `video-agent`, so agents and shells can run it too.
+// Child processes and terminals see the app's own CLI as `video-agent`, so agents and shells can run it too.
 function childEnv(extra = {}) {
   const env = { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1', ...extra };
-  if (bundledCli()) {
+  const own = bundledCli() || sourceCli();
+  if (own) {
     // The copy is a plain object with Windows' own spelling (usually `Path`); adding `PATH` beside it would give the
     // child two entries, and node-pty's terminal would read the old one.
     const key = Object.keys(env).find((name) => name.toUpperCase() === 'PATH') || 'PATH';
-    env[key] = `${path.dirname(bundledCli())};${env[key] || ''}`;
+    env[key] = `${path.dirname(own)};${env[key] || ''}`;
   }
   return env;
 }
