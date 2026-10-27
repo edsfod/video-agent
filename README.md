@@ -44,7 +44,7 @@ Video Agent 由三部分组成，按需取用：
 **只装命令行工具**：先装 [uv](https://docs.astral.sh/uv/)（`winget install astral-sh.uv`），再运行
 
 ```powershell
-uv tool install https://github.com/edsfod/video-agent/releases/download/v0.1.2/video_agent-0.1.2-py3-none-any.whl
+uv tool install https://github.com/edsfod/video-agent/releases/download/v0.2.0/video_agent-0.2.0-py3-none-any.whl
 ```
 
 FFmpeg 和 yt-dlp 会作为依赖一起装上，不需要 git。电脑上已经有的 ffmpeg、ffprobe、yt-dlp（包括 [Media Downloader](https://github.com/mhogomchungu/media-downloader) 自带的 yt-dlp）会优先使用。
@@ -129,6 +129,8 @@ video-agent config --provider openai --model Qwen/Qwen3.5-397B-A17B --base-url h
 - 必剪转录会把视频的音轨上传到哔哩哔哩，用的是必剪的非官方接口，随时可能失效。只有你明确同意时才会上传：命令行要同时加 `--asr bcut --allow-remote-asr`，桌面程序要勾选，Agent 要先问过你。
 - 用模型 API 总结时，字幕和画面会发给你设置的服务商；用 Claude Code、Codex 时，由它们按各自的规则处理。
 - 日志不记录 API key。
+- 检查更新：桌面程序启动时会向 GitHub 查一次最新版本，连不上时依次改用 GitHub API 和下载镜像（gh-proxy.com、ghfast.top，或你在设置里填的镜像）。这些请求只是普通的下载请求，不附带你的视频、字幕、设置或其他数据；对方能看到的是你的 IP 地址和请求的文件。可以在设置里关掉启动时的检查。
+- 除此之外，程序只在你要求时联网：下载链接（yt-dlp）、必剪转录、调用你设置的模型 API。
 
 ## 开发
 

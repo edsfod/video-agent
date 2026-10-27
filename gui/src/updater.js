@@ -14,8 +14,9 @@ const signature = require('./update-signature');
 const REPO = 'edsfod/video-agent';
 const RELEASES = `https://github.com/${REPO}/releases`;
 // Third-party GitHub download proxies, used only after github.com and the API fail. They are not trusted: whatever
-// they serve must match the signed latest.yml. A mirror set in the settings comes first.
-const MIRRORS = ['https://ghfast.top/', 'https://gh-proxy.com/'];
+// they serve must match the signed latest.yml. A mirror set in the settings comes first; gh-proxy.com was the faster
+// of the two on a direct connection (2026-10-27: about 2.5 MB/s against 0.4 MB/s, one measurement).
+const MIRRORS = ['https://gh-proxy.com/', 'https://ghfast.top/'];
 const REQUEST_TIMEOUT = 15_000; // per metadata request; Electron's requests never time out on their own
 const STALL_TIMEOUT = 60_000; // a download with no progress for this long is cancelled and the next source tried
 

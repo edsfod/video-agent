@@ -48,6 +48,10 @@ jobs:
       - run: Add-Content $env:GITHUB_PATH "$env:GITHUB_WORKSPACE\build\cli\video-agent"
       - run: npm run test:dist
         working-directory: gui
+      - name: PATH choice in silent installs
+        run: |
+          $env:VA_E2E_SETUP = (Get-ChildItem gui\dist\Video-Agent-Setup-*.exe | Select-Object -First 1).FullName
+          node --test gui/test/installer-path.test.js
       - name: Install the build silently
         run: |
           $setup = Get-ChildItem gui\dist\Video-Agent-Setup-*.exe | Select-Object -First 1
