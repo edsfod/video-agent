@@ -102,5 +102,6 @@ Open:
 - On the maintainer's machine the first two silent installs of 0.2.0 saved the PATH choice as 0 (opted out), though no choice was saved before the second; later runs of the same installer, with probes and without, and the CI test saved 1. Not explained; a test the user stopped earlier may have left a 0, which explains only the first.
 
 - Check the Codex route after 2026-11-25.
+- Code signing postponed (user decision, 2026-10-27): the SignPath application form at signpath.org/apply did not work for the user. Preparation notes are in `notes/` (local); the update signature on `latest.yml` does not depend on it.
 - Representative frames can include black frames (fade-ins); detecting them needs image analysis.
 - Add site-specific authentication only if needed; `download` already accepts an explicit yt-dlp config file.
