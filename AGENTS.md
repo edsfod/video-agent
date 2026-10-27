@@ -18,7 +18,7 @@ This project grew out of [edsfod/yanhe-agent](https://github.com/edsfod/yanhe-ag
 - The GUI (Electron, per ARCHITECTURE.md) and any other front end call the CLI and must not duplicate media or summary logic.
 - Do not tag, publish or create a release until the user says all planned work is finished.
 - Push work to a branch (`dev/<topic>`) and fast-forward `main` only after CI passed on that branch, so `main` receives only commits that passed CI, including the GUI tests that run only there (user decision, 2026-10-28). Commit messages carry no AI attribution trailer.
-- yt-dlp and FFmpeg (through `imageio-ffmpeg`) are Python dependencies and are bundled in the desktop installer; copies on `PATH` are preferred (user decision, 2026-10-27; see ARCHITECTURE.md "Distribution"). Do not install other external tools, such as AutoSlides Extractor, automatically. Report the missing optional tool and its explicit path/configuration options.
+- yt-dlp and FFmpeg (through `imageio-ffmpeg`) are Python dependencies; the desktop installer bundles yt-dlp and its own LGPL FFmpeg build instead of imageio-ffmpeg's GPL one, and offers that FFmpeg's source with each release (user decisions, 2026-10-27 and 2026-10-28; see ARCHITECTURE.md "Distribution" and "Bundled FFmpeg"). Copies on `PATH` are preferred. Do not install other external tools, such as AutoSlides Extractor, automatically. Report the missing optional tool and its explicit path/configuration options.
 
 ## Design record
 
