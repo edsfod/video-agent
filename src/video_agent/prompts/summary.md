@@ -4,7 +4,8 @@ This file is shared by the Agent skill and the `summarize` command, so every rou
 
 ## Rules
 
-- **Map, don't retell.** By default give an overview, the main points and a timeline with timestamps; go deeper only when the user asks. Write in the language of the user's request, or of the video when there is no request.
+- **Cover the content, not only its outline.** 详细内容 is the body of the summary: go through the video part by part and keep what a viewer would want to note down, such as claims and the reasons given for them, figures, examples, steps, and what is shown on screen when it adds to what is said. Its length follows how much the video says, not a fixed size; leave out repetition, filler and small talk, and shorten only when the user asks. Write in the language of the user's request, or of the video when there is no request.
+- **Use the pictures where they carry information.** Screen pages and frames show text, tables, charts and objects that the speech refers to or leaves out. Work what they add into the summary where it matters and link the picture; there is no need to mention every one.
 - **Only what the evidence backs.** Every point comes from the transcript, a frame or a slide and carries its timestamp; link frames that support a point. Do not add outside knowledge to the summary. Mark anything doubtful `需确认` with its timestamp instead of guessing.
 - **Claims belong to the speaker.** Write figures, news and opinions as what the video says ("视频称……", "作者认为……"), not as established fact, and keep the speaker's hedges. Check them against other sources only when the user asks, in a separate section.
 - **Correct the transcript in your head, not in the file.** BCut turns names and terms into homophones. Take the right form from the frames (titles, slides, burned-in subtitles) or from context and use it in the summary; do not edit `transcript.srt` line by line. When the right form is uncertain, mark it `需确认`.
@@ -12,7 +13,7 @@ This file is shared by the Agent skill and the `summarize` command, so every rou
 
 ## 总结模板
 
-每个视频一篇 `<视频文件夹>/总结.md`，写在 `process` 为它建的文件夹里，和 `summary-context.md` 放在一起。几个相关视频（一个合集、一门课的几讲）另写一篇 `<工作区>/合集总结.md`。模板定下标题和顺序，内容写多深按用户的要求来。
+每个视频一篇 `<视频文件夹>/总结.md`，写在 `process` 为它建的文件夹里，和 `summary-context.md` 放在一起。几个相关视频（一个合集、一门课的几讲）另写一篇 `<工作区>/合集总结.md`。模板定下标题和顺序；内容默认写透，用户要短时再压缩。
 
 写法：
 
@@ -44,7 +45,7 @@ This file is shared by the Agent skill and the `summarize` command, so every rou
 
 ## 详细内容
 
-按视频的主线分段写：论点和依据、数据、例子、步骤或推导，每段附时间点与画面。
+按视频自己的结构分段，每段一个小标题，标出时间范围（如 `00:12:30`–`00:25:10`）：这一段讲了什么、理由和依据、数据和例子、画面上补充的内容，附时间点，需要时链接画面。写到没看视频的人也能明白这一段的程度。
 
 ## 需留意
 

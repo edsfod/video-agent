@@ -86,7 +86,10 @@ def _context(asset, video, info, rows, transcript_source, transcript_error, fram
   lines = [
     '# Video summary context',
     '',
-    'This is source evidence, not a generated summary. Write a concise, timestamped summary from the transcript and frames.',
+    (
+      'This is source evidence, not a generated summary. Write the summary from the transcript, the screen pages and '
+      'the frames, following the rules and template printed by `video-agent template`.'
+    ),
     '',
     f'- Source: `{video}`',
     f'- Duration: {seconds:.1f} seconds',

@@ -49,6 +49,10 @@ Lecture uploads often show the camera picture beside or inside the screen record
 - **Limits.** Pages and representative frames stop at 500 each, spread evenly, and the run reports it; the GUI's frame field is empty (no cap) by default, and the old saved default of 36 is ignored.
 - **Not handled yet.** A layout that changes during the video (for example camera only for the first minutes) is read as a whole, so its border may not reach 85 %; then the frame counts as one region.
 
+## Summary depth — user decision (2026-10-27)
+
+The user found summaries shallow. Besides the missing screen pages, the rules asked for it: the first rule, "Map, don't retell", gave only an overview, main points and a timeline unless the user asked for more (a default taken over from upstream in 0.1.0, not a user decision), `summary-context.md` asked for a "concise" summary, and 详细内容 had one line of guidance. Now 详细内容 is the body: part by part, what a viewer would note down, with a length that follows how much the video says, shortened only on request; pictures are worked in where they add something, without a duty to mention each one. The user asked that the rules name no subject or kind of video (they apply to every video) and not require every screen page.
+
 ## Concurrent jobs — user decision (2026-10-27), modelled on AutoSlides
 
 Until 0.2.0 the window ran one job at a time and refused a second one, even a download while another video was being processed. The user asked for the rules to be worked out from what each job reads and writes, and pointed to AutoSlides (its download queue, `renderer/shared/services/downloadService.ts`, and its serial extraction worker) as a model. Jobs are separate processes, so what they share is files:
