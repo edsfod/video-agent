@@ -1,0 +1,424 @@
+// Electron main process: runs the Video Agent CLI, the Agent CLIs and terminal shells for the window.
+// All media and summary work happens in the CLI; this file only starts processes and relays their output.
+
+const { app, BrowserWindow, ipcMain, dialog, shell, clipboard, nativeTheme, Tray, Menu, nativeImage } = require('electron');
+const { spawn, execFileSync } = require('node:child_process');
+const fs = require('node:fs');
+const path = require('node:path');
+const pty = require('node-pty');
+const { Logs } = require('./logs');
+
+const RELEASE = 'v0.1.0';
+const UVX_CLI = ['uvx', '--from', `git+https://github.com/edsfod/video-agent@${RELEASE}`, 'video-agent'];
+const settingsFile = () => path.join(app.getPath('userData'), 'settings.json');
+const jobs = new Map();
+const terminals = new Map();
+const ICONS = path.join(__dirname, '..', 'assets');
+let win;
+let tray;
+let logs;
+let quitting = false;
+// What the tray shows, kept for the end-to-end tests, which read it through app.evaluate.
+const trayState = { tooltip: '', menu: null };
+global.vaTray = {
+  tooltip: () => trayState.tooltip,
+  labels: () => trayState.menu?.items.map((item) => item.label).filter(Boolean) ?? [],
+  click: (label) => trayState.menu?.items.find((item) => item.label === label)?.click(),
+  windowVisible: () => !!win && !win.isDestroyed() && win.isVisible(),
+};
+
+// --user-data=<dir> keeps test runs away from the user's settings.
+const userData = process.argv.find((arg) => arg.startsWith('--user-data='));
+if (userData) app.setPath('userData', userData.slice('--user-data='.length));
+
+// ---------- settings ----------
+
+function defaults() {
+  return {
+    workspace: path.join(app.getPath('documents'), 'Video Agent'),
+    cli: '',
+    videos: [],
+    frameInterval: 60,
+    maxFrames: 36,
+    shell: '',
+    closeToTray: true,
+  };
+}
+
+function loadSettings() {
+  try {
+    return { ...defaults(), ...JSON.parse(fs.readFileSync(settingsFile(), 'utf8')) };
+  } catch {
+    return defaults();
+  }
+}
+
+function saveSettings(changes) {
+  const next = { ...loadSettings(), ...changes };
+  fs.mkdirSync(path.dirname(settingsFile()), { recursive: true });
+  fs.writeFileSync(settingsFile(), JSON.stringify(next, null, 2));
+  return next;
+}
+
+// ---------- locating programs ----------
+
+function which(name) {
+  try {
+    const found = execFileSync('where.exe', [name], { encoding: 'utf8', windowsHide: true });
+    return found.split(/\r?\n/).find(Boolean) || null;
+  } catch {
+    return null;
+  }
+}
+
+function cliCommand() {
+  const custom = loadSettings().cli.trim();
+  if (custom) return splitCommand(custom);
+  return which('video-agent') ? ['video-agent'] : UVX_CLI;
+}
+
+function splitCommand(text) {
+  return (text.match(/"[^"]*"|\S+/g) || []).map((part) => part.replace(/^"|"$/g, ''));
+}
+
+// The folder that holds .claude-plugin/ and skills/: the repository in development, resources/plugin when packaged.
+function pluginRoot() {
+  return app.isPackaged ? path.join(process.resourcesPath, 'plugin') : path.resolve(__dirname, '..', '..');
+}
+
+function shells() {
+  const found = [];
+  const add = (id, label, file, args = []) => file && found.push({ id, label, file, args });
+  add('pwsh', 'PowerShell 7', which('pwsh.exe'), ['-NoLogo']);
+  add('powershell', 'Windows PowerShell', which('powershell.exe'), ['-NoLogo']);
+  add('cmd', '命令提示符', which('cmd.exe'));
+  const git = which('git.exe');
+  const bash = [
+    git && path.resolve(path.dirname(git), '..', 'bin', 'bash.exe'),
+    'C:\\Program Files\\Git\\bin\\bash.exe',
+  ].find((candidate) => candidate && fs.existsSync(candidate));
+  add('gitbash', 'Git Bash', bash, ['--login', '-i']);
+  return found;
+}
+
+// ---------- child processes ----------
+
+function send(channel, value) {
+  if (win && !win.isDestroyed()) win.webContents.send(channel, value);
+}
+
+// Programs are started directly when they resolve to an .exe, so arguments need no cmd.exe quoting. A .cmd or .bat
+// shim needs cmd.exe; then arguments are quoted, and prompts always travel through stdin, never as arguments.
+function launch(command, args) {
+  const found = path.isAbsolute(command) ? command : which(command);
+  if (found && /\.exe$/i.test(found)) return { file: found, args, shell: false };
+  return { file: quote(found || command), args: args.map(quote), shell: true };
+}
+
+function startJob(id, command, args, { cwd, stdin, env, title = id, prompt } = {}) {
+  const run = launch(command, args);
+  const log = logs.job(id, { title, command: [command, ...args], cwd, ...(prompt ? { prompt } : {}) });
+  const child = spawn(run.file, run.args, {
+    cwd,
+    shell: run.shell,
+    windowsHide: true,
+    env: { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1', ...env },
+    stdio: [stdin === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'],
+  });
+  jobs.set(id, { child, title });
+  updateTray();
+  if (stdin !== undefined) child.stdin.end(stdin);
+  const relay = (stream) => (chunk) => {
+    const text = chunk.toString('utf8');
+    log.write(text);
+    send('job:output', { id, stream, text });
+  };
+  child.stdout.on('data', relay('stdout'));
+  child.stderr.on('data', relay('stderr'));
+  child.on('error', (error) => {
+    log.write(`${error.message}\n`);
+    send('job:output', { id, stream: 'stderr', text: `${error.message}\n` });
+  });
+  child.on('close', (code) => {
+    jobs.delete(id);
+    log.close(code);
+    updateTray();
+    send('job:exit', { id, code });
+  });
+}
+
+function stopJob(id) {
+  const job = jobs.get(id);
+  if (job) spawn('taskkill', ['/PID', String(job.child.pid), '/T', '/F'], { windowsHide: true });
+}
+
+
+
+// cmd.exe quoting for .cmd shims. cmd.exe still expands %NAME% inside quotes; such arguments are not supported.
+function quote(value) {
+  const text = String(value);
+  if (/^[\w\-.:\\/=@+,]+$/.test(text)) return text;
+  return `"${text.replace(/"/g, '""')}"`;
+}
+
+function runToEnd(command, args, stdin) {
+  return new Promise((resolve) => {
+    const run = launch(command, args);
+    const child = spawn(run.file, run.args, {
+      shell: run.shell,
+      windowsHide: true,
+      env: { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1' },
+    });
+    child.stdin.end(stdin ?? '');
+    let out = '';
+    let err = '';
+    child.stdout.on('data', (chunk) => (out += chunk.toString('utf8')));
+    child.stderr.on('data', (chunk) => (err += chunk.toString('utf8')));
+    child.on('error', (error) => resolve({ code: -1, out, err: error.message }));
+    child.on('close', (code) => resolve({ code, out, err }));
+  });
+}
+
+function insideWorkspace(target) {
+  const root = path.resolve(loadSettings().workspace).toLowerCase() + path.sep;
+  return path.resolve(target).toLowerCase().startsWith(root);
+}
+
+// ---------- IPC ----------
+
+function registerIpc() {
+  ipcMain.handle('settings:get', () => loadSettings());
+  ipcMain.handle('settings:set', (_, changes) => saveSettings(changes));
+  ipcMain.handle('env:info', () => ({
+    cli: cliCommand(),
+    claude: which('claude'),
+    codex: which('codex'),
+    shells: shells().map(({ id, label }) => ({ id, label })),
+    pluginRoot: pluginRoot(),
+  }));
+
+  ipcMain.handle('dialog:videos', async () => {
+    const result = await dialog.showOpenDialog(win, {
+      title: '选择视频',
+      properties: ['openFile', 'multiSelections'],
+      filters: [
+        { name: '视频', extensions: ['mp4', 'mkv', 'webm', 'mov', 'avi', 'flv', 'm4v', 'ts', 'wmv'] },
+        { name: '所有文件', extensions: ['*'] },
+      ],
+    });
+    return result.canceled ? [] : result.filePaths;
+  });
+  ipcMain.handle('dialog:folder', async (_, title) => {
+    const result = await dialog.showOpenDialog(win, { title, properties: ['openDirectory', 'createDirectory'] });
+    return result.canceled ? null : result.filePaths[0];
+  });
+
+  // Video Agent CLI: streamed jobs and one-shot JSON queries.
+  ipcMain.handle('cli:start', (_, { id, args, stdin, title }) => {
+    const [command, ...prefix] = cliCommand();
+    startJob(id, command, [...prefix, ...args], { cwd: loadSettings().workspace, stdin, title });
+  });
+  ipcMain.handle('cli:json', async (_, args) => {
+    const [command, ...prefix] = cliCommand();
+    const { code, out, err } = await runToEnd(command, [...prefix, ...args]);
+    if (code !== 0) return { error: (err || out).trim() || `exit ${code}` };
+    try {
+      return JSON.parse(out);
+    } catch {
+      return { error: `unexpected output: ${out.slice(0, 300)}` };
+    }
+  });
+  ipcMain.handle('cli:text', (_, { args, stdin }) => {
+    const [command, ...prefix] = cliCommand();
+    return runToEnd(command, [...prefix, ...args], stdin);
+  });
+  ipcMain.handle('job:cancel', (_, id) => {
+    logs.line('info', `job ${id} stopped by the user`);
+    stopJob(id);
+  });
+
+  // Agent route: Claude Code with the plugin, or Codex told to follow the skill file.
+  ipcMain.handle('agent:start', (_, { id, agent, video, folder, request, overwrite, title }) => {
+    const workspace = loadSettings().workspace;
+    const skill = path.join(pluginRoot(), 'skills', 'video-agent', 'SKILL.md');
+    const task = [
+      `总结这个视频：${video}`,
+      `工作区是 ${workspace}，这个视频已经用 process 处理过，处理结果在 ${folder}。直接用这个文件夹，不要再运行 process，也不要上传音频。`,
+      overwrite ? '已有的 总结.md 按要求重写。' : '',
+      request ? `用户的要求：${request}` : '',
+    ].filter(Boolean).join('\n');
+    if (agent === 'claude') {
+      const prompt = `用 video-agent skill 完成下面的任务。\n${task}`;
+      startJob(id, 'claude', [
+        '-p',
+        '--plugin-dir', pluginRoot(),
+        '--add-dir', workspace,
+        '--permission-mode', 'acceptEdits',
+        '--allowedTools', 'Bash(video-agent *)', 'Read', 'Write', 'Edit', 'Skill',
+        '--output-format', 'stream-json', '--verbose',
+      ], { cwd: workspace, stdin: prompt, title, prompt });
+    } else {
+      const prompt = `先读 ${skill} 并照它做，<video-agent> 用 video-agent 命令。\n${task}`;
+      startJob(id, 'codex', [
+        'exec', '--skip-git-repo-check', '--cd', workspace, '--sandbox', 'workspace-write', '--json', '-',
+      ], { cwd: workspace, stdin: prompt, title, prompt });
+    }
+  });
+
+  // Files inside the workspace only.
+  ipcMain.handle('fs:read', (_, file) => {
+    if (!insideWorkspace(file)) throw new Error('只能读取工作区里的文件');
+    return fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : null;
+  });
+  ipcMain.handle('shell:open', (_, target) => shell.openPath(target));
+  ipcMain.handle('shell:reveal', (_, target) => shell.showItemInFolder(target));
+  ipcMain.handle('shell:external', (_, url) => /^https?:\/\//.test(url) && shell.openExternal(url));
+  ipcMain.handle('clipboard:write', (_, text) => clipboard.writeText(text));
+
+  // Logs.
+  ipcMain.handle('logs:list', () => logs.list());
+  ipcMain.handle('logs:read', (_, file) => logs.read(file));
+  ipcMain.handle('logs:open', () => shell.openPath(logs.dir));
+  ipcMain.on('log:renderer', (_, message) => logs.line('error', `renderer: ${message}`));
+
+  // Embedded terminal.
+  ipcMain.handle('pty:start', (_, { id, shellId, cwd, cols, rows }) => {
+    const choice = shells().find((item) => item.id === shellId) || shells()[0];
+    const term = pty.spawn(choice.file, choice.args, {
+      name: 'xterm-256color',
+      cols,
+      rows,
+      cwd: cwd && fs.existsSync(cwd) ? cwd : loadSettings().workspace,
+      env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
+      useConpty: true,
+    });
+    terminals.set(id, term);
+    logs.line('info', `terminal ${id} opened: ${choice.label} in ${cwd}`);
+    term.onData((data) => send('pty:data', { id, data }));
+    term.onExit(({ exitCode }) => {
+      terminals.delete(id);
+      send('pty:exit', { id, exitCode });
+    });
+    return choice.label;
+  });
+  ipcMain.on('pty:write', (_, { id, data }) => terminals.get(id)?.write(data));
+  ipcMain.on('pty:resize', (_, { id, cols, rows }) => terminals.get(id)?.resize(cols, rows));
+  ipcMain.handle('pty:kill', (_, id) => terminals.get(id)?.kill());
+}
+
+// ---------- window ----------
+
+function createWindow() {
+  win = new BrowserWindow({
+    width: 1280,
+    height: 820,
+    minWidth: 960,
+    minHeight: 600,
+    title: 'Video Agent',
+    icon: path.join(ICONS, 'icon-256.png'),
+    backgroundColor: nativeTheme.shouldUseDarkColors ? '#1b1a18' : '#faf9f7',
+    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, sandbox: true },
+  });
+  win.removeMenu();
+  win.on('close', (event) => {
+    if (quitting || !loadSettings().closeToTray || !tray) return;
+    event.preventDefault();
+    win.hide();
+  });
+  win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//.test(url)) shell.openExternal(url);
+    return { action: 'deny' };
+  });
+  win.webContents.on('will-navigate', (event) => event.preventDefault());
+
+  // --screenshot=<file> [--select=<n>] [--tab=<name>]: render, save a PNG and quit (for checks without a person).
+  const option = (name) => process.argv.find((arg) => arg.startsWith(`--${name}=`))?.split('=').slice(1).join('=');
+  const target = option('screenshot');
+  if (target) {
+    if (option('theme')) nativeTheme.themeSource = option('theme'); // light or dark
+    win.webContents.once('did-finish-load', async () => {
+      await win.webContents.executeJavaScript(
+        `window.__screenshot && window.__screenshot(${JSON.stringify({ select: option('select'), tab: option('tab') })})`,
+      );
+      await new Promise((resolve) => setTimeout(resolve, Number(option('wait') || 2500)));
+      // Wait for the images in view to finish decoding (at most 10 s); lazy ones below the fold never start.
+      await win.webContents.executeJavaScript(`Promise.race([
+        Promise.all([...document.images].filter((image) => {
+          const box = image.getBoundingClientRect();
+          return image.src && box.top < innerHeight && box.bottom > 0;
+        }).map((image) => image.decode().catch(() => {}))),
+        new Promise((resolve) => setTimeout(resolve, 10000)),
+      ])`);
+      // Wait for two painted frames; capturing right after the timer can return a stale frame.
+      await win.webContents.executeJavaScript(
+        'new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))',
+      );
+      fs.writeFileSync(target, (await win.webContents.capturePage()).toPNG());
+      app.quit();
+    });
+  }
+}
+
+// ---------- tray ----------
+
+function showWindow() {
+  if (!win || win.isDestroyed()) return createWindow();
+  if (win.isMinimized()) win.restore();
+  win.show();
+  win.focus();
+}
+
+function updateTray() {
+  if (!tray) return;
+  const running = [...jobs.values()].map((job) => job.title);
+  trayState.tooltip = running.length ? `Video Agent · 正在运行：${running.join('；')}` : 'Video Agent';
+  tray.setToolTip(trayState.tooltip);
+  tray.setContextMenu(
+    (trayState.menu = Menu.buildFromTemplate([
+      { label: '显示窗口', click: showWindow },
+      { label: '添加本地视频…', click: () => (showWindow(), send('tray:add-videos')) },
+      { type: 'separator' },
+      { label: running.length ? `正在运行 ${running.length} 个任务` : '没有运行中的任务', enabled: false },
+      { label: '停止所有任务', enabled: running.length > 0, click: () => [...jobs.keys()].forEach(stopJob) },
+      { type: 'separator' },
+      { label: '打开工作区', click: () => shell.openPath(loadSettings().workspace) },
+      { label: '打开日志文件夹', click: () => shell.openPath(logs.dir) },
+      { type: 'separator' },
+      { label: '退出', click: () => app.quit() },
+    ])),
+  );
+}
+
+function createTray() {
+  const image = nativeImage.createFromPath(path.join(ICONS, 'icon-16.png'));
+  image.addRepresentation({ scaleFactor: 2, buffer: fs.readFileSync(path.join(ICONS, 'icon-32.png')) });
+  tray = new Tray(image);
+  tray.on('click', showWindow);
+  updateTray();
+}
+
+// ---------- lifecycle ----------
+
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  app.on('second-instance', showWindow);
+  app.whenReady().then(() => {
+    logs = new Logs(path.join(app.getPath('userData'), 'logs'));
+    logs.line('info', `started ${app.getVersion()}, Electron ${process.versions.electron}`);
+    process.on('uncaughtException', (error) => logs.line('error', error.stack || String(error)));
+    fs.mkdirSync(loadSettings().workspace, { recursive: true });
+    registerIpc();
+    createTray();
+    createWindow();
+  });
+}
+
+app.on('before-quit', () => (quitting = true));
+app.on('will-quit', () => {
+  for (const id of jobs.keys()) stopJob(id);
+  for (const term of terminals.values()) term.kill();
+  logs?.line('info', 'quit');
+});
+app.on('window-all-closed', () => app.quit());

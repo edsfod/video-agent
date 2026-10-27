@@ -1,0 +1,204 @@
+// End-to-end test: drives the real window with Playwright and the real Video Agent CLI on a synthetic video.
+// The model is a local fake; CLI settings live in a temporary %APPDATA%. Run with `npm test`.
+
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const http = require('node:http');
+const os = require('node:os');
+const path = require('node:path');
+const { execFileSync } = require('node:child_process');
+const { _electron: electron } = require('playwright-core');
+
+const GUI = path.resolve(__dirname, '..');
+const ROOT = fs.mkdtempSync(path.join(os.tmpdir(), 'va-e2e-'));
+const WORKSPACE = path.join(ROOT, 'workspace');
+const APPDATA = path.join(ROOT, 'appdata');
+const VIDEO = path.join(ROOT, 'media', 'sample clip [e2e].mp4');
+const ENV = { ...process.env, APPDATA, NO_PROXY: '127.0.0.1,localhost', no_proxy: '127.0.0.1,localhost' };
+const SUMMARY = '# 测试视频\n\n## 概要\n\n一段测试视频。[画面](frames/extra/frame-00-00-03.jpg)\n';
+
+function cli(args) {
+  return execFileSync('video-agent', args, { env: ENV, encoding: 'utf8', windowsHide: true });
+}
+
+function makeVideo() {
+  fs.mkdirSync(path.dirname(VIDEO), { recursive: true });
+  execFileSync('ffmpeg', [
+    '-y', '-hide_banner', '-loglevel', 'error',
+    '-f', 'lavfi', '-i', 'testsrc=duration=4:size=320x240:rate=10',
+    '-f', 'lavfi', '-i', 'smptebars=duration=4:size=320x240:rate=10',
+    '-f', 'lavfi', '-i', 'sine=frequency=440:duration=8',
+    '-filter_complex', '[0:v][1:v]concat=n=2:v=1:a=0[v]', '-map', '[v]', '-map', '2:a',
+    '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-shortest', VIDEO,
+  ]);
+  fs.writeFileSync(VIDEO.replace(/\.mp4$/, '.srt'),
+    '1\n00:00:00,500 --> 00:00:02,500\n大家好，今天讲测试视频\n\n2\n00:00:03,000 --> 00:00:05,000\n我们看看这张图表\n');
+}
+
+// A fake OpenAI-compatible server: the first reply asks for a frame, the second returns the summary.
+function fakeModel() {
+  const requests = [];
+  const replies = [
+    { choices: [{ message: { role: 'assistant', content: null, tool_calls: [
+      { id: 'c1', type: 'function', function: { name: 'frame', arguments: '{"time":"00:00:03"}' } }] } }] },
+    { choices: [{ message: { role: 'assistant', content: SUMMARY } }] },
+  ];
+  const server = http.createServer((request, response) => {
+    let body = '';
+    request.on('data', (chunk) => (body += chunk));
+    request.on('end', () => {
+      requests.push(JSON.parse(body));
+      response.setHeader('Content-Type', 'application/json');
+      response.end(JSON.stringify(replies.shift()));
+    });
+  });
+  return new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve({ server, requests })));
+}
+
+let app;
+let page;
+let model;
+
+test.before(async () => {
+  makeVideo();
+  model = await fakeModel();
+  cli(['config', '--provider', 'openai', '--model', 'fake-model', '--base-url', `http://127.0.0.1:${model.server.address().port}/v1`]);
+  const userData = path.join(ROOT, 'gui-data');
+  fs.mkdirSync(userData, { recursive: true });
+  fs.writeFileSync(path.join(userData, 'settings.json'), JSON.stringify({ workspace: WORKSPACE, videos: [VIDEO], shell: 'cmd' }));
+  // VA_E2E_EXE=<path to Video Agent.exe> runs the same tests against a packaged build.
+  const packaged = process.env.VA_E2E_EXE;
+  app = await electron.launch({
+    executablePath: packaged || require('electron'),
+    args: [...(packaged ? [] : ['.']), `--user-data=${userData}`],
+    cwd: GUI,
+    env: ENV,
+  });
+  page = await app.firstWindow();
+  page.on('dialog', (dialog) => dialog.accept());
+  await page.waitForSelector('.video-item .badge:text("未处理")');
+});
+
+test.after(async () => {
+  await app?.close();
+  model?.server.close();
+  fs.rmSync(ROOT, { recursive: true, force: true });
+});
+
+test('process the video from the window', async () => {
+  await page.click('#run-process');
+  await page.waitForSelector('.video-item .badge:text("已处理")', { timeout: 60_000 });
+  const facts = await page.textContent('#facts');
+  assert.match(facts, /2 段 · 字幕文件：sample clip \[e2e\]\.srt/);
+  assert.match(await page.textContent('#log-text'), /完成/);
+});
+
+test('transcript tab lists the lines', async () => {
+  await page.click('.tabs button[data-tab=transcript]');
+  await page.waitForSelector('#transcript .line');
+  assert.equal(await page.locator('#transcript .line').count(), 2);
+  await page.fill('#transcript-filter', '图表');
+  await page.waitForFunction(() => document.querySelectorAll('#transcript .line').length === 1);
+});
+
+test('frames tab takes an extra frame', async () => {
+  await page.click('.tabs button[data-tab=frames]');
+  await page.waitForSelector('.frame img');
+  await page.fill('#frame-times', '0:05');
+  await page.click('#frame-form button[type=submit]');
+  await page.waitForSelector('.frame.extra', { timeout: 30_000 });
+  const loaded = await page.$eval('.frame.extra img', (img) => img.complete && img.naturalWidth > 0);
+  assert.ok(loaded, 'the extra frame image loads from file://');
+});
+
+test('summary through the model API, with one frame tool round', async () => {
+  await page.click('.tabs button[data-tab=summary]');
+  await page.check('input[name=route][value=api]');
+  await page.click('#run-summary');
+  await page.waitForSelector('#summary h1:text("测试视频")', { timeout: 60_000 });
+  assert.equal(model.requests.length, 2);
+  assert.equal(model.requests[0].tools[0].function.name, 'frame');
+  assert.equal(model.requests[1].messages.at(-1).content[1].type, 'image_url');
+  await page.waitForSelector('.video-item .badge:text("已总结")');
+  await page.click('#summary a');
+  await page.waitForSelector('#lightbox[open]');
+  await page.click('#lightbox');
+});
+
+test('copy material puts the rules and transcript on the clipboard', async () => {
+  await page.check('input[name=route][value=copy]');
+  await page.click('#run-summary');
+  await page.waitForFunction(() => document.querySelector('#summary-state').textContent.includes('已复制'));
+  const copied = await app.evaluate(({ clipboard }) => clipboard.readText());
+  assert.match(copied, /# Writing a video summary/);
+  assert.match(copied, /我们看看这张图表/);
+});
+
+test('settings dialog saves the model through the CLI', async () => {
+  const keyBefore = JSON.parse(cli(['config', '--json', '--provider', 'openai'])).key;
+  await page.click('#open-settings');
+  await page.waitForSelector('#settings[open]');
+  await page.waitForFunction(() => document.querySelector('#set-model').value === 'fake-model');
+  await page.fill('#set-model', 'fake-model-2');
+  if (!keyBefore) await page.fill('#set-key', 'e2e-test-key');
+  await page.click('#save-settings');
+  await page.waitForFunction(() => !document.querySelector('#settings').open);
+  let shown;
+  for (let i = 0; i < 40 && shown?.model !== 'fake-model-2'; i++) {
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    shown = JSON.parse(cli(['config', '--json']));
+  }
+  assert.equal(shown.model, 'fake-model-2');
+  if (!keyBefore) {
+    assert.equal(shown.key, 'Credential Manager');
+    cli(['config', '--provider', 'openai', '--delete-key']);
+  }
+});
+
+test('logs record every job and never the API key', async () => {
+  await page.click('#open-logs');
+  await page.waitForSelector('#logs[open] .log-entry');
+  const titles = await page.locator('.log-entry').allTextContents();
+  assert.ok(titles.some((text) => /处理：sample clip \[e2e\]\.mp4.*完成/.test(text)), titles.join(' | '));
+  assert.ok(titles.some((text) => text.includes('总结（模型 API）')));
+  await page.locator('.log-entry', { hasText: '处理：' }).click();
+  await page.waitForFunction(() => document.querySelector('#log-view').textContent.includes('evidence saved'));
+  await page.click('#close-logs');
+
+  const dir = path.join(ROOT, 'gui-data', 'logs');
+  const files = [path.join(dir, 'main.log'), ...fs.readdirSync(path.join(dir, 'jobs')).map((name) => path.join(dir, 'jobs', name))];
+  const all = files.map((file) => fs.readFileSync(file, 'utf8')).join('\n');
+  assert.match(all, /job job-\d+ started: 处理/);
+  assert.doesNotMatch(all, /e2e-test-key/);
+});
+
+test('closing the window keeps the app in the tray', async () => {
+  const labels = await app.evaluate(() => global.vaTray.labels());
+  for (const label of ['显示窗口', '添加本地视频…', '打开日志文件夹', '退出']) assert.ok(labels.includes(label), label);
+  assert.equal(await app.evaluate(() => global.vaTray.tooltip()), 'Video Agent');
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].close());
+  assert.equal(await app.evaluate(() => global.vaTray.windowVisible()), false);
+  await app.evaluate(() => global.vaTray.click('显示窗口'));
+  assert.equal(await app.evaluate(() => global.vaTray.windowVisible()), true);
+});
+
+test('embedded terminal runs a command in the video folder', async () => {
+  await page.click('.tabs button[data-tab=terminal]');
+  await page.waitForSelector('.xterm-rows');
+  await page.waitForFunction(() => document.querySelector('.xterm-rows').textContent.includes('>'), null, { timeout: 30_000 });
+  await page.click('#terminal');
+  await page.keyboard.type('echo va-e2e-%CD%');
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(
+    () => /va-e2e-.*sample-clip/.test(document.querySelector('.xterm-rows').textContent.replace(/\s+/g, '')),
+    null,
+    { timeout: 30_000 },
+  );
+});
+
+test('remove the video from the list', async () => {
+  await page.click('#remove-video');
+  await page.waitForSelector('#empty:not([hidden])');
+  assert.equal(await page.locator('.video-item').count(), 0);
+});

@@ -1,0 +1,38 @@
+{
+  "name": "video-agent",
+  "version": "0.1.0",
+  "description": "Summarize any video, local or from a link: prepare its transcript and representative frames with the Video Agent CLI, look at the frames, and write a timestamped summary. Windows only.",
+  "author": {
+    "name": "edsfod"
+  },
+  "license": "AGPL-3.0-or-later",
+  "keywords": [
+    "video",
+    "summary",
+    "transcript",
+    "subtitles",
+    "bilibili",
+    "yt-dlp"
+  ],
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "Video Agent",
+        "shortDescription": "视频总结",
+        "longDescription": "总结本地视频或链接里的视频：先用已有字幕，没有字幕时经你同意用必剪转录；抽取代表画面，按需补截画面，写出带时间点的总结。",
+        "developerName": "edsfod",
+        "category": "Productivity",
+        "capabilities": [
+          "Read",
+          "Write"
+        ],
+        "defaultPrompt": [
+          "总结这个视频：D:\\Videos\\example.mp4",
+          "下载并总结这个视频：https://www.bilibili.com/video/BV...",
+          "这个视频里第 3 分钟那张图表说了什么？"
+        ]
+      }
+    }
+  }
+}

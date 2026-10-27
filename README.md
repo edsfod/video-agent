@@ -1,0 +1,153 @@
+<div align="center">
+  <img src="docs/images/icon.png" width="112" alt="Video Agent 图标" />
+  <h1>Video Agent</h1>
+  <p>总结任何视频：本地文件或链接，先拿到字幕和画面，再写出带时间点的总结。</p>
+  <p>
+    <img src="https://img.shields.io/badge/platform-Windows-lightgrey" alt="平台：Windows" />
+    <img src="https://img.shields.io/badge/license-AGPL--3.0--or--later-blue" alt="许可证：AGPL-3.0-or-later" />
+    <img src="https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white" alt="Python 3.11+" />
+    <img src="https://img.shields.io/badge/Electron-45-47848F?logo=electron&logoColor=white" alt="Electron 45" />
+  </p>
+</div>
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/summary-dark.webp" />
+    <img src="docs/images/summary-light.webp" width="90%" alt="总结页：选择总结方式，下方是生成的总结" />
+  </picture>
+</p>
+
+Video Agent 由三部分组成，按需取用：
+
+- **命令行工具**：下载（可选）、提取字幕、抽取代表画面、按时间点补截画面，并把这些整理成一份供总结用的材料。也可以直接调用模型 API 写总结。
+- **Agent 插件**：让 Claude Code、Codex 按同一套规则调用命令行工具、看画面、写总结。
+- **桌面程序**：在窗口里完成以上全部操作，内嵌终端，支持托盘和任务日志。
+
+只支持 Windows。
+
+## 能做什么
+
+- **任何来源的视频**：直接选本地文件；也可以粘贴链接，用 [yt-dlp](https://github.com/yt-dlp/yt-dlp) 下载。下载和处理是两步，下载完不会自动开始处理。
+- **字幕优先**：先用视频自带的字幕或同名的 `.srt`、`.vtt` 文件；都没有时，可以用必剪（B 站的语音识别）转录，但每次都要你明确同意上传音频。
+- **代表画面**：按时间间隔和场景变化抽取一组带时间点的画面，补上字幕里没有的图表、幻灯片和屏幕文字；写总结时可以按时间补截。
+- **PPT 提取（可选，默认关闭）**：需要时调用 [AutoSlides Extractor](https://github.com/bit-admin/AutoSlides-Extractor) 提取幻灯片。
+- **四种总结方式**，写出的总结用同一套规则和模板：
+  - Claude Code 或 Codex 按插件里的 skill 写，会自己补截画面；
+  - 模型 API（Anthropic，或 OpenAI 兼容接口，例如 ModelScope、本地 Ollama），支持工具调用的模型同样会补截画面；
+  - 复制材料，贴进任何聊天 AI。
+- **总结的写法**：每一点都附时间点和画面出处；视频里的说法按“视频称”转述，不当成事实；拿不准的标“需确认”。
+
+## 安装
+
+先装两样依赖（已经有了可以跳过）：
+
+```powershell
+winget install astral-sh.uv
+winget install Gyan.FFmpeg
+```
+
+**命令行工具**
+
+```powershell
+uv tool install git+https://github.com/edsfod/video-agent@v0.1.0
+```
+
+装好后终端里就有 `video-agent` 命令。
+
+**桌面程序**：从 [Releases](https://github.com/edsfod/video-agent/releases) 下载 `Video-Agent-Setup-<版本>.exe` 安装。安装包没有代码签名，Windows SmartScreen 可能提示“未知发布者”，选“仍要运行”即可。桌面程序调用的是命令行工具：找得到 `video-agent` 命令就用它，找不到就用 `uvx` 临时拉取同一版本。
+
+**Agent 插件**
+
+- Claude Code：在 Claude Code 里运行
+
+  ```
+  /plugin marketplace add edsfod/video-agent
+  /plugin install video-agent@video-agent
+  ```
+
+- Codex：在终端里运行
+
+  ```bash
+  codex plugin marketplace add edsfod/video-agent
+  codex plugin add video-agent@video-agent
+  ```
+
+- 其他 Agent：把 `skills/video-agent/` 复制到它的技能目录。
+
+可选的外部程序：下载要用 yt-dlp（找不到时，也会使用 [Media Downloader](https://github.com/mhogomchungu/media-downloader) 自带的那一份）；提取 PPT 要用 AutoSlides Extractor。
+
+## 桌面程序
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/process-dark.webp" />
+    <img src="docs/images/process-light.webp" width="90%" alt="处理页：抽帧间隔、是否用必剪转录、是否提取 PPT" />
+  </picture>
+</p>
+
+添加本地视频（也可以拖进窗口），或在左上角粘贴链接下载。在「处理」页开始处理：必剪转录和 PPT 提取都是默认关闭的选项，勾选必剪只对这一次处理生效。
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/frames-dark.webp" />
+    <img src="docs/images/frames-light.webp" width="90%" alt="画面页：代表画面和补截的画面" />
+  </picture>
+</p>
+
+「画面」页列出代表画面，可以按时间补截；「字幕」页可以筛选字幕；「总结」页选择总结方式并显示结果，点画面链接直接看图。
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/terminal-dark.webp" />
+    <img src="docs/images/terminal-light.webp" width="90%" alt="终端页：在视频的处理结果文件夹里打开的命令提示符" />
+  </picture>
+</p>
+
+「终端」页内嵌一个终端，可以选 PowerShell 7、Windows PowerShell、命令提示符或 Git Bash，打开在这个视频的处理结果文件夹里，可以直接运行 `video-agent` 或交互式的 `claude`、`codex`。
+
+关闭窗口时程序缩到托盘，任务继续在后台运行（可在设置里关掉）。每个任务的完整输出都记在日志里，点左下角「日志」查看。
+
+## 命令行
+
+```powershell
+video-agent download "https://www.bilibili.com/video/BV..." -o D:\Videos
+video-agent process "D:\Videos\lecture.mp4" -o D:\Video-Work
+video-agent frame "D:\Videos\lecture.mp4" 1:10 4:49 -o D:\Video-Work
+video-agent summarize "D:\Videos\lecture.mp4" -o D:\Video-Work
+```
+
+`process` 在工作区里为每个视频建一个文件夹，放字幕（`transcript.srt`、`transcript.txt`）、代表画面（`frames/`）、总结材料（`summary-context.md`）和 `manifest.json`，原视频不会被修改或移动。没有字幕时加 `--asr bcut --allow-remote-asr` 用必剪转录；加 `--extract-slides` 提取 PPT。
+
+`summarize` 用模型 API 写 `总结.md`。先设置一次服务商和 API key，key 存在 Windows 凭据管理器里，不写进文件：
+
+```powershell
+video-agent config --provider anthropic --set-key
+video-agent config --provider openai --model Qwen/Qwen3.5-397B-A17B --base-url https://api-inference.modelscope.cn/v1 --set-key
+```
+
+全部命令和选项见 [docs/commands.md](docs/commands.md)，处理流程见 [docs/cli.md](docs/cli.md)，设计记录见 [ARCHITECTURE.md](ARCHITECTURE.md)。
+
+## 隐私
+
+- 必剪转录会把视频的音轨上传到哔哩哔哩，用的是必剪的非官方接口，随时可能失效。只有你明确同意时才会上传：命令行要同时加 `--asr bcut --allow-remote-asr`，桌面程序要勾选，Agent 要先问过你。
+- 用模型 API 总结时，字幕和画面会发给你设置的服务商；用 Claude Code、Codex 时，由它们按各自的规则处理。
+- 日志不记录 API key。
+
+## 开发
+
+```powershell
+uv run pytest              # 命令行工具的测试
+cd gui; npm ci; npm test   # 桌面程序的端到端测试（会打开窗口）
+npm run dist               # 打包安装程序
+npm run screenshots -- <工作区> <视频>   # 重新生成本页截图
+```
+
+## 许可
+
+Copyright (C) 2026 edsfod。以 [GNU Affero 通用公共许可证第 3 版](LICENSE)或（由你选择）任何更新的版本发布（AGPL-3.0-or-later）：分发修改版，或让用户通过网络使用修改版时，都必须以同一许可证公开完整源码。
+
+## 鸣谢
+
+- 本项目从 [edsfod/yanhe-agent](https://github.com/edsfod/yanhe-agent) 发展而来，必剪转录的做法也来自那里。
+- 下载用 [yt-dlp](https://github.com/yt-dlp/yt-dlp)，媒体处理用 [FFmpeg](https://ffmpeg.org/)，PPT 提取用 [AutoSlides Extractor](https://github.com/bit-admin/AutoSlides-Extractor)，界面配色参考了 [AutoSlides](https://github.com/bit-admin/Yanhekt-AutoSlides)。
+- 截图里的视频和字幕来自 NASA 戈达德太空飞行中心的 [NASA's Fermi Mission Shows How Luck Favors the Prepared](https://images.nasa.gov/details/GSFC_20181108_FERMI_m13042_Luck4K)（2018），按 [NASA 的媒体使用规定](https://www.nasa.gov/nasa-brand-center/images-and-media/)用于演示。截图里的总结由 AI（Qwen3.5，经模型 API）生成，不是 NASA 的说法，未经 NASA 审核，NASA 不对其准确性负责；本项目与 NASA 无关，也未获 NASA 认可。

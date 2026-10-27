@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src file:; style-src file: 'unsafe-inline'; img-src file: data:; font-src file: data:"
+    />
+    <title>Video Agent</title>
+    <link rel="stylesheet" href="../../node_modules/@xterm/xterm/css/xterm.css" />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div class="app">
+      <aside class="sidebar">
+        <div class="brand">Video Agent</div>
+        <button id="add-videos" class="primary wide">添加本地视频…</button>
+        <form id="download-form" class="download">
+          <input id="download-url" type="text" placeholder="或粘贴视频链接下载" spellcheck="false" />
+          <button type="submit">下载</button>
+        </form>
+        <div class="list-title">视频</div>
+        <div id="video-list" class="video-list"></div>
+        <div class="sidebar-foot">
+          <button id="open-logs" class="ghost">日志</button>
+          <button id="open-settings" class="ghost">设置</button>
+        </div>
+      </aside>
+
+      <main>
+        <section id="empty" class="empty">
+          <h1>总结任何视频</h1>
+          <p>添加本地视频，或粘贴链接下载，也可以把视频文件拖进窗口。</p>
+          <p class="muted">处理时先找视频自带的字幕；没有字幕时，可以选择用必剪转录（会上传音频）。</p>
+        </section>
+
+        <section id="video" class="video" hidden>
+          <header class="video-head">
+            <div class="video-title">
+              <h1 id="video-name"></h1>
+              <div id="video-path" class="muted path"></div>
+            </div>
+            <div class="actions">
+              <button id="reveal-video" class="ghost">打开所在文件夹</button>
+              <button id="reveal-folder" class="ghost">打开处理结果</button>
+              <button id="remove-video" class="ghost">移出列表</button>
+            </div>
+          </header>
+
+          <nav class="tabs">
+            <button data-tab="process" class="active">处理</button>
+            <button data-tab="transcript">字幕</button>
+            <button data-tab="frames">画面</button>
+            <button data-tab="summary">总结</button>
+            <button data-tab="terminal">终端</button>
+          </nav>
+
+          <div class="panel" data-panel="process">
+            <div class="card">
+              <h2>准备材料</h2>
+              <p class="muted">提取字幕、抽取代表画面，写出供总结用的材料。原视频不会被修改或移动。</p>
+              <div class="options">
+                <label>抽帧间隔（秒）<input id="opt-interval" type="number" min="1" step="1" /></label>
+                <label>最多画面数<input id="opt-max-frames" type="number" min="1" step="1" /></label>
+              </div>
+              <label class="check">
+                <input id="opt-bcut" type="checkbox" />
+                <span>没有字幕时，用必剪（B 站）转录<br /><small class="warn">会把这个视频的音轨上传到哔哩哔哩。只对这一次处理生效。</small></span>
+              </label>
+              <label class="check">
+                <input id="opt-slides" type="checkbox" />
+                <span>提取 PPT 幻灯片<br /><small class="muted">调用 AutoSlides Extractor，耗时较长；默认关闭。</small></span>
+              </label>
+              <div class="row">
+                <button id="run-process" class="primary">开始处理</button>
+                <span id="process-state" class="muted"></span>
+              </div>
+            </div>
+            <div id="facts" class="facts"></div>
+          </div>
+
+          <div class="panel" data-panel="transcript" hidden>
+            <div class="toolbar">
+              <input id="transcript-filter" type="search" placeholder="筛选字幕" />
+              <span id="transcript-count" class="muted"></span>
+            </div>
+            <div id="transcript" class="transcript"></div>
+          </div>
+
+          <div class="panel" data-panel="frames" hidden>
+            <form id="frame-form" class="toolbar">
+              <input id="frame-times" type="text" placeholder="补截画面的时间，如 1:10 4:49" />
+              <button type="submit">截取</button>
+              <span class="muted">代表画面按间隔和场景变化抽取；需要时按时间补截。</span>
+            </form>
+            <div id="frames" class="frames"></div>
+          </div>
+
+          <div class="panel" data-panel="summary" hidden>
+            <div class="card">
+              <div class="routes" id="routes">
+                <label><input type="radio" name="route" value="claude" /> Claude Code</label>
+                <label><input type="radio" name="route" value="codex" /> Codex</label>
+                <label><input type="radio" name="route" value="api" /> 模型 API</label>
+                <label><input type="radio" name="route" value="copy" /> 复制材料</label>
+              </div>
+              <p id="route-note" class="muted"></p>
+              <textarea id="summary-request" rows="2" placeholder="对总结的要求（可不填），例如：写详细一点，重点讲数据"></textarea>
+              <div class="row">
+                <button id="run-summary" class="primary">生成总结</button>
+                <button id="open-summary" class="ghost" hidden>用编辑器打开</button>
+                <span id="summary-state" class="muted"></span>
+              </div>
+            </div>
+            <article id="summary" class="markdown"></article>
+          </div>
+
+          <div class="panel terminal-panel" data-panel="terminal" hidden>
+            <div class="toolbar">
+              <select id="shell-choice"></select>
+              <button id="new-terminal">新建终端</button>
+              <span class="muted">在这个视频的处理结果文件夹里打开；可以运行 video-agent，或交互式的 claude、codex。</span>
+            </div>
+            <div id="terminal" class="terminal"></div>
+          </div>
+        </section>
+
+        <section id="log" class="log" hidden>
+          <header>
+            <span id="log-title"></span>
+            <span class="spacer"></span>
+            <button id="cancel-job" class="ghost small">停止</button>
+            <button id="close-log" class="ghost small">收起</button>
+          </header>
+          <pre id="log-text"></pre>
+        </section>
+      </main>
+    </div>
+
+    <dialog id="settings">
+      <form method="dialog" class="settings">
+        <h2>设置</h2>
+        <label>工作区（处理结果和下载的视频都放在这里）
+          <span class="row"><input id="set-workspace" type="text" readonly /><button id="pick-workspace" type="button">选择…</button></span>
+        </label>
+        <label>Video Agent 命令（留空自动查找）
+          <input id="set-cli" type="text" placeholder="例如 C:\Users\me\.local\bin\video-agent.exe" spellcheck="false" />
+        </label>
+        <label class="check"><input id="set-close-to-tray" type="checkbox" /><span>关闭窗口时收到托盘，任务继续在后台运行</span></label>
+        <div id="env-info" class="muted small-text"></div>
+        <h3>模型 API</h3>
+        <label>服务商
+          <select id="set-provider"><option value="anthropic">Anthropic</option><option value="openai">OpenAI 兼容接口</option></select>
+        </label>
+        <label>模型<input id="set-model" type="text" spellcheck="false" /></label>
+        <label>接口地址<input id="set-base-url" type="text" spellcheck="false" /></label>
+        <label>API key（存在 Windows 凭据管理器，不写进文件）
+          <span class="row"><input id="set-key" type="password" placeholder="不修改就留空" autocomplete="off" /><button id="delete-key" type="button">删除已存的 key</button></span>
+        </label>
+        <div id="api-info" class="muted small-text"></div>
+        <div class="row end">
+          <button value="cancel" class="ghost">取消</button>
+          <button id="save-settings" value="save" class="primary">保存</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="logs">
+      <div class="logs">
+        <header class="row">
+          <h2>日志</h2>
+          <span class="spacer"></span>
+          <button id="open-log-folder" class="ghost">打开日志文件夹</button>
+          <button id="close-logs" class="ghost">关闭</button>
+        </header>
+        <div class="logs-body">
+          <div id="log-list" class="log-list"></div>
+          <pre id="log-view" class="log-view"></pre>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog id="lightbox"><img id="lightbox-image" alt="" /><div id="lightbox-caption"></div></dialog>
+
+    <script src="../../node_modules/marked/lib/marked.umd.js"></script>
+    <script src="../../node_modules/dompurify/dist/purify.min.js"></script>
+    <script src="../../node_modules/@xterm/xterm/lib/xterm.js"></script>
+    <script src="../../node_modules/@xterm/addon-fit/lib/addon-fit.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>

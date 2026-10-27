@@ -1,0 +1,85 @@
+{
+  "name": "video-agent-gui",
+  "productName": "Video Agent",
+  "version": "0.1.0",
+  "description": "Desktop front end for the Video Agent CLI",
+  "main": "src/main.js",
+  "private": true,
+  "license": "AGPL-3.0-or-later",
+  "author": "edsfod",
+  "scripts": {
+    "start": "electron .",
+    "screenshot": "electron . --screenshot",
+    "test": "node --test --test-concurrency=1 \"test/**/*.test.js\"",
+    "dist": "electron-builder --win nsis --x64",
+    "test:dist": "set \"VA_E2E_EXE=%CD%\\dist\\win-unpacked\\Video Agent.exe\" && node --test --test-concurrency=1 \"test/**/*.test.js\"",
+    "screenshots": "node scripts/screenshots.js"
+  },
+  "dependencies": {
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
+    "dompurify": "^3.4.17",
+    "marked": "^18.1.1",
+    "node-pty": "^1.1.0"
+  },
+  "devDependencies": {
+    "electron": "^45.0.0",
+    "electron-builder": "^26.18.0",
+    "playwright-core": "^1.64.1"
+  },
+  "allowScripts": {
+    "electron@45.0.0": true,
+    "node-pty@1.1.0": true,
+    "electron-winstaller@5.4.0": true
+  },
+  "build": {
+    "appId": "com.edsfod.video-agent",
+    "productName": "Video Agent",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**",
+      "assets/**",
+      "package.json",
+      "!**/test/**"
+    ],
+    "asarUnpack": [
+      "node_modules/node-pty/**"
+    ],
+    "extraResources": [
+      {
+        "from": "..",
+        "to": "plugin",
+        "filter": [
+          ".claude-plugin/**",
+          ".agents/**",
+          "skills/**",
+          "plugin.json"
+        ]
+      },
+      {
+        "from": "../LICENSE",
+        "to": "LICENSE.txt"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/icon-256.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false,
+      "artifactName": "Video-Agent-Setup-${version}.exe"
+    },
+    "npmRebuild": false
+  }
+}

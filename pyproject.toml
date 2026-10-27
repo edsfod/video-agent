@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "video-agent"
+version = "0.1.0"
+description = "Local video evidence preparation for transcription and summarization"
+requires-python = ">=3.11"
+license = "AGPL-3.0-or-later"
+license-files = ["LICENSE"]
+dependencies = ["requests>=2.32"]
+
+[dependency-groups]
+dev = ["pytest>=8", "ruff>=0.8"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[project.scripts]
+video-agent = "video_agent.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+video_agent = ["prompts/*.md"]
+
+[tool.ruff]
+line-length = 120
+indent-width = 2
+
+[tool.ruff.format]
+quote-style = "single"

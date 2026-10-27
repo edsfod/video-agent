@@ -1,0 +1,33 @@
+name: test
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  cli:
+    runs-on: windows-latest # Windows only (ARCHITECTURE.md)
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.0 # publishes no major-version tag
+      - run: choco install ffmpeg --no-progress -y
+      - run: uv run ruff check src tests
+      - run: uv run ruff format --check src tests
+      - run: uv run pytest
+      - run: uvx --from . video-agent --help
+
+  gui:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - run: choco install ffmpeg --no-progress -y
+      - run: uv tool install .
+      - run: Add-Content $env:GITHUB_PATH "$env:USERPROFILE\.local\bin"
+      - run: npm ci
+        working-directory: gui
+      - run: npm test
+        working-directory: gui
