@@ -1,8 +1,9 @@
 name: release
 
 # A tag v<version> builds the installer and the wheel, signs latest.yml for the in-app updater and creates a draft
-# release with the notes from docs/releases/v<version>.md. The draft is published by hand after checking it;
-# the app only sees published releases.
+# release with the notes from docs/releases/v<version>.md. The release also carries the source of the LGPL FFmpeg in
+# the installer (FFmpeg and dav1d tarballs and how they were built), as the LGPL requires. The draft is published by
+# hand after checking it; the app only sees published releases.
 
 on:
   push:
@@ -12,13 +13,21 @@ permissions:
   contents: write
 
 jobs:
+  ffmpeg:
+    uses: ./.github/workflows/ffmpeg.yml
+
   release:
+    needs: ffmpeg
     runs-on: windows-latest
     defaults:
       run:
         shell: bash
     steps:
       - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: ffmpeg-lgpl
+          path: build/ffmpeg
       - uses: astral-sh/setup-uv@v10.3.0
       - uses: actions/setup-node@v6
         with:
@@ -43,5 +52,6 @@ jobs:
           --title "Video Agent ${GITHUB_REF_NAME#v}" --notes-file "docs/releases/$GITHUB_REF_NAME.md"
           gui/dist/Video-Agent-Setup-*.exe gui/dist/Video-Agent-Setup-*.exe.blockmap
           gui/dist/latest.yml gui/dist/latest.yml.sig dist/*.whl
+          build/ffmpeg/source/*.tar.xz "build/ffmpeg/BUILD.txt#FFmpeg-BUILD.txt"
         env:
           GH_TOKEN: ${{ github.token }}

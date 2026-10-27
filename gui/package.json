@@ -104,6 +104,12 @@
     ],
     "electronFuses": {
       "enableCookieEncryption": true
-    }
+    },
+    "extraFiles": [
+      {
+        "from": "../build/cli/video-agent/THIRD-PARTY-NOTICES.txt",
+        "to": "THIRD-PARTY-NOTICES.txt"
+      }
+    ]
   }
 }

@@ -32,10 +32,18 @@ jobs:
       - run: npm test
         working-directory: gui
 
+  ffmpeg:
+    uses: ./.github/workflows/ffmpeg.yml
+
   installer:
+    needs: ffmpeg
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: ffmpeg-lgpl
+          path: build/ffmpeg
       - uses: astral-sh/setup-uv@v10.3.0
       - uses: actions/setup-node@v6
         with:

@@ -159,7 +159,7 @@ video-agent config --provider openai --model Qwen/Qwen3.5-397B-A17B --base-url h
 ```powershell
 uv run pytest              # 命令行工具的测试
 cd gui; npm ci; npm test   # 桌面程序的端到端测试（会打开窗口）
-npm run dist               # 先用 PyInstaller 打包命令行工具（需要 uv），再打包安装程序
+npm run dist               # 先用 PyInstaller 打包命令行工具（需要 uv，以及 build/ffmpeg：CI 的 ffmpeg-lgpl 产物，或在 MSYS2 里运行 packaging/ffmpeg/build.sh），再打包安装程序
 npm run screenshots -- <工作区> <视频>   # 重新生成本页截图
 ```
 
@@ -170,6 +170,7 @@ Copyright (C) 2026 edsfod。以 [GNU Affero 通用公共许可证第 3 版](LICE
 ## 鸣谢
 
 - 本项目受 [windlandneko/yanhekit](https://github.com/windlandneko/yanhekit) 启发：做成 Claude Code、Codex 插件的形式，以及用必剪转录字幕的思路，都参考了它。
-- 下载用 [yt-dlp](https://github.com/yt-dlp/yt-dlp)，媒体处理用 [FFmpeg](https://ffmpeg.org/)（随 [imageio-ffmpeg](https://github.com/imageio/imageio-ffmpeg) 一起装上），安装程序里的命令行工具用 [PyInstaller](https://pyinstaller.org/) 打包，PPT 提取用 [AutoSlides Extractor](https://github.com/bit-admin/AutoSlides-Extractor)。
+- 下载用 [yt-dlp](https://github.com/yt-dlp/yt-dlp)，媒体处理用 [FFmpeg](https://ffmpeg.org/)（安装程序里是自己编译的 LGPL 版，带 [dav1d](https://code.videolan.org/videolan/dav1d) 解码 AV1，源码随每个发布版提供；用 uv 或 pip 安装时随 [imageio-ffmpeg](https://github.com/imageio/imageio-ffmpeg) 装上），安装程序里的命令行工具用 [PyInstaller](https://pyinstaller.org/) 打包，PPT 提取用 [AutoSlides Extractor](https://github.com/bit-admin/AutoSlides-Extractor)。
 - 界面的浅色和深色配色取自 [AutoSlides](https://github.com/bit-admin/Yanhekt-AutoSlides) 的主题文件（Apache License 2.0）；任务队列的设计（排队而不是拒绝、按类型限制同时运行的数量、去重）参考了它的下载队列，代码是本项目自己写的。
+- 安装程序附带的所有第三方组件和它们的许可证，见安装目录里的 `THIRD-PARTY-NOTICES.txt`。
 - 截图里的视频和字幕来自 NASA 戈达德太空飞行中心的 [NASA's Fermi Mission Shows How Luck Favors the Prepared](https://images.nasa.gov/details/GSFC_20181108_FERMI_m13042_Luck4K)（2018），按 [NASA 的媒体使用规定](https://www.nasa.gov/nasa-brand-center/images-and-media/)用于演示。截图里的总结由 AI（Qwen3.5，经模型 API）生成，不是 NASA 的说法，未经 NASA 审核，NASA 不对其准确性负责；本项目与 NASA 无关，也未获 NASA 认可。

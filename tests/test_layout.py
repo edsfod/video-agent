@@ -102,16 +102,30 @@ def test_a_screen_region_given_by_hand(tmp_path):
     layout.from_region('600,0,320,180', 640, 180)
 
 
-def test_near_identical_pages_merge_into_the_latest_picture(tmp_path):
-  # One page whose pointer moves, then a small label appears; then a real second page.
-  graph = (
-    'color=c=white:s=320x180:r=5:d=20,'
-    "drawbox=x=20:y=20:w=200:h=80:color=0x303030:t=fill:enable='lt(t,12)',"
-    "drawbox=x='40+t*3':y=140:w=6:h=8:color=black:t=fill:enable='lt(t,12)',"
-    "drawbox=x=230:y=20:w=20:h=12:color=red:t=fill:enable='between(t,6,12)',"
-    "drawbox=x=60:y=60:w=220:h=100:color=0x6060c0:t=fill:enable='gte(t,12)'[out]"
+def _boxes(*boxes):
+  """A white 320x180 picture with dark boxes (x, y, w, h, start, end) shown from `start` to `end` seconds."""
+  drawn = ''.join(
+    f",drawbox=x={x}:y={y}:w={w}:h={h}:color=0x303030:t=fill:enable='between(t,{start},{end - 0.01})'"
+    for x, y, w, h, start, end in boxes
   )
-  video = _video(tmp_path, 'merge', graph)
-  pages = media.screen_pages(video, tmp_path / 'pages', 'null', stable=1.0)
-  assert [round(page['time_s']) for page in pages] == [0, 12]
+  return f'color=c=white:s=320x180:r=5:d=30{drawn}[out]'
+
+
+def test_an_addition_to_a_page_keeps_the_fuller_picture(tmp_path):
+  # A page, then a label added to it (under 2.5 % of the picture), then another page.
+  graph = _boxes((20, 20, 200, 80, 0, 20), (230, 20, 40, 12, 8, 20), (60, 110, 220, 60, 20, 30))
+  pages = media.screen_pages(_video(tmp_path, 'addition', graph), tmp_path / 'pages', 'null')
+  assert [round(page['time_s']) for page in pages] == [0, 20]
   assert pages[0]['path'].name != 'page-00001.jpg', 'the later, more complete picture of the first page is kept'
+
+
+def test_short_minor_changes_and_returns_are_not_new_pages(tmp_path):
+  graph = _boxes(
+    (20, 20, 200, 80, 0, 10),  # page A, 10 s
+    (20, 20, 200, 80, 10, 13),
+    (20, 110, 120, 20, 10, 13),  # A with a line more, only 3 s: a passing state
+    (100, 30, 200, 130, 13, 21),  # page B, 8 s
+    (20, 20, 200, 80, 21, 30),  # back to A: a return, not a new page
+  )
+  pages = media.screen_pages(_video(tmp_path, 'passing', graph), tmp_path / 'pages', 'null')
+  assert [round(page['time_s']) for page in pages] == [0, 13]

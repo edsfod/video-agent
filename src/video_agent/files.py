@@ -14,6 +14,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 LOCK_NAME = '.lock'
+LOCK_WAIT_S = 2.0
 
 
 class BusyError(RuntimeError):
@@ -52,18 +53,25 @@ def write_text(path, text):
 @contextmanager
 def video_lock(asset, action):
   """Holds `<asset>/.lock` for one writer. The operating system releases it when the process ends, even when killed,
-  so a stopped job never leaves the folder locked."""
+  so a stopped job never leaves the folder locked; Windows may take a moment for that, so a taken lock is tried again
+  for up to LOCK_WAIT_S seconds before the run gives up."""
   asset = Path(asset)
   asset.mkdir(parents=True, exist_ok=True)
   handle = open(asset / LOCK_NAME, 'a+b')  # noqa: SIM115 - held for the whole block
   try:
-    try:
-      _lock(handle)
-    except OSError:
-      raise BusyError(
-        f'Another Video Agent run is changing {asset.name} (process or summarize); wait for it to finish, then {action} '
-        'again'
-      ) from None
+    deadline = time.monotonic() + LOCK_WAIT_S
+    while True:
+      try:
+        _lock(handle)
+        break
+      except OSError:
+        if time.monotonic() < deadline:
+          time.sleep(0.1)
+          continue
+        raise BusyError(
+          f'Another Video Agent run is changing {asset.name} (process or summarize); wait for it to finish, then '
+          f'{action} again'
+        ) from None
     try:
       yield
     finally:

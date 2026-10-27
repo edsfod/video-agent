@@ -1,6 +1,7 @@
 /* Warm neutral palette; follows the system light or dark setting. The colour values of the light and dark themes
    come from AutoSlides (https://github.com/bit-admin/Yanhekt-AutoSlides, src/renderer/shared/styles/theme.css),
-   licensed under the Apache License 2.0; the variable names and the rest of this file are Video Agent's own. */
+   Copyright 2025 bit-admin, licensed under the Apache License 2.0 (text in THIRD-PARTY-NOTICES.txt); the rest of
+   this file is Video Agent's own. */
 :root {
   --bg-page: #faf9f7;
   --bg-sidebar: #f4f3f0;
