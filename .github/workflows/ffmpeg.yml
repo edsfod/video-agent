@@ -1,10 +1,8 @@
 name: ffmpeg
 
-# The LGPL FFmpeg the installer ships, built by packaging/ffmpeg/build.sh in MSYS2 UCRT64 (ARCHITECTURE.md, "Bundled
-# FFmpeg"). test.yml and release.yml call this workflow and take the `ffmpeg-lgpl` artifact: bin/ffmpeg.exe and
-# bin/ffprobe.exe, the licences, BUILD.txt and the source tarballs. A cold build takes a while, so the result is saved
-# to the cache as soon as it succeeds (as AutoSlides Extractor does for its FFmpeg), keyed on the build script, which
-# pins the source versions and their checksums.
+# The LGPL FFmpeg the installer ships, as the `ffmpeg-lgpl` artifact for release.yml: bin/ffmpeg.exe and
+# bin/ffprobe.exe, the licences, BUILD.txt and the source tarballs. The cache and the build are in
+# .github/actions/ffmpeg, which test.yml's installer job uses directly so that it does not wait for another job.
 
 on:
   workflow_call:
@@ -14,28 +12,7 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
-      - id: cache
-        uses: actions/cache/restore@v6
-        with:
-          path: build/ffmpeg
-          key: ffmpeg-lgpl-${{ hashFiles('packaging/ffmpeg/build.sh') }}
-      - if: steps.cache.outputs.cache-hit != 'true'
-        uses: msys2/setup-msys2@v2
-        with:
-          msystem: UCRT64
-          update: true
-          install: >-
-            make diffutils
-            mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-nasm mingw-w64-ucrt-x86_64-pkgconf
-            mingw-w64-ucrt-x86_64-meson mingw-w64-ucrt-x86_64-ninja mingw-w64-ucrt-x86_64-zlib
-      - if: steps.cache.outputs.cache-hit != 'true'
-        shell: msys2 {0}
-        run: bash packaging/ffmpeg/build.sh
-      - if: steps.cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v6
-        with:
-          path: build/ffmpeg
-          key: ffmpeg-lgpl-${{ hashFiles('packaging/ffmpeg/build.sh') }}
+      - uses: ./.github/actions/ffmpeg
       - uses: actions/upload-artifact@v7
         with:
           name: ffmpeg-lgpl

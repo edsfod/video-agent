@@ -24,13 +24,12 @@ function cli(args) {
 
 function makeVideo() {
   fs.mkdirSync(path.dirname(VIDEO), { recursive: true });
+  // Filter sources and mpeg4, so that the LGPL FFmpeg the installer ships can make it too (no lavfi, no libx264).
   execFileSync('ffmpeg', [
     '-y', '-hide_banner', '-loglevel', 'error',
-    '-f', 'lavfi', '-i', 'testsrc=duration=4:size=320x240:rate=10',
-    '-f', 'lavfi', '-i', 'smptebars=duration=4:size=320x240:rate=10',
-    '-f', 'lavfi', '-i', 'sine=frequency=440:duration=8',
-    '-filter_complex', '[0:v][1:v]concat=n=2:v=1:a=0[v]', '-map', '[v]', '-map', '2:a',
-    '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-shortest', VIDEO,
+    '-filter_complex', 'testsrc=duration=4:size=320x240:rate=10[a];smptebars=duration=4:size=320x240:rate=10[b];'
+      + '[a][b]concat=n=2:v=1:a=0[v];sine=frequency=440:duration=8[s]',
+    '-map', '[v]', '-map', '[s]', '-c:v', 'mpeg4', '-q:v', '3', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-shortest', VIDEO,
   ]);
   fs.writeFileSync(VIDEO.replace(/\.mp4$/, '.srt'),
     '1\n00:00:00,500 --> 00:00:02,500\n大家好，今天讲测试视频\n\n2\n00:00:03,000 --> 00:00:05,000\n我们看看这张图表\n');

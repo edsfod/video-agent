@@ -18,9 +18,9 @@ for (const agent of ['claude', 'codex']) {
     const workspace = path.join(root, 'workspace');
     const video = path.join(root, 'clip.mp4');
     execFileSync('ffmpeg', [
-      '-y', '-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i', 'testsrc=duration=6:size=320x240:rate=10',
-      '-f', 'lavfi', '-i', 'sine=frequency=440:duration=6', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac',
-      '-shortest', video,
+      '-y', '-hide_banner', '-loglevel', 'error',
+      '-filter_complex', 'testsrc=duration=6:size=320x240:rate=10[v];sine=frequency=440:duration=6[s]',
+      '-map', '[v]', '-map', '[s]', '-c:v', 'mpeg4', '-q:v', '3', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-shortest', video,
     ]);
     fs.writeFileSync(path.join(root, 'clip.srt'),
       '1\n00:00:00,500 --> 00:00:02,500\n这是一段测试画面\n\n2\n00:00:03,000 --> 00:00:05,000\n画面上是彩色测试图和计时器\n');

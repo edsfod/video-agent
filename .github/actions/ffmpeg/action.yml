@@ -1,0 +1,31 @@
+name: LGPL FFmpeg
+description: >-
+  Puts the LGPL FFmpeg the installer ships in build/ffmpeg: from the cache, or built by packaging/ffmpeg/build.sh in
+  MSYS2 UCRT64 and saved to the cache as soon as the build succeeds (ARCHITECTURE.md, "Bundled FFmpeg"). The cache is
+  keyed on the build script, which pins the source versions and their checksums. Expects the repository checked out.
+
+runs:
+  using: composite
+  steps:
+    - id: cache
+      uses: actions/cache/restore@v6
+      with:
+        path: build/ffmpeg
+        key: ffmpeg-lgpl-${{ hashFiles('packaging/ffmpeg/build.sh') }}
+    - if: steps.cache.outputs.cache-hit != 'true'
+      uses: msys2/setup-msys2@v2
+      with:
+        msystem: UCRT64
+        update: true
+        install: >-
+          make diffutils
+          mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-nasm mingw-w64-ucrt-x86_64-pkgconf
+          mingw-w64-ucrt-x86_64-meson mingw-w64-ucrt-x86_64-ninja mingw-w64-ucrt-x86_64-zlib
+    - if: steps.cache.outputs.cache-hit != 'true'
+      shell: msys2 {0}
+      run: bash packaging/ffmpeg/build.sh
+    - if: steps.cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v6
+      with:
+        path: build/ffmpeg
+        key: ffmpeg-lgpl-${{ hashFiles('packaging/ffmpeg/build.sh') }}

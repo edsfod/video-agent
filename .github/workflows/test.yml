@@ -7,6 +7,11 @@ on:
 # A newer push to the same branch replaces a run still going, so a fixed intermediate commit does not report a
 # failure. The FFmpeg build is cached as soon as it succeeds; a cold build cut short only happens when
 # packaging/ffmpeg/build.sh changes twice within its 15 minutes.
+#
+# The installer job sets the time of a run (about 4 minutes when FFmpeg comes from the cache). npm packages, and the
+# Electron and electron-builder downloads, are cached on gui/package-lock.json; the installer job takes FFmpeg from the
+# cache itself and makes its test video with that LGPL build instead of installing another FFmpeg (Claude judgment,
+# 2026-10-28, after the user asked for faster runs).
 concurrency:
   group: test-${{ github.ref }}
   cancel-in-progress: true
@@ -31,6 +36,12 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: 24
+          cache: npm
+          cache-dependency-path: gui/package-lock.json
+      - uses: actions/cache@v6
+        with:
+          path: ~\AppData\Local\electron\Cache
+          key: electron-${{ hashFiles('gui/package-lock.json') }}
       - run: choco install ffmpeg --no-progress -y
       - run: uv tool install .
       - run: Add-Content $env:GITHUB_PATH "$env:USERPROFILE\.local\bin"
@@ -39,15 +50,13 @@ jobs:
       - run: npm test
         working-directory: gui
 
-  ffmpeg:
-    uses: ./.github/workflows/ffmpeg.yml
-
   installer:
-    needs: ffmpeg
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/download-artifact@v8
+      - uses: ./.github/actions/ffmpeg
+      # Kept for .git/hooks/pre-push, which takes the FFmpeg for its local packaging smoke test from the last run.
+      - uses: actions/upload-artifact@v7
         with:
           name: ffmpeg-lgpl
           path: build/ffmpeg
@@ -55,7 +64,15 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: 24
-      - run: choco install ffmpeg --no-progress -y # only to make the test video; the app uses its bundled copy
+          cache: npm
+          cache-dependency-path: gui/package-lock.json
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ~\AppData\Local\electron\Cache
+            ~\AppData\Local\electron-builder\Cache
+          key: electron-builder-${{ hashFiles('gui/package-lock.json') }}
+      - run: Add-Content $env:GITHUB_PATH "$env:GITHUB_WORKSPACE\build\ffmpeg\bin" # only to make the test video
       - run: npm ci
         working-directory: gui
       - run: npm run dist
