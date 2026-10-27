@@ -184,7 +184,7 @@ test('logs record every job and never the API key', async () => {
   const titles = await page.locator('.log-entry').allTextContents();
   assert.ok(titles.some((text) => /处理：sample clip \[e2e\]\.mp4.*完成/.test(text)), titles.join(' | '));
   assert.ok(titles.some((text) => text.includes('总结（模型 API）')));
-  await page.locator('.log-entry', { hasText: '处理：' }).click();
+  await page.locator('.log-entry', { hasText: '处理：' }).first().click(); // newest of the two processing runs
   await page.waitForFunction(() => document.querySelector('#log-view').textContent.includes('evidence saved'));
   await page.click('#close-logs');
 
