@@ -10,7 +10,7 @@ from . import settings
 from .download import DownloadError, download_urls
 from .media import MediaError, duration, parse_clock, probe, save_frame
 from .processor import asset_folder, process_video
-from .summarize import summarize_video, template
+from .summarize import import_summary, material, pack, summarize_video, template
 
 
 def positive_float(value):
@@ -145,6 +145,27 @@ def build_parser():
   )
   summarize.add_argument('--no-tools', action='store_true', help='for models without tool calling')
   summarize.add_argument('--overwrite', action='store_true', help='replace an existing 总结.md')
+  summarize.add_argument(
+    '--import',
+    dest='import_from',
+    metavar='FILE',
+    help='save a summary written elsewhere (a file, or - for stdin) as 总结.md instead of calling a model',
+  )
+
+  packing = commands.add_parser(
+    'pack', help='the summary prompt for a chat AI: print it, or zip it with the frames (--zip)'
+  )
+  packing.add_argument('video', type=Path)
+  packing.add_argument(
+    '-o',
+    '--output',
+    type=Path,
+    default=Path.cwd() / 'video-agent-output',
+    help='the workspace passed to process (default: video-agent-output)',
+  )
+  packing.add_argument('--request', default='', help="the user's wishes for this summary")
+  packing.add_argument('--zip', type=Path, help='write 提示词.md and the frames into this zip file')
+  packing.add_argument('--max-images', type=positive_int, default=40, help='frames put into the zip (default: 40)')
 
   config = commands.add_parser('config', help='show or change the summarize provider, model, base URL and API key')
   config.add_argument('--provider', choices=tuple(settings.PROVIDERS), help='choose the provider to use and edit')
@@ -289,6 +310,21 @@ def run(args):
 
   if args.command == 'config':
     return _config(args)
+
+  if args.command == 'summarize' and args.import_from:
+    # Bytes, not text: the GUI sends UTF-8, whatever code page a frozen build would decode stdin with.
+    source = sys.stdin.buffer.read() if args.import_from == '-' else Path(args.import_from).read_bytes()
+    text = source.decode('utf-8-sig')
+    print(import_summary(args.video, args.output, text, overwrite=args.overwrite))
+    return 0
+
+  if args.command == 'pack':
+    if args.zip:
+      target, count = pack(args.video, args.output, args.zip, request=args.request, max_images=args.max_images)
+      print(f'{target} ({count} frames)')
+    else:
+      sys.stdout.write(material(args.video, args.output, request=args.request)[0])
+    return 0
 
   if args.command == 'summarize':
     chosen = settings.resolve(args.provider, args.model, args.base_url)

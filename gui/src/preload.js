@@ -23,6 +23,8 @@ contextBridge.exposeInMainWorld('va', {
   onUpdateState: listen('update:state'),
   pickVideos: () => ipcRenderer.invoke('dialog:videos'),
   pickFolder: (title) => ipcRenderer.invoke('dialog:folder', title),
+  pickFile: (title, filters) => ipcRenderer.invoke('dialog:file', { title, filters }),
+  pickSave: (title, name) => ipcRenderer.invoke('dialog:save', { title, name }),
   droppedPath: (file) => webUtils.getPathForFile(file),
 
   addTask: (spec) => ipcRenderer.invoke('tasks:add', spec),

@@ -407,6 +407,19 @@ function registerIpc() {
     });
     return result.canceled ? [] : result.filePaths;
   });
+  ipcMain.handle('dialog:file', async (_, { title, filters }) => {
+    const result = await dialog.showOpenDialog(win, { title, properties: ['openFile'], filters });
+    return result.canceled ? null : result.filePaths[0];
+  });
+  // Saves land in Downloads unless the user picks another folder.
+  ipcMain.handle('dialog:save', async (_, { title, name }) => {
+    const result = await dialog.showSaveDialog(win, {
+      title,
+      defaultPath: path.join(app.getPath('downloads'), name),
+      filters: [{ name: 'zip', extensions: ['zip'] }],
+    });
+    return result.canceled ? null : result.filePath;
+  });
   ipcMain.handle('dialog:folder', async (_, title) => {
     const result = await dialog.showOpenDialog(win, { title, properties: ['openDirectory', 'createDirectory'] });
     return result.canceled ? null : result.filePaths[0];

@@ -424,7 +424,7 @@ const ROUTE_NOTES = {
   claude: '在后台运行 Claude Code，按 video-agent skill 写总结，会按需补截画面。使用你的 Claude 订阅。',
   codex: '在后台运行 Codex，按同一份 skill 写总结。使用你的 Codex 订阅。',
   api: '用设置里的模型 API 写总结（字幕和画面会发给该服务商）。支持工具调用的模型会按需补截画面。',
-  copy: '把规则、模板和字幕材料复制到剪贴板，贴进任何聊天 AI。画面不会一起复制，可以在「画面」里另外附上。',
+  copy: '把规则、模板和字幕材料复制到剪贴板，贴进任何聊天 AI；要连画面一起给，用「导出 zip」，把里面的提示词和图片交给它。写好后用「导入总结」存回来，画面链接照样能点开。',
 };
 
 function renderRoutes() {
@@ -449,6 +449,7 @@ async function renderSummary(video) {
   $('run-summary').disabled = !info?.processed;
   $('run-summary').textContent = state.route === 'copy' ? '复制材料' : info?.summary ? '重新生成总结' : '生成总结';
   $('open-summary').hidden = !info?.summary;
+  $('export-zip').hidden = $('import-summary').hidden = state.route !== 'copy' || !info?.processed;
   if (!info?.processed) {
     article.replaceChildren(element('p', { className: 'placeholder', textContent: '先在「处理」里处理这个视频，再生成总结。' }));
     return;
@@ -478,7 +479,7 @@ $('run-summary').onclick = async () => {
   const video = current();
   const info = video.info;
   const request = $('summary-request').value.trim();
-  if (state.route === 'copy') return copyMaterial(info);
+  if (state.route === 'copy') return copyMaterial();
   if (info.summary && !confirm('已经有总结了，要重新生成并覆盖吗？')) return;
   const name = { api: '模型 API', claude: 'Claude Code', codex: 'Codex' }[state.route];
   addTask({
@@ -534,21 +535,66 @@ function codexLine(line) {
   else if (item.type === 'agent_message' && item.text) logAppend(item.text.trim() + '\n');
 }
 
-async function copyMaterial(info) {
-  const template = await window.va.cliText(['template']);
-  const context = await window.va.read(info.context);
-  const request = $('summary-request').value.trim();
-  const text = [
-    '请按下面的规则和模板，为这个视频写一篇总结（Markdown）。',
-    request ? `我的要求：${request}` : '',
-    template.out,
-    '---',
-    context,
-  ].filter(Boolean).join('\n\n');
-  await window.va.copy(text);
-  $('summary-state').textContent = `已复制 ${text.length} 个字符。画面在处理结果的 frames 文件夹里。`;
-  setTimeout(() => ($('summary-state').textContent = ''), 8000);
+// The prompt comes from the CLI (`pack`), the same text the zip holds.
+const packArgs = (video) => ['pack', video.path, '-o', state.settings.workspace, '--request', $('summary-request').value.trim()];
+
+function summaryState(text) {
+  $('summary-state').textContent = text;
+  clearTimeout(summaryState.timer);
+  summaryState.timer = setTimeout(() => ($('summary-state').textContent = ''), 10000);
 }
+
+async function copyMaterial() {
+  const result = await window.va.cliText(packArgs(current()));
+  if (result.code !== 0) return alert(`没有复制：${result.err || result.out}`);
+  await window.va.copy(result.out);
+  summaryState(`已复制 ${result.out.length} 个字符。画面没有一起复制；要连画面一起给，用「导出 zip」。`);
+}
+
+$('export-zip').onclick = async () => {
+  const video = current();
+  const file = await window.va.pickSave('导出给网页 AI 的材料', `${baseName(video.path).replace(/\.[^.]+$/, '')}-材料.zip`);
+  if (!file) return;
+  summaryState('正在打包…');
+  const result = await window.va.cliText([...packArgs(video), '--zip', file]);
+  if (result.code !== 0) return summaryState(`没有导出：${(result.err || result.out).trim()}`);
+  summaryState(`已导出：${result.out.trim()}。把 提示词.md 和图片交给网页 AI；不收 zip 的，就解压后上传。`);
+  window.va.reveal(file);
+};
+
+// A video with a running or queued processing or summary task would be written twice.
+function busyWriting(video) {
+  return state.tasks.some((task) => ACTIVE.has(task.status) && ['process', 'summary'].includes(task.kind) && sameVideo(task.video, video.path));
+}
+
+let importFile = null;
+
+$('import-summary').onclick = () => {
+  if (busyWriting(current())) return alert('这个视频正在处理或总结，等任务结束再导入。');
+  importFile = null;
+  $('import-text').value = '';
+  $('import-file-name').textContent = '';
+  $('import-dialog').showModal();
+};
+
+$('import-file').onclick = async () => {
+  importFile = await window.va.pickFile('选择总结文件', [{ name: 'Markdown', extensions: ['md', 'markdown', 'txt'] }]);
+  $('import-file-name').textContent = importFile ? `将导入 ${baseName(importFile)}（文本框里的内容不用）` : '';
+};
+
+$('import-dialog').addEventListener('close', async () => {
+  if ($('import-dialog').returnValue !== 'save') return;
+  const video = current();
+  const text = $('import-text').value;
+  if (!importFile && !text.trim()) return;
+  if (video.info.summary && !confirm('已经有总结了，要用导入的内容覆盖吗？')) return;
+  const args = ['summarize', video.path, '-o', state.settings.workspace, '--import', importFile || '-'];
+  if (video.info.summary) args.push('--overwrite');
+  const result = await window.va.cliText(args, importFile ? '' : text);
+  if (result.code !== 0) return alert(`没有导入：${(result.err || result.out).trim()}`);
+  summaryState('已导入总结。');
+  await refresh(video);
+});
 
 // ---------- terminal ----------
 

@@ -111,6 +111,8 @@
               <textarea id="summary-request" rows="2" placeholder="对总结的要求（可不填），例如：写详细一点，重点讲数据"></textarea>
               <div class="row">
                 <button id="run-summary" class="primary">生成总结</button>
+                <button id="export-zip" hidden>导出 zip…</button>
+                <button id="import-summary" hidden>导入总结…</button>
                 <button id="open-summary" class="ghost" hidden>用编辑器打开</button>
                 <span id="summary-state" class="muted"></span>
               </div>
@@ -205,6 +207,22 @@
         <div class="row end">
           <button value="cancel" class="ghost">取消</button>
           <button id="save-settings" value="save" class="primary">保存</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="import-dialog">
+      <form method="dialog" class="settings">
+        <h2>导入总结</h2>
+        <p class="muted small-text">把网页 AI 写好的总结粘贴到下面，或者选一个 Markdown 文件，保存成这个视频的 总结.md。外面包着的 ```markdown 会自动去掉。</p>
+        <textarea id="import-text" rows="14" spellcheck="false" placeholder="粘贴总结"></textarea>
+        <span class="row">
+          <button id="import-file" type="button">从文件读取…</button>
+          <span id="import-file-name" class="muted small-text grow"></span>
+        </span>
+        <div class="row end">
+          <button value="cancel" class="ghost">取消</button>
+          <button id="import-save" value="save" class="primary">导入</button>
         </div>
       </form>
     </dialog>

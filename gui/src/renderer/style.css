@@ -234,6 +234,7 @@ dialog {
 }
 dialog::backdrop { background: rgba(0, 0, 0, 0.35); }
 .settings { width: 560px; padding: 20px 24px; display: flex; flex-direction: column; gap: 10px; }
+#import-text { width: 100%; box-sizing: border-box; font-family: var(--mono); font-size: 12px; resize: vertical; }
 .settings label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
 .settings label .row input { flex: 1; }
 .settings label.check { flex-direction: row; }

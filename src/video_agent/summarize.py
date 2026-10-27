@@ -7,6 +7,7 @@ more frames: the `frame` tool saves one into `frames/extra/` and sends the image
 import base64
 import json
 import re
+import zipfile
 from importlib import resources
 from pathlib import Path
 
@@ -287,3 +288,75 @@ def _summarize_locked(
     raise SummaryError('The model returned no usable summary')
   files.write_text(target, text)
   return target
+
+
+def _processed(video, workspace):
+  video, info = media.probe(video)
+  asset = asset_folder(workspace, video)
+  manifest_path, context_path = asset / 'manifest.json', asset / 'summary-context.md'
+  if not manifest_path.is_file() or not context_path.is_file():
+    raise SummaryError(f'{video.name} has not been processed in {workspace}; run process with the same --output first')
+  return video, info, asset, json.loads(manifest_path.read_text(encoding='utf-8'))
+
+
+def import_summary(video, workspace, text, *, overwrite=False):
+  """Saves a summary written elsewhere, such as by a chat AI from `pack`, as 总结.md; a ```markdown fence is removed."""
+  video, _, asset, _ = _processed(video, workspace)
+  text = _clean(text)
+  if len(text.strip()) < 40:
+    raise SummaryError('The summary to import is empty or too short')
+  with files.video_lock(asset, 'import the summary'):
+    target = asset / SUMMARY_NAME
+    if target.exists() and not overwrite:
+      raise SummaryError(f'{target} already exists; pass --overwrite to replace it')
+    files.write_text(target, text)
+  return target
+
+
+PROMPT_NAME = '提示词.md'
+
+
+def material(video, workspace, *, request='', max_images=40, with_images=False):
+  """The prompt for a chat AI: rules, template and the evidence. Returns it with the frames that go along when
+  `with_images` (relative path, file); they keep their paths from the video's folder, so the links the AI writes from
+  the evidence still work once its summary is imported there."""
+  video, info, asset, manifest = _processed(video, workspace)
+  frames = [(relative, asset / relative) for _, relative in _evidence_frames(asset, manifest, max_images)]
+  if with_images:
+    note = (
+      f'我附上了这个视频的 {len(frames)} 张画面，文件名里带时间点。下面材料引用画面时写的是 frames/… 的相对路径：'
+      '看图时按文件名对应，写总结时照材料里的相对路径链接画面，不要只写文件名。没有附上的画面不要链接。'
+    )
+  else:
+    note = '这次没有附上画面，材料里列出的画面你看不到：不要描述画面内容，也不要链接画面。'
+  text = '\n\n'.join(
+    part
+    for part in (
+      f'请按下面的规则和模板，为这个视频写 {SUMMARY_NAME}（Markdown）。只输出文件内容，前后不要加说明。',
+      f'我的要求：{request}' if request else '',
+      note,
+      f'「视频」那一行的开头照抄：{video_line(video, media.duration(info))}',
+      template(),
+      '---',
+      (asset / 'summary-context.md').read_text(encoding='utf-8'),
+    )
+    if part
+  )
+  return text, (frames if with_images else [])
+
+
+def pack(video, workspace, target, *, request='', max_images=40):
+  """Writes a zip with 提示词.md and the frames, for chat AIs that take files. Returns the zip and the frame count."""
+  text, frames = material(video, workspace, request=request, max_images=max_images, with_images=True)
+  target = Path(target)
+  target.parent.mkdir(parents=True, exist_ok=True)
+  temporary = files.temporary_beside(target)
+  try:
+    with zipfile.ZipFile(temporary, 'w') as archive:
+      archive.writestr(PROMPT_NAME, text, compress_type=zipfile.ZIP_DEFLATED)
+      for relative, path in frames:
+        archive.write(path, relative)  # JPEG does not compress further
+    files.replace(temporary, target)
+  finally:
+    temporary.unlink(missing_ok=True)
+  return target, len(frames)

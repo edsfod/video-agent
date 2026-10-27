@@ -1,6 +1,8 @@
 """summarize against fake Anthropic and OpenAI-compatible servers, including one round of the frame tool."""
 
+import io
 import json
+import zipfile
 
 import pytest
 
@@ -143,3 +145,46 @@ def test_video_line_reads_like_a_title():
     '[打开视频](<C:/下载/Agent-native 开发 [08-Raw⧸26生成式软件工程⧸NJU] [BV11LWw6VEHW].mp4>) · 时长：1:37:09'
   )
   assert video_line('C:/v/clip.mp4', 65).endswith('时长：1:05')
+
+
+def test_import_saves_a_pasted_summary_once(processed, monkeypatch, capsys):
+  from video_agent import cli
+
+  video, workspace = processed
+  pasted = f'```markdown\n{SUMMARY}```\n'
+  monkeypatch.setattr('sys.stdin', io.TextIOWrapper(io.BytesIO(pasted.encode('utf-8'))))
+  assert cli.main(['summarize', str(video), '-o', str(workspace), '--import', '-']) == 0
+  target = asset_folder(workspace, video.resolve()) / '总结.md'
+  assert target.read_text(encoding='utf-8') == SUMMARY
+  again = workspace / 'again.md'
+  again.write_text('# 第二版\n\n' + '内容' * 30, encoding='utf-8')
+  with pytest.raises(SystemExit) as stopped:
+    cli.main(['summarize', str(video), '-o', str(workspace), '--import', str(again)])
+  assert stopped.value.code == 2
+  assert 'already exists' in capsys.readouterr().err
+  assert cli.main(['summarize', str(video), '-o', str(workspace), '--import', str(again), '--overwrite']) == 0
+  assert target.read_text(encoding='utf-8').startswith('# 第二版')
+
+
+def test_pack_zips_the_prompt_with_frames_at_their_folder_paths(processed, capsys):
+  from video_agent import cli
+
+  video, workspace = processed
+  asset = asset_folder(workspace, video.resolve())
+  assert cli.main(['frame', str(video), '3', '-o', str(workspace)]) == 0
+  target = workspace / 'out' / 'material.zip'
+  assert cli.main(['pack', str(video), '-o', str(workspace), '--zip', str(target), '--request', '写短一点']) == 0
+  with zipfile.ZipFile(target) as archive:
+    names = archive.namelist()
+    prompt = archive.read('提示词.md').decode('utf-8')
+  frames = [name for name in names if name != '提示词.md']
+  assert 'frames/extra/frame-00-00-03.jpg' in frames
+  assert all((asset / name).is_file() for name in frames), 'zip paths are the folder paths the evidence links'
+  assert f'附上了这个视频的 {len(frames)} 张画面' in prompt
+  assert '我的要求：写短一点' in prompt
+  assert '「视频」那一行的开头照抄：视频：sample clip [test] · [打开视频]' in prompt
+  assert '我们看看这张图表' in prompt and '# Writing a video summary' in prompt
+
+  capsys.readouterr()
+  assert cli.main(['pack', str(video), '-o', str(workspace)]) == 0
+  assert '这次没有附上画面' in capsys.readouterr().out
