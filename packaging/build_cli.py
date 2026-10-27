@@ -4,6 +4,7 @@ Run from the repository root: uv run --with pyinstaller --with pillow python pac
 The desktop installer ships this folder as resources/cli.
 """
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -29,8 +30,12 @@ subprocess.run(
     str(OUT / 'work'),
     '--specpath',
     str(OUT / 'work'),
-    '--collect-data',
-    'video_agent',  # prompts/summary.md
+    # From the source tree, not by import: in a fresh `uv run --with` environment the build interpreter cannot import
+    # the editable project, so PyInstaller would leave out both the package and its data.
+    '--paths',
+    str(ROOT / 'src'),
+    '--add-data',
+    f'{ROOT / "src" / "video_agent" / "prompts"}{os.pathsep}video_agent/prompts',
     '--collect-binaries',
     'imageio_ffmpeg',  # the bundled ffmpeg.exe
     '--collect-data',
@@ -40,4 +45,8 @@ subprocess.run(
   ],
   check=True,
 )
-print(OUT / 'video-agent' / 'video-agent.exe')
+EXE = OUT / 'video-agent' / 'video-agent.exe'
+# Fail here, not in the installer: the frozen CLI must start, find its template and run the bundled yt-dlp.
+for args in (['template'], ['_yt-dlp', '--version']):
+  subprocess.run([str(EXE), *args], check=True, capture_output=True)
+print(EXE)
