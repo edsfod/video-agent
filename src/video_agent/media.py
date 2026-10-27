@@ -41,30 +41,73 @@ def save_frame(video, asset, second, length):
 
 
 def tool(name):
+  """ffmpeg or ffprobe from PATH; ffmpeg falls back to the copy bundled with imageio-ffmpeg. ffprobe may be None."""
   found = shutil.which(name)
-  if not found:
-    raise MediaError(f'{name} was not found on PATH; install FFmpeg and make {name} available')
-  return found
+  if found or name == 'ffprobe':
+    return found
+  try:
+    import imageio_ffmpeg
+
+    return imageio_ffmpeg.get_ffmpeg_exe()
+  except (ImportError, RuntimeError) as error:
+    raise MediaError(f'ffmpeg was not found on PATH and the bundled copy is unavailable ({error})') from error
 
 
-def probe(video):
-  video = Path(video).expanduser().resolve()
-  if not video.is_file():
-    raise MediaError(f'Video file does not exist: {video}')
+STREAM = re.compile(
+  r'^\s*Stream #0:(?P<index>\d+)(?:\[0x[0-9a-f]+\])?(?:\((?P<language>[^)]+)\))?: '
+  r'(?P<type>Video|Audio|Subtitle|Data|Attachment): (?P<codec>[^\s,]+)',
+  re.MULTILINE,
+)
+DURATION = re.compile(r'Duration: (?P<h>\d+):(?P<m>\d\d):(?P<s>\d\d(?:\.\d+)?)')
+
+
+def _probe_with_ffmpeg(video):
+  """The parts of ffprobe's JSON this package uses, read from ffmpeg's banner when ffprobe is missing."""
   result = subprocess.run(
-    [tool('ffprobe'), '-v', 'error', '-show_format', '-show_streams', '-of', 'json', str(video)],
+    [tool('ffmpeg'), '-hide_banner', '-i', str(video)],
     capture_output=True,
     text=True,
     encoding='utf-8',
     errors='replace',
     check=False,
   )
-  if result.returncode:
-    raise MediaError(f'ffprobe could not read {video.name}: {result.stderr.strip() or result.returncode}')
-  try:
-    info = json.loads(result.stdout)
-  except json.JSONDecodeError as error:
-    raise MediaError(f'ffprobe returned invalid JSON for {video.name}') from error
+  text = result.stderr
+  if 'Input #0' not in text:
+    raise MediaError(f'ffmpeg could not read {video.name}: {text.strip()[-500:]}')
+  streams = []
+  for match in STREAM.finditer(text):
+    stream = {'index': int(match['index']), 'codec_type': match['type'].lower(), 'codec_name': match['codec']}
+    if match['language']:
+      stream['tags'] = {'language': match['language']}
+    streams.append(stream)
+  info = {'streams': streams, 'format': {}}
+  if found := DURATION.search(text):
+    info['format']['duration'] = str(int(found['h']) * 3600 + int(found['m']) * 60 + float(found['s']))
+  return info
+
+
+def probe(video):
+  video = Path(video).expanduser().resolve()
+  if not video.is_file():
+    raise MediaError(f'Video file does not exist: {video}')
+  ffprobe = tool('ffprobe')
+  if ffprobe is None:
+    info = _probe_with_ffmpeg(video)
+  else:
+    result = subprocess.run(
+      [ffprobe, '-v', 'error', '-show_format', '-show_streams', '-of', 'json', str(video)],
+      capture_output=True,
+      text=True,
+      encoding='utf-8',
+      errors='replace',
+      check=False,
+    )
+    if result.returncode:
+      raise MediaError(f'ffprobe could not read {video.name}: {result.stderr.strip() or result.returncode}')
+    try:
+      info = json.loads(result.stdout)
+    except json.JSONDecodeError as error:
+      raise MediaError(f'ffprobe returned invalid JSON for {video.name}') from error
   streams = info.get('streams') or []
   if not any(stream.get('codec_type') == 'video' for stream in streams):
     raise MediaError(f'No video stream found in {video.name}')
@@ -135,7 +178,10 @@ def _extract_filter(video, output_dir, prefix, video_filter, *, allow_empty=Fals
   paths = sorted(output_dir.glob(f'{prefix}-*.jpg'))
   times = [float(value) for value in PTS_TIME.findall(result.stderr)]
   if result.returncode and not paths:
-    empty_selection = 'does not contain any stream' in result.stderr.lower()
+    # Nothing selected: older FFmpeg says the output has no stream; 7.x and 9.x fail to open the encoder after
+    # "No filtered frames for output stream".
+    stderr = result.stderr.lower()
+    empty_selection = 'does not contain any stream' in stderr or 'no filtered frames for output stream' in stderr
     if allow_empty and empty_selection:
       return []
     raise MediaError(

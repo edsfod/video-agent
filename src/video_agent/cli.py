@@ -362,6 +362,11 @@ def _utf8_output():
 
 def main(argv=None):
   _utf8_output()
+  argv = sys.argv[1:] if argv is None else argv
+  if argv[:1] == ['_yt-dlp']:  # internal: the bundled yt-dlp, for frozen builds (see download.executable)
+    import yt_dlp
+
+    return yt_dlp.main(argv[1:])
   parser = build_parser()
   args = parser.parse_args(argv)
   try:

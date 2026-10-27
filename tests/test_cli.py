@@ -1,6 +1,7 @@
 """Subtitle parsing, times, process, frame, download with a fake yt-dlp, and summarize settings."""
 
 import json
+import subprocess
 import sys
 import textwrap
 from pathlib import Path
@@ -190,3 +191,115 @@ def test_help_survives_a_non_utf8_pipe():
   result = subprocess.run([sys.executable, '-m', 'video_agent', '--help'], capture_output=True, env=env, check=False)
   assert result.returncode == 0, result.stderr.decode('utf-8', 'replace')
   assert '总结.md' in result.stdout.decode('utf-8')
+
+
+@pytest.fixture
+def embedded_mkv(sample_video, tmp_path):
+  """The sample with its subtitles muxed in as a Chinese-tagged stream and no sidecar file."""
+  import subprocess
+
+  target = tmp_path / 'embedded.mkv'
+  subprocess.run(
+    [
+      media.tool('ffmpeg'),
+      '-y',
+      '-hide_banner',
+      '-loglevel',
+      'error',
+      '-i',
+      str(sample_video),
+      '-i',
+      str(sample_video.with_suffix('.srt')),
+      '-map',
+      '0',
+      '-map',
+      '1',
+      '-c',
+      'copy',
+      '-c:s',
+      'srt',
+      '-metadata:s:s:0',
+      'language=chi',
+      str(target),
+    ],
+    check=True,
+  )
+  return target
+
+
+def _summary(info):
+  streams = [
+    (s['index'], s['codec_type'], s['codec_name'], (s.get('tags') or {}).get('language')) for s in info['streams']
+  ]
+  return round(float(info['format']['duration']), 1), streams
+
+
+def test_ffmpeg_probe_matches_ffprobe(sample_video, embedded_mkv, monkeypatch):
+  import shutil
+
+  if not shutil.which('ffprobe'):
+    pytest.skip('ffprobe not installed')
+  for video in (sample_video, embedded_mkv):
+    _, with_ffprobe = media.probe(video)
+    monkeypatch.setattr(media, 'tool', lambda name, real=media.tool: None if name == 'ffprobe' else real(name))
+    _, without = media.probe(video)
+    monkeypatch.undo()
+    duration, streams = _summary(with_ffprobe)
+    other_duration, other_streams = _summary(without)
+    assert abs(duration - other_duration) < 0.1
+    assert [s[:3] for s in streams] == [s[:3] for s in other_streams]
+    assert [s[3] for s in streams] == [s[3] for s in other_streams]
+
+
+def test_works_without_ffmpeg_on_path(embedded_mkv, tmp_path, monkeypatch):
+  monkeypatch.setattr(media.shutil, 'which', lambda name: None)
+  assert media.tool('ffprobe') is None
+  assert 'imageio_ffmpeg' in media.tool('ffmpeg')
+  workspace = tmp_path / 'work'
+  assert cli.main(['process', str(embedded_mkv), '-o', str(workspace), '--frame-interval', '2']) == 0
+  manifest = json.loads((asset_folder(workspace, embedded_mkv.resolve()) / 'manifest.json').read_text(encoding='utf-8'))
+  assert manifest['transcript']['source'] == 'embedded:chi'
+  assert manifest['transcript']['segments'] == 2
+  assert manifest['representative_frames']
+
+
+def test_bundled_yt_dlp_entry(capsys):
+  with pytest.raises(SystemExit) as stopped:
+    cli.main(['_yt-dlp', '--version'])
+  assert stopped.value.code in (0, None)
+  assert capsys.readouterr().out.strip()[:4].isdigit()
+
+
+def test_download_tells_yt_dlp_where_ffmpeg_is(fake_yt_dlp, tmp_path, monkeypatch):
+  seen = []
+  real_run = download.subprocess.run
+
+  def spy(command, **options):
+    seen.append(command)
+    return real_run(command, **options)
+
+  monkeypatch.setattr(download.subprocess, 'run', spy)
+  download.download_urls(['https://example.com/video'], tmp_path / 'out', status=lambda message: None)
+  command = seen[0]
+  assert command[command.index('--ffmpeg-location') + 1] == media.tool('ffmpeg')
+
+
+@pytest.mark.parametrize('bundled', [False, True])
+def test_no_scene_changes_is_not_an_error(tmp_path, monkeypatch, bundled):
+  still = tmp_path / 'still.mp4'
+  command = [media.tool('ffmpeg'), '-y', '-v', 'error', '-f', 'lavfi', '-i', 'color=gray:size=160x120:rate=5:d=3']
+  subprocess.run([*command, '-pix_fmt', 'yuv420p', str(still)], check=True)
+  if bundled:
+    monkeypatch.setattr(media.shutil, 'which', lambda name: None)
+  assert media.scene_frames(still, tmp_path / 'scenes', 0.35) == []
+
+
+def test_versions_match():
+  from video_agent import __version__
+
+  root = Path(__file__).resolve().parents[1]
+  for name in ('plugin.json', '.claude-plugin/plugin.json', 'gui/package.json'):
+    assert json.loads((root / name).read_text(encoding='utf-8'))['version'] == __version__, name
+  wheel = f'releases/download/v{__version__}/video_agent-{__version__}-py3-none-any.whl'
+  assert (root / 'skills/video-agent/SKILL.md').read_text(encoding='utf-8').count(wheel) == 2
+  assert wheel in (root / 'README.md').read_text(encoding='utf-8')

@@ -148,6 +148,13 @@
         </label>
         <label class="check"><input id="set-close-to-tray" type="checkbox" /><span>关闭窗口时收到托盘，任务继续在后台运行</span></label>
         <div id="env-info" class="muted small-text"></div>
+        <h3>Agent 插件</h3>
+        <p class="muted small-text">把总结用的 skill 装进 Claude Code 或 Codex，之后在它们里面直接说“总结这个视频”即可。从本机安装，不需要 git，也不用联网；重复点击会刷新已装的版本。</p>
+        <span class="row">
+          <button id="install-claude" type="button">安装到 Claude Code</button>
+          <button id="install-codex" type="button">安装到 Codex</button>
+        </span>
+        <pre id="plugin-output" class="plugin-output" hidden></pre>
         <h3>模型 API</h3>
         <label>服务商
           <select id="set-provider"><option value="anthropic">Anthropic</option><option value="openai">OpenAI 兼容接口</option></select>

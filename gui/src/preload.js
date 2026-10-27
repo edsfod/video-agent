@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld('va', {
   settings: () => ipcRenderer.invoke('settings:get'),
   saveSettings: (changes) => ipcRenderer.invoke('settings:set', changes),
   env: () => ipcRenderer.invoke('env:info'),
+  installPlugin: (agent) => ipcRenderer.invoke('plugin:install', agent),
   pickVideos: () => ipcRenderer.invoke('dialog:videos'),
   pickFolder: (title) => ipcRenderer.invoke('dialog:folder', title),
   droppedPath: (file) => webUtils.getPathForFile(file),

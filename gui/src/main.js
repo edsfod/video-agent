@@ -8,8 +8,13 @@ const path = require('node:path');
 const pty = require('node-pty');
 const { Logs } = require('./logs');
 
-const RELEASE = 'v0.1.0';
-const UVX_CLI = ['uvx', '--from', `git+https://github.com/edsfod/video-agent@${RELEASE}`, 'video-agent'];
+const VERSION = app.getVersion(); // package.json, kept equal to the CLI version
+// Last resort in development when no CLI is installed: the release wheel through uvx (needs uv, not git).
+const UVX_CLI = [
+  'uvx', '--from',
+  `https://github.com/edsfod/video-agent/releases/download/v${VERSION}/video_agent-${VERSION}-py3-none-any.whl`,
+  'video-agent',
+];
 const settingsFile = () => path.join(app.getPath('userData'), 'settings.json');
 const jobs = new Map();
 const terminals = new Map();
@@ -71,10 +76,25 @@ function which(name) {
   }
 }
 
+// The frozen CLI shipped in the installer (resources/cli), with Python, ffmpeg and yt-dlp inside.
+function bundledCli() {
+  const file = path.join(process.resourcesPath, 'cli', 'video-agent.exe');
+  return app.isPackaged && fs.existsSync(file) ? file : null;
+}
+
+// Settings first, then the bundled CLI, then one on PATH.
 function cliCommand() {
   const custom = loadSettings().cli.trim();
   if (custom) return splitCommand(custom);
+  if (bundledCli()) return [bundledCli()];
   return which('video-agent') ? ['video-agent'] : UVX_CLI;
+}
+
+// Child processes and terminals see the bundled CLI as `video-agent`, so agents and shells can run it too.
+function childEnv(extra = {}) {
+  const env = { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1', ...extra };
+  if (bundledCli()) env.PATH = `${path.dirname(bundledCli())};${env.PATH || env.Path || ''}`;
+  return env;
 }
 
 function splitCommand(text) {
@@ -122,7 +142,7 @@ function startJob(id, command, args, { cwd, stdin, env, title = id, prompt } = {
     cwd,
     shell: run.shell,
     windowsHide: true,
-    env: { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1', ...env },
+    env: childEnv(env),
     stdio: [stdin === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'],
   });
   jobs.set(id, { child, title });
@@ -167,7 +187,7 @@ function runToEnd(command, args, stdin) {
     const child = spawn(run.file, run.args, {
       shell: run.shell,
       windowsHide: true,
-      env: { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1' },
+      env: childEnv(),
     });
     child.stdin.end(stdin ?? '');
     let out = '';
@@ -195,7 +215,29 @@ function registerIpc() {
     codex: which('codex'),
     shells: shells().map(({ id, label }) => ({ id, label })),
     pluginRoot: pluginRoot(),
+    bundled: !!bundledCli(),
   }));
+
+  // Install the Agent plugin from the local copy in the installer; no git or network needed. Both commands are
+  // idempotent, so the button also repairs or refreshes an earlier install.
+  ipcMain.handle('plugin:install', async (_, agent) => {
+    const root = pluginRoot();
+    const steps = agent === 'claude'
+      ? [['claude', ['plugin', 'marketplace', 'add', root]], ['claude', ['plugin', 'marketplace', 'update', 'video-agent']],
+         ['claude', ['plugin', 'install', 'video-agent@video-agent']]]
+      : [['codex', ['plugin', 'marketplace', 'add', root]], ['codex', ['plugin', 'add', 'video-agent@video-agent']]];
+    let output = '';
+    for (const [command, args] of steps) {
+      const { code, out, err } = await runToEnd(command, args);
+      output += `$ ${command} ${args.join(' ')}\n${out}${err}\n`;
+      if (code !== 0) {
+        logs.line('warn', `plugin install for ${agent} failed at: ${command} ${args.join(' ')}`);
+        return { ok: false, output };
+      }
+    }
+    logs.line('info', `plugin installed for ${agent} from ${root}`);
+    return { ok: true, output };
+  });
 
   ipcMain.handle('dialog:videos', async () => {
     const result = await dialog.showOpenDialog(win, {
@@ -289,7 +331,7 @@ function registerIpc() {
       cols,
       rows,
       cwd: cwd && fs.existsSync(cwd) ? cwd : loadSettings().workspace,
-      env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
+      env: childEnv(),
       useConpty: true,
     });
     terminals.set(id, term);

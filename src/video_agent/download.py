@@ -8,6 +8,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from . import media
+
 
 class DownloadError(RuntimeError):
   pass
@@ -37,8 +39,9 @@ def executable(explicit=None):
         managed = Path(root) / 'media-downloader' / 'bin' / 'yt-dlp.exe'
         if managed.is_file():
           return [str(managed.resolve())]
+  # The yt-dlp installed with this package. A frozen build has no `python -m`, so it runs through `video-agent _yt-dlp`.
   if importlib.util.find_spec('yt_dlp'):
-    return [sys.executable, '-m', 'yt_dlp']
+    return [sys.executable, '_yt-dlp'] if getattr(sys, 'frozen', False) else [sys.executable, '-m', 'yt_dlp']
   raise DownloadError(
     'yt-dlp is not installed or not on PATH. Install its executable, set YT_DLP_EXECUTABLE, '
     'or pass --yt-dlp PATH. See https://github.com/yt-dlp/yt-dlp.'
@@ -46,7 +49,8 @@ def executable(explicit=None):
 
 
 def _base_command(program, config):
-  command = [*program, '--ignore-config']
+  # yt-dlp looks for ffmpeg only on PATH; point it at ours so separate video and audio streams get merged.
+  command = [*program, '--ignore-config', '--ffmpeg-location', media.tool('ffmpeg')]
   if config:
     command.extend(['--config-locations', str(config)])
   return command

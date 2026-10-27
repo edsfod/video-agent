@@ -37,7 +37,7 @@ When `--output` is omitted, Video Agent uses `video-agent-output` under the curr
 
 ## Default processing pipeline
 
-1. Inspect the video with ffprobe.
+1. Inspect the video with ffprobe, or read the same facts from ffmpeg when ffprobe is missing.
 2. Read a matching `.srt` or `.vtt` sidecar, or extract an embedded subtitle stream.
 3. Sample frames at the requested interval (default 60 seconds) and at detected scene changes. Keep at most 36 representative frames by default.
 4. Write a manifest and `summary-context.md`. When a subtitle source is available, also write `transcript.srt` and `transcript.txt`.

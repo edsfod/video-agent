@@ -31,3 +31,24 @@ jobs:
         working-directory: gui
       - run: npm test
         working-directory: gui
+
+  installer:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - run: choco install ffmpeg --no-progress -y # only to make the test video; the app uses its bundled copy
+      - run: npm ci
+        working-directory: gui
+      - run: npm run dist
+        working-directory: gui
+      - run: Add-Content $env:GITHUB_PATH "$env:GITHUB_WORKSPACE\build\cli\video-agent"
+      - run: npm run test:dist
+        working-directory: gui
+      - uses: actions/upload-artifact@v7
+        with:
+          name: installer
+          path: gui/dist/Video-Agent-Setup-*.exe

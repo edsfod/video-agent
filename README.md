@@ -39,42 +39,37 @@ Video Agent 由三部分组成，按需取用：
 
 ## 安装
 
-先装两样依赖（已经有了可以跳过）：
+**桌面程序**（推荐）：从 [Releases](https://github.com/edsfod/video-agent/releases) 下载 `Video-Agent-Setup-<版本>.exe` 安装，不用另装任何东西，也不需要联网：Python、FFmpeg、yt-dlp 和命令行工具都在安装包里。安装时会创建桌面和开始菜单快捷方式，并把命令行工具加进 PATH，新开的终端里就能用 `video-agent`。安装包没有代码签名，Windows SmartScreen 可能提示“未知发布者”，选“仍要运行”即可。
+
+**只装命令行工具**：先装 [uv](https://docs.astral.sh/uv/)（`winget install astral-sh.uv`），再运行
 
 ```powershell
-winget install astral-sh.uv
-winget install Gyan.FFmpeg
+uv tool install https://github.com/edsfod/video-agent/releases/download/v0.1.1/video_agent-0.1.1-py3-none-any.whl
 ```
 
-**命令行工具**
-
-```powershell
-uv tool install git+https://github.com/edsfod/video-agent@v0.1.0
-```
-
-装好后终端里就有 `video-agent` 命令。
-
-**桌面程序**：从 [Releases](https://github.com/edsfod/video-agent/releases) 下载 `Video-Agent-Setup-<版本>.exe` 安装。安装包没有代码签名，Windows SmartScreen 可能提示“未知发布者”，选“仍要运行”即可。桌面程序调用的是命令行工具：找得到 `video-agent` 命令就用它，找不到就用 `uvx` 临时拉取同一版本。
+FFmpeg 和 yt-dlp 会作为依赖一起装上，不需要 git。电脑上已经有的 ffmpeg、ffprobe、yt-dlp（包括 [Media Downloader](https://github.com/mhogomchungu/media-downloader) 自带的 yt-dlp）会优先使用。
 
 **Agent 插件**
 
-- Claude Code：在 Claude Code 里运行
+- 装了桌面程序：在设置里点“安装到 Claude Code”或“安装到 Codex”，从本机安装，不需要 git。
+- 没装桌面程序：下面两组命令从 GitHub 拉取插件，需要电脑上有 git。
+  - Claude Code：在 Claude Code 里运行
 
-  ```
-  /plugin marketplace add edsfod/video-agent
-  /plugin install video-agent@video-agent
-  ```
+    ```
+    /plugin marketplace add edsfod/video-agent
+    /plugin install video-agent@video-agent
+    ```
 
-- Codex：在终端里运行
+  - Codex：在终端里运行
 
-  ```bash
-  codex plugin marketplace add edsfod/video-agent
-  codex plugin add video-agent@video-agent
-  ```
+    ```bash
+    codex plugin marketplace add edsfod/video-agent
+    codex plugin add video-agent@video-agent
+    ```
 
 - 其他 Agent：把 `skills/video-agent/` 复制到它的技能目录。
 
-可选的外部程序：下载要用 yt-dlp（找不到时，也会使用 [Media Downloader](https://github.com/mhogomchungu/media-downloader) 自带的那一份）；提取 PPT 要用 AutoSlides Extractor。
+插件找不到 `video-agent` 命令时，会用 uv 临时拉取同一版本。提取 PPT 要另装 AutoSlides Extractor。
 
 ## 桌面程序
 
@@ -138,7 +133,7 @@ video-agent config --provider openai --model Qwen/Qwen3.5-397B-A17B --base-url h
 ```powershell
 uv run pytest              # 命令行工具的测试
 cd gui; npm ci; npm test   # 桌面程序的端到端测试（会打开窗口）
-npm run dist               # 打包安装程序
+npm run dist               # 先用 PyInstaller 打包命令行工具（需要 uv），再打包安装程序
 npm run screenshots -- <工作区> <视频>   # 重新生成本页截图
 ```
 
@@ -149,5 +144,5 @@ Copyright (C) 2026 edsfod。以 [GNU Affero 通用公共许可证第 3 版](LICE
 ## 鸣谢
 
 - 本项目受 [windlandneko/yanhekit](https://github.com/windlandneko/yanhekit) 启发：做成 Claude Code、Codex 插件的形式，以及用必剪转录字幕的思路，都参考了它。
-- 下载用 [yt-dlp](https://github.com/yt-dlp/yt-dlp)，媒体处理用 [FFmpeg](https://ffmpeg.org/)，PPT 提取用 [AutoSlides Extractor](https://github.com/bit-admin/AutoSlides-Extractor)，界面配色参考了 [AutoSlides](https://github.com/bit-admin/Yanhekt-AutoSlides)。
+- 下载用 [yt-dlp](https://github.com/yt-dlp/yt-dlp)，媒体处理用 [FFmpeg](https://ffmpeg.org/)（随 [imageio-ffmpeg](https://github.com/imageio/imageio-ffmpeg) 一起装上），安装程序里的命令行工具用 [PyInstaller](https://pyinstaller.org/) 打包，PPT 提取用 [AutoSlides Extractor](https://github.com/bit-admin/AutoSlides-Extractor)，界面配色参考了 [AutoSlides](https://github.com/bit-admin/Yanhekt-AutoSlides)。
 - 截图里的视频和字幕来自 NASA 戈达德太空飞行中心的 [NASA's Fermi Mission Shows How Luck Favors the Prepared](https://images.nasa.gov/details/GSFC_20181108_FERMI_m13042_Luck4K)（2018），按 [NASA 的媒体使用规定](https://www.nasa.gov/nasa-brand-center/images-and-media/)用于演示。截图里的总结由 AI（Qwen3.5，经模型 API）生成，不是 NASA 的说法，未经 NASA 审核，NASA 不对其准确性负责；本项目与 NASA 无关，也未获 NASA 认可。

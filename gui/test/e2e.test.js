@@ -140,6 +140,7 @@ test('settings dialog saves the model through the CLI', async () => {
   await page.click('#open-settings');
   await page.waitForSelector('#settings[open]');
   await page.waitForFunction(() => document.querySelector('#set-model').value === 'fake-model');
+  if (process.env.VA_E2E_EXE) assert.match(await page.textContent('#env-info'), /安装程序自带的 video-agent/);
   await page.fill('#set-model', 'fake-model-2');
   if (!keyBefore) await page.fill('#set-key', 'e2e-test-key');
   await page.click('#save-settings');
@@ -192,6 +193,15 @@ test('embedded terminal runs a command in the video folder', async () => {
   await page.keyboard.press('Enter');
   await page.waitForFunction(
     () => /va-e2e-.*sample-clip/.test(document.querySelector('.xterm-rows').textContent.replace(/\s+/g, '')),
+    null,
+    { timeout: 30_000 },
+  );
+  if (!process.env.VA_E2E_EXE) return;
+  // The packaged app puts its bundled CLI first on the terminal's PATH.
+  await page.keyboard.type('where video-agent');
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(
+    () => /resources\\cli\\video-agent\.exe/i.test(document.querySelector('.xterm-rows').textContent.replace(/\s+/g, '')),
     null,
     { timeout: 30_000 },
   );

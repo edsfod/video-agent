@@ -4,12 +4,12 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "video-agent"
-version = "0.1.0"
+version = "0.1.1"
 description = "Local video evidence preparation for transcription and summarization"
 requires-python = ">=3.11"
 license = "AGPL-3.0-or-later"
 license-files = ["LICENSE"]
-dependencies = ["requests>=2.32"]
+dependencies = ["requests>=2.32", "imageio-ffmpeg>=0.6", "yt-dlp>=2026.10.21"]
 
 [dependency-groups]
 dev = ["pytest>=8", "ruff>=0.8"]

@@ -31,7 +31,7 @@ video-agent download URL... [OPTIONS]
 | `-o`, `--output PATH` | `video-agent-downloads` under the current directory | Directory for completed files. |
 | `--format SELECTOR` | `bv*+ba/b` | yt-dlp format selector: best video plus best audio when separate, otherwise the best combined format. |
 | `--playlist` | Off | Allow playlist downloads. Without this option, Video Agent checks the URL first, refuses playlist-only URLs, and uses `--no-playlist` for a URL containing a specific video and playlist. |
-| `--yt-dlp PATH` | Auto-detected | Executable path. Search order: this option, `YT_DLP_EXECUTABLE`, `yt-dlp`/`yt-dlp.exe` on `PATH`, the Media Downloader-managed executable in the user's AppData directory (Windows), then the current Python `yt_dlp` module. |
+| `--yt-dlp PATH` | Auto-detected | Executable path. Search order: this option, `YT_DLP_EXECUTABLE`, `yt-dlp`/`yt-dlp.exe` on `PATH`, the Media Downloader-managed executable in the user's AppData directory (Windows), then the yt-dlp installed with Video Agent. |
 | `--yt-dlp-config PATH` | None | Load this explicit yt-dlp config file. Other yt-dlp configuration files are ignored. |
 
 Without `--playlist`, the command makes a metadata-only URL check and refuses links that resolve to a playlist; this avoids downloading a large list by surprise. The command uses yt-dlp's `--print after_move:filepath` to capture the final path after merge/post-processing. Its normal progress is shown in the terminal. If a playlist is enabled, it prints one path per completed item. Any returned path can then be passed to `process` separately.
@@ -48,7 +48,7 @@ video-agent download "https://example.com/playlist" --playlist --output "D:\Vide
 video-agent process "D:\Video-Downloads\video-one.mp4" "D:\Video-Downloads\video-two.mp4"
 ```
 
-Downloading is optional. If Media Downloader is installed, the yt-dlp it keeps under `%APPDATA%\media-downloader\bin` is found automatically. If no executable or module is available, `download` reports the missing tool and exits with status 1. The downloader only handles URLs supported by yt-dlp. A video saved by any other method can be passed directly to `process`.
+Downloading is optional. Video Agent installs yt-dlp as a dependency, and the desktop installer bundles it, so `download` works without a separate install. A yt-dlp on `PATH` or the one Media Downloader keeps under `%APPDATA%\media-downloader\bin` is preferred when present, since either may be newer. yt-dlp is told where Video Agent's FFmpeg is, so separate video and audio streams are merged. If no executable or module is available, `download` reports the missing tool and exits with status 1. The downloader only handles URLs supported by yt-dlp. A video saved by any other method can be passed directly to `process`.
 
 Share-tracking query parameters are not needed. For Bilibili, the bare `https://www.bilibili.com/video/<BV id>/` link is enough: on 2026-10-26, `BV1aknV6CEFB` downloaded successfully with its `?vd_source=...` suffix removed. Keep other query parameters (such as `?p=2` for a multi-part video's part) when they select specific content.
 

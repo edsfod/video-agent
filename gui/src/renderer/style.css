@@ -233,6 +233,7 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.35); }
 .log-entry .meta { font-size: 11px; color: var(--text-muted); }
 .log-entry .meta.fail { color: var(--danger); }
 .log-view { margin: 0; overflow: auto; font-family: var(--mono); font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.plugin-output { max-height: 140px; overflow: auto; margin: 0; font-family: var(--mono); font-size: 11px; white-space: pre-wrap; background: var(--bg-sidebar); border-radius: 8px; padding: 8px; }
 #lightbox { max-width: 92vw; background: #000; border: none; }
 #lightbox img { max-width: 92vw; max-height: 84vh; display: block; }
 #lightbox-caption { color: #ccc; padding: 6px 10px; font-family: var(--mono); font-size: 12px; }

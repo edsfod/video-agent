@@ -578,9 +578,12 @@ $('open-settings').onclick = async () => {
   $('set-cli').value = state.settings.cli;
   $('set-key').value = '';
   $('set-close-to-tray').checked = state.settings.closeToTray !== false;
-  const cli = state.env.cli.join(' ');
+  const cli = state.env.bundled ? '安装程序自带的 video-agent' : state.env.cli.join(' ');
   $('env-info').textContent =
     `正在用的命令：${cli} · Claude Code：${state.env.claude ? '已找到' : '没有找到'} · Codex：${state.env.codex ? '已找到' : '没有找到'}`;
+  $('install-claude').disabled = !state.env.claude;
+  $('install-codex').disabled = !state.env.codex;
+  $('plugin-output').hidden = true;
   const config = await window.va.cliJson(['config', '--json']);
   if (config.error) {
     $('api-info').textContent = `读取不到 API 设置：${config.error}`;
@@ -592,6 +595,17 @@ $('open-settings').onclick = async () => {
   }
   $('settings').showModal();
 };
+
+for (const agent of ['claude', 'codex']) {
+  $(`install-${agent}`).onclick = async () => {
+    const name = agent === 'claude' ? 'Claude Code' : 'Codex';
+    const box = $('plugin-output');
+    box.hidden = false;
+    box.textContent = `正在安装到 ${name}…`;
+    const result = await window.va.installPlugin(agent);
+    box.textContent = `${result.ok ? `已装好。重新打开 ${name} 后生效。` : '没有装好，输出如下：'}\n\n${result.output}`;
+  };
+}
 
 $('pick-workspace').onclick = async () => {
   const folder = await window.va.pickFolder('选择工作区');

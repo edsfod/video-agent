@@ -1,6 +1,6 @@
 # Project instructions
 
-This project grew out of [edsfod/yanhe-agent](https://github.com/edsfod/yanhe-agent) and is developed separately; do not change that repository from here. AutoSlides Extractor and yt-dlp are optional external tools; invoke their documented CLIs instead of copying their implementations.
+This project grew out of [edsfod/yanhe-agent](https://github.com/edsfod/yanhe-agent) and is developed separately; do not change that repository from here. AutoSlides Extractor and yt-dlp are external tools; invoke their documented CLIs instead of copying their implementations.
 
 ## Product rules
 
@@ -16,7 +16,7 @@ This project grew out of [edsfod/yanhe-agent](https://github.com/edsfod/yanhe-ag
 - Do not modify or move source videos. Write artifacts into a separate workspace.
 - The GUI (Electron, per ARCHITECTURE.md) and any other front end call the CLI and must not duplicate media or summary logic.
 - Do not tag, publish or create a release until the user says all planned work is finished.
-- Do not install yt-dlp or other external tools automatically. Report the missing optional tool and its explicit path/configuration options.
+- yt-dlp and FFmpeg (through `imageio-ffmpeg`) are Python dependencies and are bundled in the desktop installer; copies on `PATH` are preferred (user decision, 2026-10-27; see ARCHITECTURE.md "Distribution"). Do not install other external tools, such as AutoSlides Extractor, automatically. Report the missing optional tool and its explicit path/configuration options.
 
 ## Design record
 
