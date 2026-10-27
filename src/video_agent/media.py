@@ -290,31 +290,37 @@ def sample_frames(video, output_dir, interval, scene_threshold, measure=None, sa
   return found[0], found[1]
 
 
-# A screen page counts once the region stayed this long without a large change: animations, scrolling and the
-# transition between two slides settle first.
+# A screen page counts once the region stayed this long without a change: animations, scrolling and the transition
+# between two slides settle first.
 PAGE_STABLE_S = 2.0
+# freezedetect's tolerance: the mean difference from the page's first frame, as a share of the largest possible.
+# Measured on a 726x410 screen region (2026-10-28): a moving pointer about 0.0001, the quality jump at each keyframe
+# of a compressed video 0.002-0.003, a new line of text about 0.01, a new slide 0.09 and more.
+STILL = 0.004
+FREEZE_START = re.compile(r'lavfi\.freezedetect\.freeze_start=([0-9.]+)')
 
 
 def screen_pages(video, output_dir, region_filter, stable=PAGE_STABLE_S):
-  """Pages of the screen region at the source resolution: one frame per second, kept by mpdecimate when it differs
-  from the last kept one in more than 2 % of its 8x8 blocks (a mouse pointer stays below that), then only frames that
-  stayed unchanged for `stable` seconds."""
+  """Pages of the screen region at the source resolution, from one frame per second. FFmpeg's freezedetect compares
+  each frame with the first frame of the current page and marks the frame at which the region has stayed within STILL
+  of it for `stable` seconds; only marked frames are kept, with the time the page first appeared. (mpdecimate, which
+  did this before, is GPL-only and not in the LGPL FFmpeg the installer ships.)"""
   output_dir = Path(output_dir)
   output_dir.mkdir(parents=True, exist_ok=True)
-  graph = f'{region_filter},fps=1,mpdecimate=hi=1000000:lo=384:frac=0.02,{STAMP}metadata=mode=print:file=pages.txt'
+  graph = (
+    f'{region_filter},fps=1,freezedetect=n={STILL}:d={stable:g},'
+    'metadata=mode=select:key=lavfi.freezedetect.freeze_start,metadata=mode=print:file=pages.txt'
+  )
   command = [tool('ffmpeg'), '-y', '-hide_banner', '-loglevel', 'error', '-i', str(video), '-map', '0:v:0']
   command += ['-vf', graph, '-fps_mode', 'vfr', '-q:v', '2', 'page-%05d.jpg']
   code, errors = _run_ffmpeg(command, output_dir)
   paths = sorted(output_dir.glob('page-*.jpg'))
-  times = _times(output_dir / 'pages.txt')
-  if code or len(paths) != len(times):
+  log = output_dir / 'pages.txt'
+  starts = [float(value) for value in FREEZE_START.findall(log.read_text(encoding='utf-8'))] if log.is_file() else []
+  if code or len(paths) != len(starts):
     raise MediaError(f'FFmpeg could not find screen pages in {Path(video).name}: {errors or code}')
-  stable_pages = [
-    {'time_s': second, 'path': path}
-    for index, (second, path) in enumerate(zip(times, paths))
-    if index == len(times) - 1 or times[index + 1] - second >= stable
-  ]
-  return merge_similar(stable_pages, output_dir)
+  pages = [{'time_s': second, 'path': path} for second, path in zip(starts, paths)]
+  return merge_similar(pages, output_dir)
 
 
 # Pages whose small grey copies differ in fewer than this share of pixels show the same content: a pointer, a typed
@@ -396,7 +402,8 @@ def crop_video(video, output, region_filter):
   """The screen region as its own video, for AutoSlides Extractor, which looks at whole frames."""
   output = Path(output)
   command = [tool('ffmpeg'), '-y', '-hide_banner', '-loglevel', 'error', '-i', str(video), '-map', '0:v:0']
-  command += ['-vf', region_filter, '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '18', '-an', str(output)]
+  # FFmpeg's own MPEG-4 encoder at high quality: the installer's LGPL FFmpeg has no x264.
+  command += ['-vf', region_filter, '-c:v', 'mpeg4', '-q:v', '2', '-an', str(output)]
   result = subprocess.run(command, capture_output=True, text=True, encoding='utf-8', errors='replace', check=False)
   if result.returncode or not output.is_file():
     raise MediaError(
