@@ -181,3 +181,12 @@ def test_reprocessing_keeps_the_original_transcript_source(sample_video, tmp_pat
     assert cli.main(['process', str(sample_video), '-o', str(workspace)]) == 0
   manifest = json.loads((asset_folder(workspace, sample_video.resolve()) / 'manifest.json').read_text(encoding='utf-8'))
   assert manifest['transcript']['source'] == 'sidecar:sample clip [test].srt'
+
+
+def test_help_survives_a_non_utf8_pipe():
+  import subprocess
+
+  env = {**__import__('os').environ, 'PYTHONIOENCODING': 'cp1252', 'PYTHONUTF8': '0'}
+  result = subprocess.run([sys.executable, '-m', 'video_agent', '--help'], capture_output=True, env=env, check=False)
+  assert result.returncode == 0, result.stderr.decode('utf-8', 'replace')
+  assert '总结.md' in result.stdout.decode('utf-8')

@@ -352,7 +352,16 @@ def run(args):
   return 1 if failures else 0
 
 
+def _utf8_output():
+  """Help, paths and summaries contain Chinese. Pipes get UTF-8 (the GUI and other programs read that); a console
+  keeps its encoding but shows a replacement character instead of crashing on what it cannot encode."""
+  for stream in (sys.stdout, sys.stderr):
+    if hasattr(stream, 'reconfigure'):
+      stream.reconfigure(errors='replace', **({} if stream.isatty() else {'encoding': 'utf-8'}))
+
+
 def main(argv=None):
+  _utf8_output()
   parser = build_parser()
   args = parser.parse_args(argv)
   try:
