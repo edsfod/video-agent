@@ -148,6 +148,6 @@ Copyright (C) 2026 edsfod。以 [GNU Affero 通用公共许可证第 3 版](LICE
 
 ## 鸣谢
 
-- 本项目从 [edsfod/yanhe-agent](https://github.com/edsfod/yanhe-agent) 发展而来，必剪转录的做法也来自那里。
+- 本项目受 [windlandneko/yanhekit](https://github.com/windlandneko/yanhekit) 启发：做成 Claude Code、Codex 插件的形式，以及用必剪转录字幕的思路，都参考了它。
 - 下载用 [yt-dlp](https://github.com/yt-dlp/yt-dlp)，媒体处理用 [FFmpeg](https://ffmpeg.org/)，PPT 提取用 [AutoSlides Extractor](https://github.com/bit-admin/AutoSlides-Extractor)，界面配色参考了 [AutoSlides](https://github.com/bit-admin/Yanhekt-AutoSlides)。
 - 截图里的视频和字幕来自 NASA 戈达德太空飞行中心的 [NASA's Fermi Mission Shows How Luck Favors the Prepared](https://images.nasa.gov/details/GSFC_20181108_FERMI_m13042_Luck4K)（2018），按 [NASA 的媒体使用规定](https://www.nasa.gov/nasa-brand-center/images-and-media/)用于演示。截图里的总结由 AI（Qwen3.5，经模型 API）生成，不是 NASA 的说法，未经 NASA 审核，NASA 不对其准确性负责；本项目与 NASA 无关，也未获 NASA 认可。
