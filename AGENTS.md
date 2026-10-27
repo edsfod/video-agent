@@ -1,6 +1,6 @@
 # Project instructions
 
-This project grew out of [edsfod/yanhe-agent](https://github.com/edsfod/yanhe-agent) and is developed separately; do not change that repository from here. AutoSlides Extractor and yt-dlp are external tools; invoke their documented CLIs instead of copying their implementations.
+This project grew out of [edsfod/yanhe-agent](https://github.com/edsfod/yanhe-agent), which is archived since 2026-10-28: its processing and course organisation now live here (generalised as collections), and its Yanhekt platform part waits for the AutoSlides command line. Keep platform-specific logic out of this project. AutoSlides Extractor and yt-dlp are external tools; invoke their documented CLIs instead of copying their implementations.
 
 ## Product rules
 
