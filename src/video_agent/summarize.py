@@ -14,7 +14,7 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util import Retry
 
-from . import media
+from . import files, media
 from .processor import asset_folder
 
 SUMMARY_NAME = '总结.md'
@@ -226,11 +226,21 @@ def summarize_video(
   manifest_path, context_path = asset / 'manifest.json', asset / 'summary-context.md'
   if not manifest_path.is_file() or not context_path.is_file():
     raise SummaryError(f'{video.name} has not been processed in {workspace}; run process with the same --output first')
+  if config['provider'] == 'anthropic' and not key:
+    raise SummaryError('No API key for anthropic; run: video-agent config --provider anthropic --set-key')
+  with files.video_lock(asset, 'summarize'):
+    return _summarize_locked(
+      video, info, asset, config, key, request, max_images, max_extra_frames, use_tools, overwrite, status
+    )
+
+
+def _summarize_locked(
+  video, info, asset, config, key, request, max_images, max_extra_frames, use_tools, overwrite, status
+):
+  manifest_path, context_path = asset / 'manifest.json', asset / 'summary-context.md'
   target = asset / SUMMARY_NAME
   if target.exists() and not overwrite:
     raise SummaryError(f'{target} already exists; pass --overwrite to replace it')
-  if config['provider'] == 'anthropic' and not key:
-    raise SummaryError('No API key for anthropic; run: video-agent config --provider anthropic --set-key')
   manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
 
   frames = _evidence_frames(asset, manifest, max_images)
@@ -260,5 +270,5 @@ def summarize_video(
   text = _clean(call(_session(), config, key, template(), intro, images, tools))
   if len(text.strip()) < 40:
     raise SummaryError('The model returned no usable summary')
-  target.write_text(text, encoding='utf-8')
+  files.write_text(target, text)
   return target

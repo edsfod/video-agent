@@ -6,6 +6,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from . import files
+
 
 class MediaError(RuntimeError):
   pass
@@ -195,8 +197,10 @@ def _extract_filter(video, output_dir, prefix, video_filter, *, allow_empty=Fals
 
 
 def frame_at(video, second, output):
+  """Saves through a unique temporary file, so two runs asking for the same second do not write one file at once."""
   output = Path(output)
   output.parent.mkdir(parents=True, exist_ok=True)
+  final, output = output, files.temporary_beside(output)
   command = [
     tool('ffmpeg'),
     '-y',
@@ -217,12 +221,16 @@ def frame_at(video, second, output):
     '3',
     str(output),
   ]
-  result = subprocess.run(command, capture_output=True, text=True, encoding='utf-8', errors='replace', check=False)
-  if result.returncode or not output.is_file():
-    raise MediaError(
-      f'Could not save a frame at {second:g}s from {Path(video).name}: {result.stderr.strip() or result.returncode}'
-    )
-  return output
+  try:
+    result = subprocess.run(command, capture_output=True, text=True, encoding='utf-8', errors='replace', check=False)
+    if result.returncode or not output.is_file():
+      raise MediaError(
+        f'Could not save a frame at {second:g}s from {Path(video).name}: {result.stderr.strip() or result.returncode}'
+      )
+    files.replace(output, final)
+  finally:
+    output.unlink(missing_ok=True)
+  return final
 
 
 def periodic_frames(video, output_dir, interval):

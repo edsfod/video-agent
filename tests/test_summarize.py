@@ -119,3 +119,18 @@ def test_requires_processing_first(sample_video, tmp_path):
     summarize_video(
       sample_video, tmp_path / 'empty', config('anthropic', 'http://127.0.0.1:9'), 'k', status=lambda message: None
     )
+
+
+def test_a_running_writer_blocks_process_and_summarize_but_not_frame(processed, capsys):
+  from video_agent import cli, files
+
+  video, workspace = processed
+  asset = asset_folder(workspace, video.resolve())
+  with files.video_lock(asset, 'test'):
+    assert cli.main(['process', str(video), '-o', str(workspace), '--json']) == 1
+    assert 'Another Video Agent run is changing' in json.loads(capsys.readouterr().out)['error']
+    with pytest.raises(files.BusyError):
+      summarize_video(video, workspace, config('openai', 'http://127.0.0.1:9'), None, status=lambda message: None)
+    assert cli.main(['frame', str(video), '3', '-o', str(workspace)]) == 0
+  assert [path.name for path in (asset / 'frames' / 'extra').iterdir()] == ['frame-00-00-03.jpg']
+  assert not list(asset.rglob('*.part*'))

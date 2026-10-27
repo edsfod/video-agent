@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import quote
 
-from . import media, slide_extractor, transcript
+from . import files, media, slide_extractor, transcript
 
 
 def slug(value):
@@ -24,11 +24,7 @@ def asset_folder(workspace, video):
 
 
 def _write_json(path, value):
-  path = Path(path)
-  path.parent.mkdir(parents=True, exist_ok=True)
-  temporary = path.with_suffix(path.suffix + '.part')
-  temporary.write_text(json.dumps(value, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
-  temporary.replace(path)
+  files.write_text(path, json.dumps(value, ensure_ascii=False, indent=2) + '\n')
 
 
 def _stamp(value):
@@ -133,7 +129,38 @@ def process_video(
 ):
   video, info = media.probe(video)
   asset = asset_folder(workspace, video)
-  asset.mkdir(parents=True, exist_ok=True)
+  with files.video_lock(asset, 'process'):
+    return _process_locked(
+      video,
+      info,
+      asset,
+      interval=interval,
+      scene_threshold=scene_threshold,
+      max_frames=max_frames,
+      extract_slides=extract_slides,
+      slide_extractor_path=slide_extractor_path,
+      asr=asr,
+      allow_remote_asr=allow_remote_asr,
+      overwrite=overwrite,
+      status=status,
+    )
+
+
+def _process_locked(
+  video,
+  info,
+  asset,
+  *,
+  interval,
+  scene_threshold,
+  max_frames,
+  extract_slides,
+  slide_extractor_path,
+  asr,
+  allow_remote_asr,
+  overwrite,
+  status,
+):
   status(f'{video.name}: {media.duration(info):.1f}s, {len(info.get("streams") or [])} streams')
 
   frame_run = datetime.now(UTC).strftime('%Y%m%dT%H%M%SZ') + '-' + uuid.uuid4().hex[:6]
@@ -195,7 +222,7 @@ def process_video(
   slides = slide_result['slides'] if slide_result else []
   text = _context(asset, video, info, rows, transcript_source, transcript_error, frames, slides)
   context_path = asset / 'summary-context.md'
-  context_path.write_text(text, encoding='utf-8')
+  files.write_text(context_path, text)
   manifest = {
     'schema_version': 1,
     'source_video': str(video),

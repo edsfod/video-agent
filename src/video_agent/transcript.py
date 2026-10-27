@@ -4,6 +4,7 @@ import re
 import subprocess
 from pathlib import Path
 
+from . import files
 from .media import MediaError, extract_audio, tool
 
 ARROW = re.compile(
@@ -160,6 +161,6 @@ def write(rows, output_dir):
   output_dir.mkdir(parents=True, exist_ok=True)
   srt = output_dir / 'transcript.srt'
   text = output_dir / 'transcript.txt'
-  srt.write_text(format_srt(rows), encoding='utf-8')
-  text.write_text(format_text(rows), encoding='utf-8')
+  files.write_text(srt, format_srt(rows))
+  files.write_text(text, format_text(rows))
   return srt, text

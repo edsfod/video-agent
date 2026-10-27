@@ -359,3 +359,29 @@ def test_versions_match():
   wheel = f'releases/download/v{__version__}/video_agent-{__version__}-py3-none-any.whl'
   assert (root / 'skills/video-agent/SKILL.md').read_text(encoding='utf-8').count(wheel) == 2
   assert wheel in (root / 'README.md').read_text(encoding='utf-8')
+
+
+def test_video_lock_is_released_when_its_process_is_killed(tmp_path):
+  from video_agent import files
+
+  script = (
+    'import sys, time\n'
+    'from video_agent import files\n'
+    'with files.video_lock(sys.argv[1], "test"):\n'
+    '  print("held", flush=True)\n'
+    '  time.sleep(60)\n'
+  )
+  holder = subprocess.Popen(
+    [sys.executable, '-c', script, str(tmp_path)],
+    stdout=subprocess.PIPE,
+    text=True,
+  )
+  try:
+    assert holder.stdout.readline().strip() == 'held'
+    with pytest.raises(files.BusyError), files.video_lock(tmp_path, 'test'):
+      pass
+  finally:
+    holder.kill()
+    holder.wait()
+  with files.video_lock(tmp_path, 'test'):
+    pass
