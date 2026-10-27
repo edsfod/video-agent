@@ -73,10 +73,10 @@ Done and checked (2026-10-26 and 2026-10-27):
 - Frame sampling: candidates less than 1 s apart are merged; reprocessing keeps the original transcript source in the manifest.
 - README (Chinese) with screenshots in `docs/images/`, made by `npm run screenshots` from NASA's public-domain video GSFC_20181108_FERMI_m13042_Luck4K and its official captions (both fetched from images.nasa.gov), with an AI-output disclaimer as NASA's media guidelines ask. To rebuild them: download the `~medium.mp4` and `.srt` from images.nasa.gov into a neutral folder under one name, `process`, `summarize` with a Chinese request, `frame` one extra time, then run the script.
 - Machine-specific paths removed from published files; `notes/` is local and ignored.
+- Published on 2026-10-27 at the user's request: https://github.com/edsfod/video-agent, tag `v0.1.0` (CI passed on GitHub for both jobs), release with the unsigned installer (SHA256 `4d8f959eeafc0e89f73cedaecc18f148c6d51280bb70e63c62ec8139b4d3a550`). Checked after publishing: `uvx --from git+https://github.com/edsfod/video-agent@v0.1.0 video-agent --help` works, the release download matches the local hash, and `claude plugin marketplace add` plus `claude plugin install video-agent@video-agent` succeed in a temporary config directory. The first CI run caught `--help` crashing on a cp1252 pipe; output to pipes is now UTF-8.
 
 Open:
 
-- Publishing: create `edsfod/video-agent`, push, let CI run on GitHub, tag `v0.1.0`, attach the installer to a release. Waits for the user. The skill and the GUI fetch `v0.1.0` from GitHub when `video-agent` is not installed, so the tag must exist before release.
 - Check the Codex route after 2026-11-25.
 - Representative frames can include black frames (fade-ins); detecting them needs image analysis.
 - Add site-specific authentication only if needed; `download` already accepts an explicit yt-dlp config file.
