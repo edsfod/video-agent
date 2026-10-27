@@ -774,6 +774,7 @@ $('open-settings').onclick = async () => {
   renderWorkspaceLock();
   $('set-update-mirror').value = state.settings.updateMirror || '';
   renderUpdate(await window.va.updateState());
+  renderRules();
   const cli = state.env.bundled ? '安装程序自带的 video-agent' : state.env.cli.join(' ');
   $('env-info').textContent =
     `正在用的命令：${cli} · Claude Code：${state.env.claude ? '已找到' : '没有找到'} · Codex：${state.env.codex ? '已找到' : '没有找到'}`;
@@ -809,6 +810,45 @@ function renderWorkspaceLock() {
   $('pick-workspace').disabled = active > 0;
   $('workspace-lock').hidden = active === 0;
 }
+
+// ---------- summary rules ----------
+// The rules every summary route follows; the CLI keeps the user's copy (video-agent template --edit).
+
+async function renderRules() {
+  const info = await window.va.cliJson(['template', '--info']);
+  if (info.error) return ($('rules-status').textContent = `读取不到：${info.error}`);
+  $('rules-status').textContent = !info.customized
+    ? '正在用默认规则。'
+    : info.outdated
+      ? '正在用你改过的版本。新版的默认规则有改动：打开对比，把需要的改动合并进你的版本，再点「已合并」。'
+      : '正在用你改过的版本。';
+  $('rules-reset').hidden = !info.customized;
+  $('rules-compare').hidden = $('rules-accept').hidden = !info.outdated;
+}
+
+async function rulesAction(flag) {
+  const info = await window.va.cliJson(['template', flag]);
+  if (info.error) alert(`没有成功：${info.error}`);
+  await renderRules();
+  return info;
+}
+
+$('rules-edit').onclick = async () => {
+  const info = await rulesAction('--edit');
+  if (info.path) window.va.open(info.path);
+};
+$('rules-compare').onclick = async () => {
+  const info = await rulesAction('--info');
+  if (info.default) window.va.open(info.default);
+  if (info.path) window.va.open(info.path);
+};
+$('rules-accept').onclick = () => rulesAction('--accept');
+$('rules-reset').onclick = () => confirm('删除你改过的版本，回到默认规则吗？') && rulesAction('--reset');
+$('skill-view').onclick = async () => {
+  $('skill-text').innerHTML = DOMPurify.sanitize(marked.parse(await window.va.readSkill()));
+  $('skill-dialog').showModal();
+};
+$('close-skill').onclick = () => $('skill-dialog').close();
 
 $('pick-workspace').onclick = async () => {
   const folder = await window.va.pickFolder('选择工作区');

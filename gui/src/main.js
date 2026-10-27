@@ -392,6 +392,7 @@ function registerIpc() {
   }));
 
   ipcMain.handle('plugin:install', (_, agent) => installPlugin(agent));
+  ipcMain.handle('skill:read', () => fs.readFileSync(path.join(pluginRoot(), 'skills', 'video-agent', 'SKILL.md'), 'utf8'));
 
   ipcMain.handle('bilibili:status', () => bilibili.status());
   ipcMain.handle('bilibili:login', () => bilibili.login(win));

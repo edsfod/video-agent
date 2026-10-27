@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld('va', {
   saveSettings: (changes) => ipcRenderer.invoke('settings:set', changes),
   env: () => ipcRenderer.invoke('env:info'),
   installPlugin: (agent) => ipcRenderer.invoke('plugin:install', agent),
+  readSkill: () => ipcRenderer.invoke('skill:read'),
   bilibiliStatus: () => ipcRenderer.invoke('bilibili:status'),
   bilibiliLogin: () => ipcRenderer.invoke('bilibili:login'),
   bilibiliLogout: () => ipcRenderer.invoke('bilibili:logout'),

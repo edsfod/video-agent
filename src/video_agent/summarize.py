@@ -6,6 +6,7 @@ for more frames: the `frame` tool saves one into `frames/extra/` and sends the i
 """
 
 import base64
+import hashlib
 import json
 import math
 import re
@@ -18,7 +19,7 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util import Retry
 
-from . import files, media
+from . import files, media, settings
 from .processor import asset_folder
 
 SUMMARY_NAME = '总结.md'
@@ -41,8 +42,68 @@ class SummaryError(RuntimeError):
   pass
 
 
-def template():
+def default_template():
   return resources.files('video_agent').joinpath('prompts/summary.md').read_text(encoding='utf-8')
+
+
+# The user's own copy of the rules and template, used by every route instead of the default. Its first line records
+# which default it was copied from, so an update that changes the default can say so; updates never touch the copy.
+BASE_MARK = re.compile(r'<!-- video-agent default: (\w+) -->\n?')
+
+
+def template_path():
+  return settings.settings_path().parent / 'summary.md'
+
+
+def _fingerprint(text):
+  return hashlib.sha256(text.encode('utf-8')).hexdigest()[:12]
+
+
+def template():
+  """The rules and template every route follows: the user's copy when there is one, otherwise the default."""
+  path = template_path()
+  if path.is_file():
+    return BASE_MARK.sub('', path.read_text(encoding='utf-8-sig'), count=1)
+  return default_template()
+
+
+def template_info():
+  """Where the user's copy is, whether there is one, and whether the default changed since it was copied. With a copy,
+  the current default is written beside it (summary.default.md) for comparing."""
+  path = template_path()
+  info = {'path': str(path), 'customized': path.is_file(), 'outdated': False, 'default': None}
+  if info['customized']:
+    found = BASE_MARK.match(path.read_text(encoding='utf-8-sig'))
+    info['outdated'] = not found or found.group(1) != _fingerprint(default_template())
+    default = path.with_name('summary.default.md')
+    files.write_text(default, default_template())
+    info['default'] = str(default)
+  return info
+
+
+def edit_template():
+  """Creates the user's copy from the default when there is none; returns template_info()."""
+  path = template_path()
+  if not path.is_file():
+    default = default_template()
+    files.write_text(path, f'<!-- video-agent default: {_fingerprint(default)} -->\n{default}')
+  return template_info()
+
+
+def accept_template():
+  """Marks the user's copy as up to date with the current default (after merging its changes by hand)."""
+  path = template_path()
+  if path.is_file():
+    body = BASE_MARK.sub('', path.read_text(encoding='utf-8-sig'), count=1)
+    files.write_text(path, f'<!-- video-agent default: {_fingerprint(default_template())} -->\n{body}')
+  return template_info()
+
+
+def reset_template():
+  """Removes the user's copy, so every route follows the default again."""
+  template_path().unlink(missing_ok=True)
+  template_path().with_name('summary.default.md').unlink(missing_ok=True)
+  return template_info()
 
 
 def _session():

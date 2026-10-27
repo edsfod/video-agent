@@ -195,6 +195,16 @@
           <button id="install-codex" type="button">安装到 Codex</button>
         </span>
         <pre id="plugin-output" class="plugin-output" hidden></pre>
+        <h3>总结规则和模板</h3>
+        <p class="muted small-text">几种总结方式和「复制材料」都按这份规则写。可以改成你自己的写法，比如更长、更短、固定要哪几节；更新程序不会覆盖你的版本。</p>
+        <p id="rules-status" class="muted small-text"></p>
+        <span class="row">
+          <button id="rules-edit" type="button">编辑…</button>
+          <button id="rules-compare" type="button" hidden>打开新版默认对比</button>
+          <button id="rules-accept" type="button" hidden>已合并，不再提示</button>
+          <button id="rules-reset" type="button" class="ghost" hidden>恢复默认</button>
+          <button id="skill-view" type="button" class="ghost">查看 skill</button>
+        </span>
         <h3>更新</h3>
         <p id="update-status" class="muted small-text"></p>
         <span class="row">
@@ -240,6 +250,18 @@
           <button id="import-save" value="save" class="primary">导入</button>
         </div>
       </form>
+    </dialog>
+
+    <dialog id="skill-dialog">
+      <div class="logs">
+        <header class="row">
+          <h2>video-agent skill（只读）</h2>
+          <span class="spacer"></span>
+          <button id="close-skill" class="ghost">关闭</button>
+        </header>
+        <p class="muted small-text">这是 Agent 总结视频时照着做的流程，管着上传音频前先征得同意、命令怎么写等，改坏了会出问题，而且每次更新都会覆盖，所以只能查看。想改总结的写法，在设置里编辑「总结规则和模板」。</p>
+        <article id="skill-text" class="markdown skill-text"></article>
+      </div>
     </dialog>
 
     <dialog id="logs">

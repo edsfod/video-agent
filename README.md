@@ -104,6 +104,8 @@ FFmpeg 和 yt-dlp 会作为依赖一起装上，不需要 git。电脑上已经�
 
 关闭窗口时程序缩到托盘，任务继续在后台运行（可在设置里关掉）。每个任务的完整输出都记在日志里，点左下角「日志」查看。
 
+**总结规则**：几种总结方式都按同一份规则和模板写。在「设置 → 总结规则和模板」里点「编辑」，就会生成你自己的版本并用编辑器打开，可以改成更长、更短或固定要哪几节；更新程序不会覆盖它，默认规则有改动时会提示你对比。Agent 的 skill 流程只能查看，不能改。
+
 **更新**：启动时会查一次有没有新版本，只提示，不会自己下载（可在设置里关掉）。在设置里点「下载并更新」，只下载和当前版本不同的部分；再点「重启并安装」，装完自动重新打开。依次尝试 github.com、GitHub API 和下载镜像；更新文件带签名，镜像给出的文件对不上签名就不会安装。
 
 ## 命令行
@@ -125,6 +127,8 @@ video-agent summarize "D:\Videos\lecture.mp4" -o D:\Video-Work
 video-agent pack "D:\Videos\lecture.mp4" -o D:\Video-Work --zip D:\lecture-材料.zip
 video-agent summarize "D:\Videos\lecture.mp4" -o D:\Video-Work --import D:\总结.md
 ```
+
+`video-agent template --edit` 生成你自己的一份总结规则（`%APPDATA%\video-agent\summary.md`），之后各种总结方式都按它写；`--reset` 恢复默认。
 
 `summarize` 用模型 API 写 `总结.md`。先设置一次服务商和 API key，key 存在 Windows 凭据管理器里，不写进文件：
 

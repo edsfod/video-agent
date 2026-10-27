@@ -20,6 +20,12 @@ SUBTITLES = """1
 """
 
 
+@pytest.fixture(autouse=True)
+def own_appdata(tmp_path_factory, monkeypatch):
+  """Settings and the user's copy of the summary rules come from %APPDATA%; never read the real ones."""
+  monkeypatch.setenv('APPDATA', str(tmp_path_factory.mktemp('appdata')))
+
+
 @pytest.fixture(scope='session')
 def sample_video(tmp_path_factory):
   """An 8-second H.264 video with a sine tone, its colours changing at 4 s, and a matching `.srt` beside it."""

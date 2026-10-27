@@ -145,6 +145,17 @@ test('copy material puts the rules and transcript on the clipboard', async () =>
   assert.match(copied, /我们看看这张图表/);
 });
 
+test('settings show which summary rules are in use and the skill read-only', async () => {
+  await page.click('#open-settings');
+  await page.waitForFunction(() => document.querySelector('#rules-status').textContent === '正在用默认规则。');
+  assert.equal(await page.isHidden('#rules-reset'), true);
+  await page.click('#skill-view');
+  await page.waitForSelector('#skill-dialog[open] #skill-text h2');
+  assert.match(await page.textContent('#skill-text'), /Summarize a video/);
+  await page.click('#close-skill');
+  await page.click('#settings button[value=cancel]');
+});
+
 test('settings dialog saves the model through the CLI', async () => {
   const keyBefore = JSON.parse(cli(['config', '--json', '--provider', 'openai'])).key;
   await page.click('#open-settings');

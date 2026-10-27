@@ -3,6 +3,7 @@
 import io
 import json
 import zipfile
+from pathlib import Path
 
 import pytest
 
@@ -230,3 +231,31 @@ def test_screen_pages_go_on_contact_sheets_when_they_exceed_the_budget(tmp_path)
 
   squeezed, dropped = evidence_images(tmp_path, manifest, 3, tmp_path / 'c')
   assert len(squeezed) == 3 and dropped == 3 and '3 per row' in squeezed[0][0]
+
+
+def test_the_users_copy_of_the_rules_is_used_and_knows_when_the_default_changed(capsys):
+  from video_agent import cli, summarize
+
+  assert cli.main(['template', '--info']) == 0
+  assert json.loads(capsys.readouterr().out)['customized'] is False
+  assert cli.main(['template', '--edit']) == 0
+  info = json.loads(capsys.readouterr().out)
+  copy = Path(info['path'])
+  assert info['customized'] and not info['outdated'] and Path(info['default']).is_file()
+  copy.write_text(copy.read_text(encoding='utf-8') + '\n- 全部用英文写。\n', encoding='utf-8')
+  assert template().endswith('- 全部用英文写。\n') and not template().startswith('<!--')
+  assert cli.main(['template']) == 0
+  assert capsys.readouterr().out.endswith('- 全部用英文写。\n')
+
+  original = summarize.default_template
+  summarize.default_template = lambda: original() + '\n新规则\n'
+  try:
+    assert summarize.template_info()['outdated'] is True
+    assert cli.main(['template']) == 0
+    assert 'older default' in capsys.readouterr().err
+    assert summarize.accept_template()['outdated'] is False
+    assert template().endswith('- 全部用英文写。\n'), 'accepting keeps the copy as it is'
+  finally:
+    summarize.default_template = original
+  assert summarize.reset_template()['customized'] is False
+  assert template() == summarize.default_template()

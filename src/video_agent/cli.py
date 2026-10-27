@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 from . import settings
+from . import summarize as summaries
 from .download import DownloadError, download_urls
 from .media import MediaError, duration, parse_clock, probe, save_frame
 from .processor import asset_folder, process_video
@@ -201,7 +202,15 @@ def build_parser():
     help='the workspace passed to process (default: video-agent-output)',
   )
 
-  commands.add_parser('template', help='print the summary rules and template shared by the skill and summarize')
+  rules = commands.add_parser(
+    'template', help='print the summary rules and template every route follows (your copy, if you made one)'
+  )
+  choice = rules.add_mutually_exclusive_group()
+  choice.add_argument('--default', action='store_true', help='print the built-in default instead of your copy')
+  choice.add_argument('--edit', action='store_true', help='make your own copy (once) and print its path as JSON')
+  choice.add_argument('--reset', action='store_true', help='delete your copy and go back to the default')
+  choice.add_argument('--accept', action='store_true', help="mark your copy as up to date with the default's changes")
+  choice.add_argument('--info', action='store_true', help='print as JSON where your copy is and whether it is outdated')
   return parser
 
 
@@ -320,7 +329,17 @@ def run(args):
     return _show(args)
 
   if args.command == 'template':
-    sys.stdout.write(template())
+    action = {'edit': summaries.edit_template, 'reset': summaries.reset_template}
+    action |= {'accept': summaries.accept_template, 'info': summaries.template_info}
+    chosen = next((name for name in action if getattr(args, name)), None)
+    if chosen:
+      _emit(action[chosen]())
+    else:
+      sys.stdout.write(summaries.default_template() if args.default else template())
+      if not args.default and summaries.template_info()['outdated']:
+        print(
+          'Note: your summary rules were copied from an older default; compare with template --default', file=sys.stderr
+        )
     return 0
 
   if args.command == 'config':
