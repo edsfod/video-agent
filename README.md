@@ -144,8 +144,15 @@ video-agent config --provider openai --model Qwen/Qwen3.5-397B-A17B --base-url h
 - 必剪转录会把视频的音轨上传到哔哩哔哩，用的是必剪的非官方接口，随时可能失效。只有你明确同意时才会上传：命令行要同时加 `--asr bcut --allow-remote-asr`，桌面程序要勾选，Agent 要先问过你。
 - 用模型 API 总结时，字幕和画面会发给你设置的服务商；用 Claude Code、Codex 时，由它们按各自的规则处理。
 - 日志不记录 API key。
+- 哔哩哔哩登录：在桌面程序里登录后，登录状态（cookie）只存在本机，安装版用 Windows 的 DPAPI 加密保存。只在下载 B 站视频时临时导出给 yt-dlp、发给 B 站，下载结束就删掉导出的文件；在设置里可以退出登录。
 - 检查更新：桌面程序启动时会向 GitHub 查一次最新版本，连不上时依次改用 GitHub API 和下载镜像（gh-proxy.com、ghfast.top，或你在设置里填的镜像）。这些请求只是普通的下载请求，不附带你的视频、字幕、设置或其他数据；对方能看到的是你的 IP 地址和请求的文件。可以在设置里关掉启动时的检查。
 - 除此之外，程序只在你要求时联网：下载链接（yt-dlp）、必剪转录、调用你设置的模型 API。
+
+## 使用须知
+
+- 下载、转录和截取的视频内容，版权属于原作者。请只用于个人学习，遵守视频网站的用户协议和当地法律，不要传播下载的视频。
+- 必剪转录用的是哔哩哔哩的非官方接口，不在它的公开服务条款保障之内，随时可能失效或受限制。
+- 总结由 AI 生成，可能有错，重要内容请对照原视频核实。
 
 ## 开发
 
@@ -163,5 +170,6 @@ Copyright (C) 2026 edsfod。以 [GNU Affero 通用公共许可证第 3 版](LICE
 ## 鸣谢
 
 - 本项目受 [windlandneko/yanhekit](https://github.com/windlandneko/yanhekit) 启发：做成 Claude Code、Codex 插件的形式，以及用必剪转录字幕的思路，都参考了它。
-- 下载用 [yt-dlp](https://github.com/yt-dlp/yt-dlp)，媒体处理用 [FFmpeg](https://ffmpeg.org/)（随 [imageio-ffmpeg](https://github.com/imageio/imageio-ffmpeg) 一起装上），安装程序里的命令行工具用 [PyInstaller](https://pyinstaller.org/) 打包，PPT 提取用 [AutoSlides Extractor](https://github.com/bit-admin/AutoSlides-Extractor)，界面配色参考了 [AutoSlides](https://github.com/bit-admin/Yanhekt-AutoSlides)。
+- 下载用 [yt-dlp](https://github.com/yt-dlp/yt-dlp)，媒体处理用 [FFmpeg](https://ffmpeg.org/)（随 [imageio-ffmpeg](https://github.com/imageio/imageio-ffmpeg) 一起装上），安装程序里的命令行工具用 [PyInstaller](https://pyinstaller.org/) 打包，PPT 提取用 [AutoSlides Extractor](https://github.com/bit-admin/AutoSlides-Extractor)。
+- 界面的浅色和深色配色取自 [AutoSlides](https://github.com/bit-admin/Yanhekt-AutoSlides) 的主题文件（Apache License 2.0）；任务队列的设计（排队而不是拒绝、按类型限制同时运行的数量、去重）参考了它的下载队列，代码是本项目自己写的。
 - 截图里的视频和字幕来自 NASA 戈达德太空飞行中心的 [NASA's Fermi Mission Shows How Luck Favors the Prepared](https://images.nasa.gov/details/GSFC_20181108_FERMI_m13042_Luck4K)（2018），按 [NASA 的媒体使用规定](https://www.nasa.gov/nasa-brand-center/images-and-media/)用于演示。截图里的总结由 AI（Qwen3.5，经模型 API）生成，不是 NASA 的说法，未经 NASA 审核，NASA 不对其准确性负责；本项目与 NASA 无关，也未获 NASA 认可。

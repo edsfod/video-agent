@@ -1,4 +1,6 @@
-/* Warm neutral palette in the manner of the AutoSlides app; follows the system light or dark setting. */
+/* Warm neutral palette; follows the system light or dark setting. The colour values of the light and dark themes
+   come from AutoSlides (https://github.com/bit-admin/Yanhekt-AutoSlides, src/renderer/shared/styles/theme.css),
+   licensed under the Apache License 2.0; the variable names and the rest of this file are Video Agent's own. */
 :root {
   --bg-page: #faf9f7;
   --bg-sidebar: #f4f3f0;
