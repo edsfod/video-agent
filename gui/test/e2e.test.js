@@ -207,6 +207,27 @@ test('embedded terminal runs a command in the video folder', async () => {
   );
 });
 
+test('the Bilibili login is exported as a Netscape cookies file for yt-dlp', async () => {
+  const file = path.join(ROOT, 'cookies', 'bilibili.txt');
+  const written = await app.evaluate(async ({ session }, file) => {
+    const store = session.fromPartition('persist:bilibili');
+    const expirationDate = Math.floor(Date.now() / 1000) + 3600;
+    const url = 'https://www.bilibili.com/';
+    await store.cookies.set({ url, domain: '.bilibili.com', name: 'SESSDATA', value: 'login', httpOnly: true, secure: true, expirationDate });
+    await store.cookies.set({ url, name: 'buvid3', value: 'host-only', expirationDate });
+    await store.cookies.set({ url: 'https://example.com/', name: 'other', value: 'elsewhere', expirationDate });
+    const result = await global.vaBilibili.writeCookies(file);
+    await store.clearStorageData();
+    return [result, await global.vaBilibili.writeCookies(`${file}.after-logout`)];
+  }, file);
+  assert.deepEqual(written, [file, null]);
+  const lines = fs.readFileSync(file, 'utf8').trim().split('\n');
+  assert.equal(lines[0], '# Netscape HTTP Cookie File');
+  assert.ok(lines.some((line) => /^#HttpOnly_\.bilibili\.com\tTRUE\t\/\tTRUE\t\d+\tSESSDATA\tlogin$/.test(line)), lines.join(' | '));
+  assert.ok(lines.some((line) => /^www\.bilibili\.com\tFALSE\t\/\tFALSE\t\d+\tbuvid3\thost-only$/.test(line)), lines.join(' | '));
+  assert.ok(!lines.some((line) => line.includes('elsewhere')));
+});
+
 test('remove the video from the list', async () => {
   await page.click('#remove-video');
   await page.waitForSelector('#empty:not([hidden])');

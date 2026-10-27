@@ -19,6 +19,7 @@
           <input id="download-url" type="text" placeholder="或粘贴视频链接下载" spellcheck="false" />
           <button type="submit">下载</button>
         </form>
+        <div id="download-hint" class="download-hint" hidden>没有登录 B 站，只能下载视频，拿不到字幕。<a href="#" id="download-login">登录</a></div>
         <div class="list-title">视频</div>
         <div id="video-list" class="video-list"></div>
         <div class="sidebar-foot">
@@ -148,6 +149,13 @@
         </label>
         <label class="check"><input id="set-close-to-tray" type="checkbox" /><span>关闭窗口时收到托盘，任务继续在后台运行</span></label>
         <div id="env-info" class="muted small-text"></div>
+        <h3>哔哩哔哩账号</h3>
+        <p class="muted small-text">B 站只给登录的账号看字幕（包括 AI 字幕）。在这里登录一次，之后下载 B 站视频会把字幕一起存下来，处理时直接用，不用转录。登录状态只存在本机，只在下载 B 站视频时交给 yt-dlp。</p>
+        <span class="row">
+          <span id="bili-status" class="muted small-text grow"></span>
+          <button id="bili-login" type="button">登录</button>
+          <button id="bili-logout" type="button" class="ghost" hidden>退出登录</button>
+        </span>
         <h3>Agent 插件</h3>
         <p class="muted small-text">把总结用的 skill 装进 Claude Code 或 Codex，之后在它们里面直接说“总结这个视频”即可。从本机安装，不需要 git，也不用联网；重复点击会刷新已装的版本。</p>
         <span class="row">

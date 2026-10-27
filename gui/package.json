@@ -101,6 +101,9 @@
         "repo": "video-agent",
         "releaseType": "release"
       }
-    ]
+    ],
+    "electronFuses": {
+      "enableCookieEncryption": true
+    }
   }
 }

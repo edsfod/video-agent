@@ -31,6 +31,12 @@ Do not use Media Downloader as the backend. Its repository describes it as a Qt/
 
 This choice adds one optional `download` subcommand and an external yt-dlp requirement. It does not change `process` input: `process` continues to accept local paths only. Downloads are never chained automatically into transcription or summarization. The current Media Downloader-managed executable is auto-detected from the user's AppData directory; Video Agent does not install or update it. Since 0.1.1 yt-dlp is also a Python dependency (see "Distribution"), so `download` works out of the box; a yt-dlp on `PATH` or Media Downloader's copy still comes first.
 
+## Site subtitles and Bilibili login — user decision (2026-10-27)
+
+The user expected a downloaded Bilibili video to come with the platform's subtitles. `download` now saves the site's subtitle tracks beside the video (`--write-subs --sub-langs all,-danmaku,-live_chat`; `--no-subs` turns this off), and `process` takes `clip.<language>.srt`/`.vtt` as well as `clip.srt`, preferring the plain file, then Chinese, then other human tracks, then AI tracks (`ai-*`). Only language-like parts count, so `clip.part2.srt`, which belongs to `clip.part2.mp4`, is not taken. A failed subtitle request makes yt-dlp drop the whole video, so the download is retried once without subtitles.
+
+Bilibili lists subtitles, AI ones included, only to a logged-in account. `--cookies-from-browser edge` failed on the user's machine with Edge running (locked cookie database), and yt-dlp cannot decrypt the app-bound encrypted cookies of Chromium 127 and later even with the browser closed. The user chose a login inside the GUI: the 设置 dialog and a hint under the download box open Bilibili's login page in a window of the app's own, whose cookies live in a separate persistent partition. The packaged app turns on Electron's `enableCookieEncryption` fuse, so they are stored encrypted with DPAPI; in development (`electron .`) they are not. For each Bilibili download the main process writes the partition's `bilibili.com` cookies to a Netscape file under `<userData>/cookies/`, passes it as `download --cookies`, and deletes it when the job ends and at start. The CLI only accepts `--cookies FILE`; it never reads a browser.
+
 ## Interface sequence — user decision
 
 Build the CLI first and write the operating documentation. On 2026-10-27 the user brought the GUI back into scope (it had been deferred on 2026-10-26); see "GUI". The CLI means text commands typed in PowerShell or another terminal; it is the first implementation interface, not a requirement that the project remain command-line-only. A GUI will select local files, show the default-off slide option, report progress, and open results by calling the same processing modules.
@@ -104,4 +110,4 @@ Open:
 - Check the Codex route after 2026-11-25.
 - Code signing postponed (user decision, 2026-10-27): the SignPath application form at signpath.org/apply did not work for the user. Preparation notes are in `notes/` (local); the update signature on `latest.yml` does not depend on it.
 - Representative frames can include black frames (fade-ins); detecting them needs image analysis.
-- Add site-specific authentication only if needed; `download` already accepts an explicit yt-dlp config file.
+- Bilibili login is checked by unit-level tests only (cookie export in the end-to-end test); a real login and a subtitle download need the user's account.

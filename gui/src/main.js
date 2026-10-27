@@ -8,6 +8,7 @@ const path = require('node:path');
 const pty = require('node-pty');
 const { Logs } = require('./logs');
 const { createUpdater } = require('./updater');
+const bilibili = require('./bilibili');
 
 const VERSION = app.getVersion(); // package.json, kept equal to the CLI version
 // Last resort in development when no CLI is installed: the release wheel through uvx (needs uv, not git).
@@ -17,6 +18,8 @@ const UVX_CLI = [
   'video-agent',
 ];
 const settingsFile = () => path.join(app.getPath('userData'), 'settings.json');
+// Cookies exported for one download at a time; removed when the download ends and at start (after a crash).
+const cookiesDir = () => path.join(app.getPath('userData'), 'cookies');
 const jobs = new Map();
 const terminals = new Map();
 const ICONS = path.join(__dirname, '..', 'assets');
@@ -33,6 +36,8 @@ global.vaTray = {
   click: (label) => trayState.menu?.items.find((item) => item.label === label)?.click(),
   windowVisible: () => !!win && !win.isDestroyed() && win.isVisible(),
 };
+// The cookie export, for the same tests.
+global.vaBilibili = { writeCookies: (file) => bilibili.writeCookies(file) };
 
 // --user-data=<dir> keeps test runs away from the user's settings.
 const userData = process.argv.find((arg) => arg.startsWith('--user-data='));
@@ -144,7 +149,7 @@ function launch(command, args) {
   return { file: quote(found || command), args: args.map(quote), shell: true };
 }
 
-function startJob(id, command, args, { cwd, stdin, env, title = id, prompt } = {}) {
+function startJob(id, command, args, { cwd, stdin, env, title = id, prompt, onClose } = {}) {
   const run = launch(command, args);
   const log = logs.job(id, { title, command: [command, ...args], cwd, ...(prompt ? { prompt } : {}) });
   const child = spawn(run.file, run.args, {
@@ -169,6 +174,7 @@ function startJob(id, command, args, { cwd, stdin, env, title = id, prompt } = {
     send('job:output', { id, stream: 'stderr', text: `${error.message}\n` });
   });
   child.on('close', (code) => {
+    onClose?.();
     jobs.delete(id);
     log.close(code);
     updateTray();
@@ -272,6 +278,10 @@ function registerIpc() {
 
   ipcMain.handle('plugin:install', (_, agent) => installPlugin(agent));
 
+  ipcMain.handle('bilibili:status', () => bilibili.status());
+  ipcMain.handle('bilibili:login', () => bilibili.login(win));
+  ipcMain.handle('bilibili:logout', () => bilibili.logout());
+
   ipcMain.handle('update:state', () => updater.state());
   ipcMain.handle('update:check', () => updater.check());
   ipcMain.handle('update:download', () => updater.download());
@@ -294,9 +304,16 @@ function registerIpc() {
   });
 
   // Video Agent CLI: streamed jobs and one-shot JSON queries.
-  ipcMain.handle('cli:start', (_, { id, args, stdin, title }) => {
+  // bilibiliCookies: pass the Bilibili login to a download as a temporary cookies file (only the path is logged).
+  ipcMain.handle('cli:start', async (_, { id, args, stdin, title, bilibiliCookies }) => {
     const [command, ...prefix] = cliCommand();
-    startJob(id, command, [...prefix, ...args], { cwd: loadSettings().workspace, stdin, title });
+    const cookies = bilibiliCookies ? await bilibili.writeCookies(path.join(cookiesDir(), `${id}.txt`)) : null;
+    startJob(id, command, [...prefix, ...args, ...(cookies ? ['--cookies', cookies] : [])], {
+      cwd: loadSettings().workspace,
+      stdin,
+      title,
+      onClose: () => cookies && fs.rmSync(cookies, { force: true }),
+    });
   });
   ipcMain.handle('cli:json', async (_, args) => {
     const [command, ...prefix] = cliCommand();
@@ -489,6 +506,7 @@ if (!app.requestSingleInstanceLock()) {
     logs.line('info', `started ${app.getVersion()}, Electron ${process.versions.electron}`);
     process.on('uncaughtException', (error) => logs.line('error', error.stack || String(error)));
     fs.mkdirSync(loadSettings().workspace, { recursive: true });
+    fs.rmSync(cookiesDir(), { recursive: true, force: true });
     updater = createUpdater({ logs, send, settings: loadSettings, running: () => jobs.size });
     registerIpc();
     createTray();

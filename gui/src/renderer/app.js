@@ -10,6 +10,7 @@ const state = {
   route: 'claude',
   job: null, // { id, title, handlers }
   term: null,
+  bilibili: { loggedIn: false }, // { loggedIn, name? }
 };
 let jobCounter = 0;
 
@@ -530,13 +531,39 @@ new ResizeObserver(() => state.term && state.tab === 'terminal' && state.term.fi
 
 $('add-videos').onclick = async () => addVideos(await window.va.pickVideos());
 
+// ---------- Bilibili login (subtitles are shown only to logged-in accounts) ----------
+
+const isBilibili = (url) => /(^|[/.])(bilibili\.com|b23\.tv)([/:?#]|$)/i.test(url);
+
+function renderBilibili() {
+  const { loggedIn, name } = state.bilibili;
+  $('bili-status').textContent = loggedIn ? `已登录${name ? `：${name}` : ''}` : '没有登录';
+  $('bili-login').textContent = loggedIn ? '重新登录' : '登录';
+  $('bili-logout').hidden = !loggedIn;
+  $('download-hint').hidden = loggedIn || !isBilibili($('download-url').value.trim());
+}
+
+async function bilibiliLogin() {
+  state.bilibili = await window.va.bilibiliLogin();
+  renderBilibili();
+}
+
+$('bili-login').onclick = bilibiliLogin;
+$('download-login').onclick = (event) => (event.preventDefault(), bilibiliLogin());
+$('bili-logout').onclick = async () => {
+  state.bilibili = await window.va.bilibiliLogout();
+  renderBilibili();
+};
+$('download-url').oninput = renderBilibili;
+
 $('download-form').onsubmit = (event) => {
   event.preventDefault();
   const url = $('download-url').value.trim();
   if (!url) return;
   const folder = joinPath(state.settings.workspace, '下载');
   const saved = [];
-  runJob(`下载：${url}`, (id, title) => window.va.startCli(id, ['download', url, '-o', folder, '--json'], undefined, title), {
+  const options = { bilibiliCookies: isBilibili(url) };
+  runJob(`下载：${url}`, (id, title) => window.va.startCli(id, ['download', url, '-o', folder, '--json'], undefined, title, options), {
     showStdout: false,
     onLine(line) {
       try {
@@ -739,6 +766,7 @@ async function init() {
   state.settings = await window.va.settings();
   state.env = await window.va.env();
   renderUpdate(await window.va.updateState());
+  window.va.bilibiliStatus().then((status) => ((state.bilibili = status), renderBilibili()));
   state.route = state.env.claude ? 'claude' : state.env.codex ? 'codex' : 'api';
   state.videos = state.settings.videos.map((path) => ({ path, info: null }));
   renderList();

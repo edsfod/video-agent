@@ -13,6 +13,9 @@ contextBridge.exposeInMainWorld('va', {
   saveSettings: (changes) => ipcRenderer.invoke('settings:set', changes),
   env: () => ipcRenderer.invoke('env:info'),
   installPlugin: (agent) => ipcRenderer.invoke('plugin:install', agent),
+  bilibiliStatus: () => ipcRenderer.invoke('bilibili:status'),
+  bilibiliLogin: () => ipcRenderer.invoke('bilibili:login'),
+  bilibiliLogout: () => ipcRenderer.invoke('bilibili:logout'),
   updateState: () => ipcRenderer.invoke('update:state'),
   checkUpdate: () => ipcRenderer.invoke('update:check'),
   downloadUpdate: () => ipcRenderer.invoke('update:download'),
@@ -22,7 +25,7 @@ contextBridge.exposeInMainWorld('va', {
   pickFolder: (title) => ipcRenderer.invoke('dialog:folder', title),
   droppedPath: (file) => webUtils.getPathForFile(file),
 
-  startCli: (id, args, stdin, title) => ipcRenderer.invoke('cli:start', { id, args, stdin, title }),
+  startCli: (id, args, stdin, title, options = {}) => ipcRenderer.invoke('cli:start', { id, args, stdin, title, ...options }),
   cliJson: (args) => ipcRenderer.invoke('cli:json', args),
   cliText: (args, stdin) => ipcRenderer.invoke('cli:text', { args, stdin }),
   startAgent: (options) => ipcRenderer.invoke('agent:start', options),
