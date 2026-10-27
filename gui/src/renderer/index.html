@@ -155,6 +155,20 @@
           <button id="install-codex" type="button">安装到 Codex</button>
         </span>
         <pre id="plugin-output" class="plugin-output" hidden></pre>
+        <h3>更新</h3>
+        <p id="update-status" class="muted small-text"></p>
+        <span class="row">
+          <button id="update-check" type="button">检查更新</button>
+          <button id="update-download" type="button" class="primary" hidden>下载并更新</button>
+          <button id="update-install" type="button" class="primary" hidden>重启并安装</button>
+          <button id="update-releases" type="button" class="ghost">打开发布页</button>
+        </span>
+        <progress id="update-progress" max="100" value="0" hidden></progress>
+        <div id="update-notes" class="markdown update-notes" hidden></div>
+        <label class="check"><input id="set-check-updates" type="checkbox" /><span>启动时检查一次更新（只提示，不会自己下载）</span></label>
+        <label>下载镜像（可选；GitHub 连不上时先试它，例如 https://ghfast.top/）
+          <input id="set-update-mirror" type="text" spellcheck="false" placeholder="留空用内置的镜像" />
+        </label>
         <h3>模型 API</h3>
         <label>服务商
           <select id="set-provider"><option value="anthropic">Anthropic</option><option value="openai">OpenAI 兼容接口</option></select>

@@ -66,7 +66,7 @@ test.before(async () => {
   cli(['config', '--provider', 'openai', '--model', 'fake-model', '--base-url', `http://127.0.0.1:${model.server.address().port}/v1`]);
   const userData = path.join(ROOT, 'gui-data');
   fs.mkdirSync(userData, { recursive: true });
-  fs.writeFileSync(path.join(userData, 'settings.json'), JSON.stringify({ workspace: WORKSPACE, videos: [VIDEO], shell: 'cmd' }));
+  fs.writeFileSync(path.join(userData, 'settings.json'), JSON.stringify({ workspace: WORKSPACE, videos: [VIDEO], shell: 'cmd', checkUpdates: false }));
   // VA_E2E_EXE=<path to Video Agent.exe> runs the same tests against a packaged build.
   const packaged = process.env.VA_E2E_EXE;
   app = await electron.launch({

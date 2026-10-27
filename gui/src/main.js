@@ -7,6 +7,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const pty = require('node-pty');
 const { Logs } = require('./logs');
+const { createUpdater } = require('./updater');
 
 const VERSION = app.getVersion(); // package.json, kept equal to the CLI version
 // Last resort in development when no CLI is installed: the release wheel through uvx (needs uv, not git).
@@ -22,6 +23,7 @@ const ICONS = path.join(__dirname, '..', 'assets');
 let win;
 let tray;
 let logs;
+let updater;
 let quitting = false;
 // What the tray shows, kept for the end-to-end tests, which read it through app.evaluate.
 const trayState = { tooltip: '', menu: null };
@@ -47,6 +49,8 @@ function defaults() {
     maxFrames: 36,
     shell: '',
     closeToTray: true,
+    checkUpdates: true,
+    updateMirror: '',
   };
 }
 
@@ -204,6 +208,49 @@ function runToEnd(command, args, stdin) {
   });
 }
 
+// ---------- Agent plugin ----------
+
+// Install the Agent plugin from the local copy in the installer; no git or network needed. Both commands are
+// idempotent, so the button also repairs or refreshes an earlier install.
+async function installPlugin(agent) {
+  const root = pluginRoot();
+  const steps = agent === 'claude'
+    ? [['claude', ['plugin', 'marketplace', 'add', root]], ['claude', ['plugin', 'marketplace', 'update', 'video-agent']],
+       ['claude', ['plugin', 'install', 'video-agent@video-agent']]]
+    : [['codex', ['plugin', 'marketplace', 'add', root]], ['codex', ['plugin', 'add', 'video-agent@video-agent']]];
+  let output = '';
+  for (const [command, args] of steps) {
+    const { code, out, err } = await runToEnd(command, args);
+    output += `$ ${command} ${args.join(' ')}\n${out}${err}\n`;
+    if (code !== 0) {
+      logs.line('warn', `plugin install for ${agent} failed at: ${command} ${args.join(' ')}`);
+      return { ok: false, output };
+    }
+  }
+  logs.line('info', `plugin installed for ${agent} from ${root}`);
+  return { ok: true, output };
+}
+
+// After an update, bring the plugin in Claude Code and Codex up to the new version where it is installed. Claude Code
+// loads it in place from the install folder but records the version; Codex keeps a copy per version.
+async function refreshPluginsAfterUpdate() {
+  const previous = loadSettings().lastVersion;
+  saveSettings({ lastVersion: app.getVersion() });
+  if (!previous || previous === app.getVersion()) return;
+  const installed = {
+    claude: (text) => text.includes('video-agent@video-agent'),
+    codex: (text) => /^video-agent@video-agent\s+installed/m.test(text),
+  };
+  for (const agent of ['claude', 'codex']) {
+    if (!which(agent)) continue;
+    const { out } = await runToEnd(agent, ['plugin', 'list']);
+    if (installed[agent](out)) {
+      const { ok } = await installPlugin(agent);
+      logs.line(ok ? 'info' : 'warn', `plugin refresh for ${agent} after ${previous} -> ${app.getVersion()}: ${ok ? 'done' : 'failed'}`);
+    }
+  }
+}
+
 function insideWorkspace(target) {
   const root = path.resolve(loadSettings().workspace).toLowerCase() + path.sep;
   return path.resolve(target).toLowerCase().startsWith(root);
@@ -223,26 +270,12 @@ function registerIpc() {
     bundled: !!bundledCli(),
   }));
 
-  // Install the Agent plugin from the local copy in the installer; no git or network needed. Both commands are
-  // idempotent, so the button also repairs or refreshes an earlier install.
-  ipcMain.handle('plugin:install', async (_, agent) => {
-    const root = pluginRoot();
-    const steps = agent === 'claude'
-      ? [['claude', ['plugin', 'marketplace', 'add', root]], ['claude', ['plugin', 'marketplace', 'update', 'video-agent']],
-         ['claude', ['plugin', 'install', 'video-agent@video-agent']]]
-      : [['codex', ['plugin', 'marketplace', 'add', root]], ['codex', ['plugin', 'add', 'video-agent@video-agent']]];
-    let output = '';
-    for (const [command, args] of steps) {
-      const { code, out, err } = await runToEnd(command, args);
-      output += `$ ${command} ${args.join(' ')}\n${out}${err}\n`;
-      if (code !== 0) {
-        logs.line('warn', `plugin install for ${agent} failed at: ${command} ${args.join(' ')}`);
-        return { ok: false, output };
-      }
-    }
-    logs.line('info', `plugin installed for ${agent} from ${root}`);
-    return { ok: true, output };
-  });
+  ipcMain.handle('plugin:install', (_, agent) => installPlugin(agent));
+
+  ipcMain.handle('update:state', () => updater.state());
+  ipcMain.handle('update:check', () => updater.check());
+  ipcMain.handle('update:download', () => updater.download());
+  ipcMain.handle('update:install', (_, force) => updater.install(force));
 
   ipcMain.handle('dialog:videos', async () => {
     const result = await dialog.showOpenDialog(win, {
@@ -456,9 +489,15 @@ if (!app.requestSingleInstanceLock()) {
     logs.line('info', `started ${app.getVersion()}, Electron ${process.versions.electron}`);
     process.on('uncaughtException', (error) => logs.line('error', error.stack || String(error)));
     fs.mkdirSync(loadSettings().workspace, { recursive: true });
+    updater = createUpdater({ logs, send, settings: loadSettings, running: () => jobs.size });
     registerIpc();
     createTray();
     createWindow();
+    if (app.isPackaged) refreshPluginsAfterUpdate().catch((error) => logs.line('warn', `plugin refresh: ${error.message}`));
+    // One quiet check a little after start; it only tells the window, it downloads nothing.
+    if (loadSettings().checkUpdates !== false && (app.isPackaged || process.env.VA_UPDATE_ROOT)) {
+      setTimeout(() => updater.check().catch(() => {}), Number(process.env.VA_UPDATE_DELAY_MS || 8000));
+    }
   });
 }
 

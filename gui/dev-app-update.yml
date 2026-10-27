@@ -1,0 +1,6 @@
+# Read by electron-updater only when the unpackaged app is tested (VA_UPDATE_ROOT); the packaged app has its own
+# app-update.yml. The provider here is never used, since the updater sets its sources itself; the separate cache
+# folder keeps test downloads away from an installed copy's.
+provider: generic
+url: http://127.0.0.1/
+updaterCacheDirName: video-agent-gui-updater-dev

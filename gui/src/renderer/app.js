@@ -578,6 +578,9 @@ $('open-settings').onclick = async () => {
   $('set-cli').value = state.settings.cli;
   $('set-key').value = '';
   $('set-close-to-tray').checked = state.settings.closeToTray !== false;
+  $('set-check-updates').checked = state.settings.checkUpdates !== false;
+  $('set-update-mirror').value = state.settings.updateMirror || '';
+  renderUpdate(await window.va.updateState());
   const cli = state.env.bundled ? '安装程序自带的 video-agent' : state.env.cli.join(' ');
   $('env-info').textContent =
     `正在用的命令：${cli} · Claude Code：${state.env.claude ? '已找到' : '没有找到'} · Codex：${state.env.codex ? '已找到' : '没有找到'}`;
@@ -633,6 +636,8 @@ $('settings').addEventListener('close', async () => {
     workspace: $('set-workspace').value,
     cli: $('set-cli').value.trim(),
     closeToTray: $('set-close-to-tray').checked,
+    checkUpdates: $('set-check-updates').checked,
+    updateMirror: $('set-update-mirror').value.trim(),
   });
   const args = ['config', '--provider', $('set-provider').value];
   if ($('set-model').value.trim()) args.push('--model', $('set-model').value.trim());
@@ -645,6 +650,51 @@ $('settings').addEventListener('close', async () => {
   state.env = await window.va.env();
   if (workspaceChanged) await Promise.all(state.videos.map(refresh));
 });
+
+// ---------- updates ----------
+
+const RELEASES_PAGE = 'https://github.com/edsfod/video-agent/releases';
+const megabytes = (bytes) => (bytes / 1048576).toFixed(1);
+
+function renderUpdate(update) {
+  const current = update.current;
+  const text = {
+    idle: `当前版本 ${current}。${update.message || ''}`,
+    checking: '正在检查更新…',
+    latest: `当前版本 ${current}，已经是最新（经 ${update.source} 检查）。`,
+    available: `有新版本 ${update.version}，当前是 ${current}。`,
+    downloading: `正在经 ${update.source} 下载 ${update.version}：${Math.floor(update.percent || 0)}%` +
+      (update.total ? `（${megabytes(update.transferred)} / ${megabytes(update.total)} MB）` : ''),
+    downloaded: `${update.version} 已下载并通过校验，点“重启并安装”完成更新；设置和工作区都会保留。`,
+    error: '检查更新没有成功，可以稍后再试，或打开发布页手动下载。',
+  }[update.status];
+  const failure = update.status !== 'idle' && update.message ? `\n${update.message}` : '';
+  $('update-status').textContent = text + failure;
+  $('update-check').disabled = ['checking', 'downloading', 'downloaded'].includes(update.status);
+  $('update-download').hidden = update.status !== 'available';
+  $('update-install').hidden = update.status !== 'downloaded';
+  $('update-progress').hidden = update.status !== 'downloading';
+  $('update-progress').value = update.percent || 0;
+  const notes = ['available', 'downloading', 'downloaded'].includes(update.status) && update.notes;
+  $('update-notes').hidden = !notes;
+  if (notes) $('update-notes').innerHTML = DOMPurify.sanitize(marked.parse(notes));
+  for (const link of $('update-notes').querySelectorAll('a[href]')) {
+    link.onclick = (event) => (event.preventDefault(), window.va.external(link.href));
+  }
+  $('open-settings').classList.toggle('has-update', ['available', 'downloading', 'downloaded'].includes(update.status));
+  $('open-settings').title = $('open-settings').classList.contains('has-update') ? `有新版本 ${update.version}` : '';
+}
+
+window.va.onUpdateState(renderUpdate);
+$('update-check').onclick = () => window.va.checkUpdate();
+$('update-download').onclick = () => window.va.downloadUpdate();
+$('update-releases').onclick = () => window.va.external(RELEASES_PAGE);
+$('update-install').onclick = async () => {
+  const result = await window.va.installUpdate(false);
+  if (result.running && confirm(`还有 ${result.running} 个任务在运行，安装更新会停止它们。现在安装吗？`)) {
+    await window.va.installUpdate(true);
+  }
+};
 
 // ---------- logs ----------
 
@@ -688,6 +738,7 @@ window.va.onTrayAddVideos(async () => addVideos(await window.va.pickVideos()));
 async function init() {
   state.settings = await window.va.settings();
   state.env = await window.va.env();
+  renderUpdate(await window.va.updateState());
   state.route = state.env.claude ? 'claude' : state.env.codex ? 'codex' : 'api';
   state.videos = state.settings.videos.map((path) => ({ path, info: null }));
   renderList();

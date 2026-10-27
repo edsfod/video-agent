@@ -237,3 +237,7 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.35); }
 #lightbox { max-width: 92vw; background: #000; border: none; }
 #lightbox img { max-width: 92vw; max-height: 84vh; display: block; }
 #lightbox-caption { color: #ccc; padding: 6px 10px; font-family: var(--mono); font-size: 12px; }
+#open-settings.has-update::after { content: ''; display: inline-block; width: 7px; height: 7px; margin-left: 5px; border-radius: 50%; background: var(--danger); vertical-align: middle; }
+#update-status { white-space: pre-line; }
+#update-progress { width: 100%; }
+.update-notes { max-height: 180px; overflow: auto; font-size: 13px; background: var(--bg-sidebar); border-radius: 8px; padding: 4px 12px; }

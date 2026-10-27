@@ -1,0 +1,47 @@
+name: release
+
+# A tag v<version> builds the installer and the wheel, signs latest.yml for the in-app updater and creates a draft
+# release with the notes from docs/releases/v<version>.md. The draft is published by hand after checking it;
+# the app only sees published releases.
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - name: Tag matches the versions
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          test "$(node -p "require('./gui/package.json').version")" = "$version"
+          grep -q "^version = \"$version\"" pyproject.toml
+          test -f "docs/releases/$GITHUB_REF_NAME.md"
+      - run: npm ci
+        working-directory: gui
+      - run: npm run dist
+        working-directory: gui
+      - run: node scripts/sign-update.js dist "../docs/releases/$GITHUB_REF_NAME.md"
+        working-directory: gui
+        env:
+          UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
+      - run: uv build --wheel
+      - run: >
+          gh release create "$GITHUB_REF_NAME" --draft --verify-tag
+          --title "Video Agent ${GITHUB_REF_NAME#v}" --notes-file "docs/releases/$GITHUB_REF_NAME.md"
+          gui/dist/Video-Agent-Setup-*.exe gui/dist/Video-Agent-Setup-*.exe.blockmap
+          gui/dist/latest.yml gui/dist/latest.yml.sig dist/*.whl
+        env:
+          GH_TOKEN: ${{ github.token }}

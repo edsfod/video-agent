@@ -48,6 +48,15 @@ jobs:
       - run: Add-Content $env:GITHUB_PATH "$env:GITHUB_WORKSPACE\build\cli\video-agent"
       - run: npm run test:dist
         working-directory: gui
+      - name: Install the build silently
+        run: |
+          $setup = Get-ChildItem gui\dist\Video-Agent-Setup-*.exe | Select-Object -First 1
+          $process = Start-Process $setup.FullName -ArgumentList '/S', "/D=$env:RUNNER_TEMP\va-inst" -PassThru -Wait
+          if ($process.ExitCode) { exit $process.ExitCode }
+      - run: node --test test/update-install.test.js
+        working-directory: gui
+        env:
+          VA_E2E_INSTALLED: ${{ runner.temp }}\va-inst\Video Agent.exe
       - uses: actions/upload-artifact@v7
         with:
           name: installer

@@ -11,7 +11,7 @@
     "start": "electron .",
     "screenshot": "electron . --screenshot",
     "test": "node --test --test-concurrency=1 \"test/**/*.test.js\"",
-    "dist": "npm run build:cli && electron-builder --win nsis --x64",
+    "dist": "npm run build:cli && electron-builder --win nsis --x64 --publish never",
     "test:dist": "set \"VA_E2E_EXE=%CD%\\dist\\win-unpacked\\Video Agent.exe\" && node --test --test-concurrency=1 \"test/**/*.test.js\"",
     "screenshots": "node scripts/screenshots.js",
     "build:cli": "cd .. && uv run --with pyinstaller --with pillow python packaging/build_cli.py"
@@ -19,13 +19,16 @@
   "dependencies": {
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
+    "builder-util-runtime": "^9.7.0",
     "dompurify": "^3.4.17",
+    "electron-updater": "^6.8.11",
     "marked": "^18.1.1",
     "node-pty": "^1.1.0"
   },
   "devDependencies": {
     "electron": "^45.0.0",
     "electron-builder": "^26.18.0",
+    "js-yaml": "^4.3.2",
     "playwright-core": "^1.64.1"
   },
   "allowScripts": {
@@ -90,6 +93,14 @@
       "artifactName": "Video-Agent-Setup-${version}.exe",
       "include": "installer/installer.nsh"
     },
-    "npmRebuild": false
+    "npmRebuild": false,
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "edsfod",
+        "repo": "video-agent",
+        "releaseType": "release"
+      }
+    ]
   }
 }
