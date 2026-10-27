@@ -98,7 +98,21 @@
             <div class="toolbar">
               <input id="transcript-filter" type="search" placeholder="筛选字幕" />
               <span id="transcript-count" class="muted"></span>
+              <span class="spacer"></span>
+              <label id="transcript-original-label" class="check inline" hidden><input id="transcript-original" type="checkbox" /><span>看原始字幕</span></label>
             </div>
+            <details id="corrections" class="card corrections">
+              <summary>改正错字 <span id="corrections-count" class="muted"></span></summary>
+              <p class="muted small-text">把识别错的名字、术语改过来：原始字幕保留不动，另存一份整理版，之后的总结都用整理版。只填每次出现都错的写法；中文按原样匹配，如果错的写法同时也是正常的词（比如「写作」），别加在这里。</p>
+              <div id="corrections-list" class="corrections-list"></div>
+              <form id="corrections-form" class="row">
+                <input id="correction-wrong" type="text" placeholder="错的写法" spellcheck="false" />
+                <span class="muted">→</span>
+                <input id="correction-right" type="text" placeholder="正确写法" spellcheck="false" />
+                <button type="submit">改正</button>
+              </form>
+              <p id="corrections-state" class="muted small-text"></p>
+            </details>
             <div id="transcript" class="transcript"></div>
           </div>
 

@@ -89,7 +89,7 @@ FFmpeg 和 yt-dlp 会作为依赖一起装上，不需要 git。电脑上已经�
   </picture>
 </p>
 
-「画面」页列出代表画面，可以按时间补截；「字幕」页可以筛选字幕；「总结」页选择总结方式并显示结果，点画面链接直接看图。
+「画面」页列出代表画面，可以按时间补截；「字幕」页可以筛选字幕，也可以改正识别错的名字和术语（原始字幕保留，另存整理版，之后的总结都用整理版）；「总结」页选择总结方式并显示结果，点画面链接直接看图。
 
 <p align="center">
   <picture>
@@ -126,6 +126,12 @@ video-agent summarize "D:\Videos\lecture.mp4" -o D:\Video-Work
 ```powershell
 video-agent pack "D:\Videos\lecture.mp4" -o D:\Video-Work --zip D:\lecture-材料.zip
 video-agent summarize "D:\Videos\lecture.mp4" -o D:\Video-Work --import D:\总结.md
+```
+
+字幕里反复识别错的名字、术语可以用 `fix` 改正，原始字幕不动，另存整理版 `transcript.clean.*`，之后的总结都用它；`--remove` 撤销某一条：
+
+```powershell
+video-agent fix "D:\Videos\lecture.mp4" -o D:\Video-Work --replace 延和课堂 延河课堂 --replace react ReAct
 ```
 
 `video-agent template --edit` 生成你自己的一份总结规则（`%APPDATA%\video-agent\summary.md`），之后各种总结方式都按它写；`--reset` 恢复默认。

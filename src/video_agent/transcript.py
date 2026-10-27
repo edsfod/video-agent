@@ -156,11 +156,11 @@ def acquire(video, streams, output_dir, *, asr='none', allow_remote_asr=False, s
   return rows, 'bcut-remote'
 
 
-def write(rows, output_dir):
+def write(rows, output_dir, stem='transcript'):
   output_dir = Path(output_dir)
   output_dir.mkdir(parents=True, exist_ok=True)
-  srt = output_dir / 'transcript.srt'
-  text = output_dir / 'transcript.txt'
+  srt = output_dir / f'{stem}.srt'
+  text = output_dir / f'{stem}.txt'
   files.write_text(srt, format_srt(rows))
   files.write_text(text, format_text(rows))
   return srt, text

@@ -409,12 +409,26 @@ async function startProcess(extra = {}) {
 
 async function renderTranscript(video) {
   const box = $('transcript');
+  const pairs = video.info?.corrections || [];
+  $('corrections').hidden = !video.info?.transcript;
+  $('corrections-count').textContent = pairs.length ? `（${pairs.length} 条）` : '';
+  $('corrections-list').replaceChildren(
+    ...pairs.map(([wrong, right]) => {
+      const undo = element('button', { className: 'ghost small', textContent: '撤销', title: '去掉这条改正' });
+      undo.onclick = () => runFix(video, ['--remove', wrong]);
+      return element('span', { className: 'correction' }, [element('span', { textContent: `${wrong} → ${right}` }), undo]);
+    }),
+  );
+  // With a cleaned transcript, show it unless the original is asked for.
+  const cleaned = pairs.length > 0 && video.info.transcript !== video.info.transcript_original;
+  $('transcript-original-label').hidden = !cleaned;
   if (!video.info?.transcript) {
     box.replaceChildren(element('p', { className: 'muted', textContent: '还没有字幕。先在「处理」里处理这个视频。' }));
     $('transcript-count').textContent = '';
     return;
   }
-  const text = await window.va.read(video.info.transcript);
+  const file = cleaned && $('transcript-original').checked ? video.info.transcript_original : video.info.transcript;
+  const text = await window.va.read(file);
   const filter = $('transcript-filter').value.trim().toLowerCase();
   const lines = (text || '').split(/\r?\n/).filter(Boolean);
   const shown = lines.filter((line) => !filter || line.toLowerCase().includes(filter));
@@ -430,6 +444,29 @@ async function renderTranscript(video) {
   );
 }
 $('transcript-filter').oninput = () => renderTranscript(current());
+$('transcript-original').onchange = () => renderTranscript(current());
+
+// Corrections go through the CLI (video-agent fix), which keeps the original and rebuilds the cleaned transcript.
+async function runFix(video, args) {
+  const result = await window.va.cliJson(['fix', video.path, '-o', state.settings.workspace, '--json', ...args]);
+  if (result.error) {
+    $('corrections-state').textContent = `没有改成：${result.error}`;
+    return;
+  }
+  const missing = result.unmatched.length ? `；没找到：${result.unmatched.join('、')}` : '';
+  $('corrections-state').textContent = `改动了 ${result.changed_lines} 行${missing}`;
+  await refresh(video);
+}
+
+$('corrections-form').onsubmit = async (event) => {
+  event.preventDefault();
+  const wrong = $('correction-wrong').value.trim();
+  const right = $('correction-right').value.trim();
+  if (!wrong || !right || wrong === right) return;
+  await runFix(current(), ['--replace', wrong, right]);
+  $('correction-wrong').value = '';
+  $('correction-right').value = '';
+};
 
 function frameCard(item) {
   const card = element('div', { className: 'frame' + (item.extra ? ' extra' : '') }, [

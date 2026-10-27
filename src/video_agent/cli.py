@@ -6,12 +6,13 @@ import json
 import sys
 from pathlib import Path
 
-from . import settings
+from . import corrections, files, processor, settings
 from . import summarize as summaries
 from .download import DownloadError, download_urls
 from .media import MediaError, duration, parse_clock, probe, save_frame
 from .processor import asset_folder, process_video
 from .summarize import import_summary, material, pack, summarize_video, template
+from .transcript import format_clock as transcript_clock
 
 
 def positive_float(value):
@@ -192,6 +193,30 @@ def build_parser():
   keys.add_argument('--delete-key', action='store_true', help='remove the saved API key')
   config.add_argument('--json', action='store_true', help='print the resulting settings as JSON')
 
+  fixing = commands.add_parser(
+    'fix',
+    help='correct recurring mishearings: the original transcript stays, transcript.clean.* is used from then on',
+  )
+  fixing.add_argument('video', type=Path)
+  fixing.add_argument(
+    '-o',
+    '--output',
+    type=Path,
+    default=Path.cwd() / 'video-agent-output',
+    help='the workspace passed to process (default: video-agent-output)',
+  )
+  fixing.add_argument(
+    '--replace',
+    nargs=2,
+    action='append',
+    default=[],
+    metavar=('WRONG', 'RIGHT'),
+    help='replace WRONG with RIGHT throughout the transcript; a Latin word matches as a whole word only',
+  )
+  fixing.add_argument('--remove', action='append', default=[], metavar='WRONG', help='take a correction back')
+  fixing.add_argument('--reset', action='store_true', help='remove every correction and the cleaned transcript')
+  fixing.add_argument('--json', action='store_true', help='print the corrections and the changed lines as JSON')
+
   show = commands.add_parser('show', help="print JSON about a video's processing folder without changing anything")
   show.add_argument('video', type=Path)
   show.add_argument(
@@ -283,9 +308,56 @@ def _show(args):
       'manifest': json.loads(manifest.read_text(encoding='utf-8')) if manifest.is_file() else None,
       'summary': existing('总结.md'),
       'context': existing('summary-context.md'),
-      'transcript': existing('transcript.txt'),
+      'transcript': str(corrections.in_use(asset)) if corrections.in_use(asset) else None,
+      'transcript_original': existing('transcript.txt'),
+      'corrections': [list(pair) for pair in corrections.load(asset)],
       'extra_frames': sorted(str(path) for path in (asset / 'frames' / 'extra').glob('frame-*.jpg')),
     }
+  )
+  return 0
+
+
+def _fix(args):
+  video, _ = probe(args.video)
+  asset = asset_folder(args.output, video)
+  manifest_path = asset / 'manifest.json'
+  if corrections.original_rows(asset) is None or not manifest_path.is_file():
+    print(f'{video.name} has no transcript in {args.output}; run process with the same --output first')
+    return 1
+  with files.video_lock(asset, 'fix'):
+    removed = set(args.remove)
+    pairs = [] if args.reset else [pair for pair in corrections.load(asset) if pair[0] not in removed]
+    for wrong, right in args.replace:
+      pairs = [pair for pair in pairs if pair[0] != wrong] + [(wrong, right)]
+    corrections.save(asset, pairs)
+    changes = corrections.rebuild(asset)
+    manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
+    told = manifest['transcript']
+    manifest['transcript'] = processor.transcript_entry(asset, told['source'], told['segments'], told.get('error'))
+    processor._write_json(manifest_path, manifest)
+    processor.write_context(asset)
+  text = ' '.join(row[2] for row in corrections.original_rows(asset))
+  unmatched = [wrong for wrong, _ in args.replace if not corrections._pattern(wrong).search(text)]
+  if args.json:
+    _emit(
+      {
+        'corrections': [list(pair) for pair in pairs],
+        'unmatched': unmatched,
+        'changed_lines': len(changes),
+        'changes': [
+          {'time': transcript_clock(start), 'before': before, 'after': after} for start, before, after in changes
+        ],
+      }
+    )
+    return 0
+  for start, before, after in changes[:40]:
+    print(f'[{transcript_clock(start)}] {before}\n           {after}')
+  if len(changes) > 40:
+    print(f'... and {len(changes) - 40} more changed lines')
+  for wrong in unmatched:
+    print(f'not found in the transcript: {wrong}')
+  print(
+    f'{len(pairs)} corrections, {len(changes)} changed lines' + (', cleaned transcript removed' if not pairs else '')
   )
   return 0
 
@@ -324,6 +396,9 @@ def run(args):
       )
     )
     return 0
+
+  if args.command == 'fix':
+    return _fix(args)
 
   if args.command == 'show':
     return _show(args)

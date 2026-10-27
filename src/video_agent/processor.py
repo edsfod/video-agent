@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import quote
 
-from . import files, layout, media, slide_extractor, transcript
+from . import corrections, files, layout, media, slide_extractor, transcript
 
 
 def slug(value):
@@ -81,8 +81,13 @@ LAYOUT_TEXT = {
 }
 
 
-def _context(asset, video, info, rows, transcript_source, transcript_error, frames, slides, pages=(), found=None):
-  seconds = media.duration(info)
+def _context(manifest, rows):
+  """summary-context.md from the manifest and the transcript rows in use."""
+
+  def link(path):
+    return quote(path, safe='/-._~')
+
+  told = manifest['transcript']
   lines = [
     '# Video summary context',
     '',
@@ -91,26 +96,30 @@ def _context(asset, video, info, rows, transcript_source, transcript_error, fram
       'the frames, following the rules and template printed by `video-agent template`.'
     ),
     '',
-    f'- Source: `{video}`',
-    f'- Duration: {seconds:.1f} seconds',
-    f'- Transcript source: {transcript_source}',
+    f'- Source: `{manifest["source_video"]}`',
+    f'- Duration: {manifest["duration_s"]:.1f} seconds',
+    f'- Transcript source: {told["source"]}',
   ]
-  if found:
-    lines.append(f'- Layout: {LAYOUT_TEXT[found.kind]}')
-  if transcript_error:
-    lines.extend(['', f'- Transcript status: {transcript_error}'])
+  if told.get('clean'):
+    lines.append(
+      f'- Transcript: cleaned with {told["corrections"]} corrections (`{told["clean"]}`); the original is `transcript.srt`'
+    )
+  kind = (manifest.get('layout') or {}).get('kind')
+  if kind:
+    lines.append(f'- Layout: {LAYOUT_TEXT[kind]}')
+  if told.get('error'):
+    lines.extend(['', f'- Transcript status: {told["error"]}'])
   lines.extend(['', '## Transcript', ''])
   if rows:
     lines.extend(f'[{transcript.format_clock(start)}] {" ".join(text.split())}' for start, _, text in rows)
   else:
     lines.append('(No speech transcript was available.)')
   lines.extend(['', '## Representative frames', ''])
-  if frames:
-    for item in frames:
-      relative = quote(item['path'].relative_to(asset).as_posix(), safe='/-._~')
-      lines.append(f'- {item["time_s"]:.1f}s: ![frame]({relative})')
-  else:
+  frames = manifest.get('representative_frames') or []
+  lines.extend(f'- {item["time_s"]:.1f}s: ![frame]({link(item["path"])})' for item in frames)
+  if not frames:
     lines.append('(No representative frames were extracted.)')
+  pages = manifest.get('screen_pages') or []
   if pages:
     lines.extend(
       [
@@ -124,17 +133,37 @@ def _context(asset, video, info, rows, transcript_source, transcript_error, fram
         '',
       ]
     )
-    for item in pages:
-      relative = quote(item['path'].relative_to(asset).as_posix(), safe='/-._~')
-      lines.append(f'- {item["time_s"]:.1f}s: ![page]({relative})')
+    lines.extend(f'- {item["time_s"]:.1f}s: ![page]({link(item["path"])})' for item in pages)
+  slides = (manifest.get('slide_extraction') or {}).get('slides') or []
   if slides:
     lines.extend(['', '## Extracted slides', ''])
     for item in slides:
-      relative = quote(item['path'].relative_to(asset).as_posix(), safe='/-._~')
       time_text = f'{item["time_s"]:.1f}s' if item['time_s'] is not None else 'time unavailable'
-      lines.append(f'- {time_text}: ![slide]({relative})')
+      lines.append(f'- {time_text}: ![slide]({link(item["path"])})')
   lines.append('')
   return '\n'.join(lines)
+
+
+def write_context(asset):
+  """Writes summary-context.md from the manifest and the transcript in use (the cleaned one when there is one), so a
+  cleaned transcript reaches every summary route without processing the video again."""
+  asset = Path(asset)
+  manifest = json.loads((asset / 'manifest.json').read_text(encoding='utf-8'))
+  files.write_text(asset / 'summary-context.md', _context(manifest, corrections.rows_in_use(asset) or []))
+
+
+def transcript_entry(asset, source, segments, error):
+  """The manifest's transcript entry, with the cleaned transcript if there is one."""
+  asset = Path(asset)
+  clean = asset / f'{corrections.CLEAN}.srt'
+  return {
+    'source': source,
+    'segments': segments,
+    'error': error or None,
+    'srt': 'transcript.srt' if (asset / 'transcript.srt').is_file() else None,
+    'clean': clean.name if clean.is_file() else None,
+    'corrections': len(corrections.load(asset)),
+  }
 
 
 def _previous_source(asset):
@@ -294,9 +323,8 @@ def _process_locked(
         rows, transcript_source, transcript_error = [], 'unavailable', str(error)
 
   slides = slide_result['slides'] if slide_result else []
-  text = _context(asset, video, info, rows, transcript_source, transcript_error, frames, slides, pages, found)
-  context_path = asset / 'summary-context.md'
-  files.write_text(context_path, text)
+  # A transcript taken again (--overwrite-transcript) gets its corrections again.
+  corrections.rebuild(asset)
   manifest = {
     'schema_version': 1,
     'source_video': str(video),
@@ -311,12 +339,7 @@ def _process_locked(
       }
       for stream in info.get('streams') or []
     ],
-    'transcript': {
-      'source': transcript_source,
-      'segments': len(rows),
-      'error': transcript_error or None,
-      'srt': 'transcript.srt' if transcript_path.is_file() else None,
-    },
+    'transcript': transcript_entry(asset, transcript_source, len(rows), transcript_error),
     'representative_frame_run': str(frames_dir.relative_to(asset)),
     'layout': {
       **found.as_manifest(),
@@ -345,6 +368,7 @@ def _process_locked(
     'summary_generated': False,
   }
   _write_json(asset / 'manifest.json', manifest)
+  write_context(asset)
   status(f'{video.name}: evidence saved to {asset}')
   if transcript_error:
     status(f'{video.name}: transcript missing; frames and summary context were still saved')

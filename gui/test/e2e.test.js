@@ -112,6 +112,22 @@ test('transcript tab lists the lines', async () => {
   await page.waitForFunction(() => document.querySelectorAll('#transcript .line').length === 1);
 });
 
+test('a correction gives a cleaned transcript and keeps the original', async () => {
+  await page.fill('#transcript-filter', '');
+  await page.click('#corrections summary');
+  await page.fill('#correction-wrong', '测试视频');
+  await page.fill('#correction-right', '示例视频');
+  await page.click('#corrections-form button[type=submit]');
+  await page.waitForFunction(() => document.querySelector('#transcript').textContent.includes('今天讲示例视频'));
+  assert.match(await page.textContent('#corrections-state'), /改动了 1 行/);
+  await page.check('#transcript-original');
+  await page.waitForFunction(() => document.querySelector('#transcript').textContent.includes('今天讲测试视频'));
+  await page.uncheck('#transcript-original');
+  await page.click('#corrections-list button');
+  await page.waitForFunction(() => document.querySelector('#corrections-list').children.length === 0);
+  await page.waitForFunction(() => document.querySelector('#transcript').textContent.includes('今天讲测试视频'));
+});
+
 test('frames tab takes an extra frame', async () => {
   await page.click('.tabs button[data-tab=frames]');
   await page.waitForSelector('.frame img');

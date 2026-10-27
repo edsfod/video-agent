@@ -175,6 +175,13 @@ main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 .toolbar input[type='search'], .toolbar input[type='text'] { width: 280px; }
 
 .transcript { font-size: 14px; }
+.check.inline { margin: 0; align-items: center; font-size: 13px; }
+.check.inline input { margin-top: 0; }
+.corrections { margin-bottom: 12px; }
+.corrections summary { cursor: pointer; font-weight: 600; }
+.corrections-list { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.correction { display: inline-flex; align-items: center; gap: 6px; padding: 2px 4px 2px 10px; border: 1px solid var(--border); border-radius: 999px; font-size: 13px; }
+.corrections form input { flex: 1; min-width: 0; }
 .line { display: flex; gap: 12px; padding: 3px 6px; border-radius: 6px; }
 .line:hover { background: var(--bg-hover); }
 .line time { font-family: var(--mono); color: var(--text-muted); font-size: 12px; padding-top: 2px; flex-shrink: 0; }
