@@ -60,6 +60,7 @@ STREAM = re.compile(
   r'(?P<type>Video|Audio|Subtitle|Data|Attachment): (?P<codec>[^\s,]+)',
   re.MULTILINE,
 )
+SIZE = re.compile(r', (?P<w>\d{2,5})x(?P<h>\d{2,5})[ ,]')
 DURATION = re.compile(r'Duration: (?P<h>\d+):(?P<m>\d\d):(?P<s>\d\d(?:\.\d+)?)')
 
 
@@ -81,6 +82,8 @@ def _probe_with_ffmpeg(video):
     stream = {'index': int(match['index']), 'codec_type': match['type'].lower(), 'codec_name': match['codec']}
     if match['language']:
       stream['tags'] = {'language': match['language']}
+    if stream['codec_type'] == 'video' and (size := SIZE.search(text, match.end(), text.find('\n', match.end()))):
+      stream['width'], stream['height'] = int(size['w']), int(size['h'])
     streams.append(stream)
   info = {'streams': streams, 'format': {}}
   if found := DURATION.search(text):
@@ -114,6 +117,12 @@ def probe(video):
   if not any(stream.get('codec_type') == 'video' for stream in streams):
     raise MediaError(f'No video stream found in {video.name}')
   return video, info
+
+
+def frame_size(info):
+  """Width and height of the first video stream, or (0, 0) when unknown."""
+  stream = next((item for item in info.get('streams') or [] if item.get('codec_type') == 'video'), {})
+  return int(stream.get('width') or 0), int(stream.get('height') or 0)
 
 
 def duration(info):
@@ -154,49 +163,7 @@ def extract_audio(video, output):
   return output
 
 
-def _extract_filter(video, output_dir, prefix, video_filter, *, allow_empty=False):
-  output_dir = Path(output_dir)
-  output_dir.mkdir(parents=True, exist_ok=True)
-  pattern = output_dir / f'{prefix}-%05d.jpg'
-  command = [
-    tool('ffmpeg'),
-    '-y',
-    '-hide_banner',
-    '-loglevel',
-    'info',
-    '-i',
-    str(video),
-    '-map',
-    '0:v:0',
-    '-vf',
-    video_filter,
-    '-fps_mode',
-    'vfr',
-    '-q:v',
-    '4',
-    str(pattern),
-  ]
-  result = subprocess.run(command, capture_output=True, text=True, encoding='utf-8', errors='replace', check=False)
-  paths = sorted(output_dir.glob(f'{prefix}-*.jpg'))
-  times = [float(value) for value in PTS_TIME.findall(result.stderr)]
-  if result.returncode and not paths:
-    # Nothing selected: older FFmpeg says the output has no stream; 7.x and 9.x fail to open the encoder after
-    # "No filtered frames for output stream".
-    stderr = result.stderr.lower()
-    empty_selection = 'does not contain any stream' in stderr or 'no filtered frames for output stream' in stderr
-    if allow_empty and empty_selection:
-      return []
-    raise MediaError(
-      f'FFmpeg frame extraction failed for {Path(video).name}: {result.stderr.strip() or result.returncode}'
-    )
-  if not paths:
-    return []
-  if len(paths) != len(times):
-    raise MediaError(f'FFmpeg returned {len(paths)} frames but {len(times)} timestamps for {Path(video).name}')
-  return [{'time_s': second, 'path': path} for second, path in zip(times, paths)]
-
-
-def frame_at(video, second, output):
+def frame_at(video, second, output, video_filter=None):
   """Saves through a unique temporary file, so two runs asking for the same second do not write one file at once."""
   output = Path(output)
   output.parent.mkdir(parents=True, exist_ok=True)
@@ -216,7 +183,7 @@ def frame_at(video, second, output):
     '-frames:v',
     '1',
     '-vf',
-    'scale=1280:-2',
+    video_filter or 'scale=1280:-2',
     '-q:v',
     '3',
     str(output),
@@ -233,18 +200,178 @@ def frame_at(video, second, output):
   return final
 
 
-def periodic_frames(video, output_dir, interval):
+# metadata=mode=print writes only frames that carry metadata, which plain frames do not; this gives each one an entry.
+STAMP = 'metadata=mode=add:key=video_agent:value=1,'
+
+
+def _times(path):
+  return [float(value) for value in PTS_TIME.findall(path.read_text(encoding='utf-8'))] if path.is_file() else []
+
+
+def _run_ffmpeg(command, cwd, stdout_reader=None):
+  """Runs FFmpeg with stderr in a file (it can be long) and, when given, a reader for its stdout."""
+  log = Path(cwd) / 'ffmpeg.log'
+  with log.open('wb') as errors:
+    process = subprocess.Popen(
+      command, cwd=cwd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE if stdout_reader else None, stderr=errors
+    )
+    try:
+      if stdout_reader:
+        stdout_reader(process.stdout)
+      code = process.wait()
+    except BaseException:
+      process.kill()
+      process.wait()
+      raise
+  return code, log.read_text(encoding='utf-8', errors='replace').strip()
+
+
+def sample_frames(video, output_dir, interval, scene_threshold, measure=None, sample_gap=30.0):
+  """One decoding pass for the representative frames: one every `interval` seconds and the scene-change candidates,
+  at 960 pixels wide. With `measure` (a layout.Measure), the same pass streams the grey copy the layout is read from:
+  per second the changed share of each cell, and a plain frame every `sample_gap` seconds."""
   if interval <= 0:
     raise ValueError('Frame interval must be greater than zero')
-  # select, not fps=1/N: FFmpeg 9's MJPEG encoder fails to open with fps=1/N when the video is shorter than about
-  # 2N seconds, and fps also drops the last partial interval.
-  value = f'{interval:g}'
-  expression = f"select='isnan(prev_selected_t)+gte(t-prev_selected_t\\,{value})',showinfo,scale=960:-2"
-  return _extract_filter(video, output_dir, 'periodic', expression)
-
-
-def scene_frames(video, output_dir, threshold):
-  if not 0 < threshold <= 1:
+  if not 0 < scene_threshold <= 1:
     raise ValueError('Scene threshold must be greater than 0 and at most 1')
-  expression = f"select='gt(scene,{threshold})',showinfo,scale=960:-2"
-  return _extract_filter(video, output_dir, 'scene', expression, allow_empty=True)
+  from . import layout
+
+  output_dir = Path(output_dir)
+  output_dir.mkdir(parents=True, exist_ok=True)
+  # select, not fps=1/N: FFmpeg 9's MJPEG encoder fails to open with fps=1/N when the video is shorter than about
+  # 2N seconds, and fps also drops the last partial interval. Frame 0 joins the scene candidates so that output is
+  # never empty (FFmpeg 7 and 9 fail on an output without frames); it is the same image as the first regular sample
+  # and is merged away.
+  branches = [
+    (
+      f"[p]select='isnan(prev_selected_t)+gte(t-prev_selected_t\\,{interval:g})',"
+      f'{STAMP}metadata=mode=print:file=periodic.txt,scale=960:-2[periodic]'
+    ),
+    f"[s]select='gt(scene\\,{scene_threshold:g})+eq(n\\,0)',{STAMP}metadata=mode=print:file=scene.txt,scale=960:-2[scene]",
+  ]
+  outputs = [
+    *('-map', '[periodic]', '-fps_mode', 'vfr', '-q:v', '4', 'periodic-%05d.jpg'),
+    *('-map', '[scene]', '-fps_mode', 'vfr', '-q:v', '4', 'scene-%05d.jpg'),
+  ]
+  if measure:
+    grey = f'scale={measure.width}:{measure.height}:flags=area,format=gray'
+    branches += [
+      (
+        f"[m]fps=1,{grey},tblend=all_mode=difference,lut=y='if(gte(val\\,{layout.MOTION_LEVEL})\\,255\\,0)',"
+        f'scale={measure.columns}:{measure.rows}:flags=area[motion]'
+      ),
+      f'[a]fps=1/{sample_gap:g},{grey}[samples]',
+    ]
+    outputs += [
+      *('-map', '[motion]', '-f', 'rawvideo', 'pipe:1'),
+      *('-map', '[samples]', '-f', 'rawvideo', 'samples.raw'),
+    ]
+  graph = f'[0:v:0]split={len(branches)}' + ''.join(f'[{branch[1]}]' for branch in branches) + ';' + ';'.join(branches)
+  command = [tool('ffmpeg'), '-y', '-hide_banner', '-loglevel', 'error', '-i', str(video), '-filter_complex', graph]
+
+  def read(stream):
+    while len(cells := stream.read(measure.cell_size)) == measure.cell_size:
+      measure.feed(cells)
+
+  code, errors = _run_ffmpeg([*command, *outputs], output_dir, read if measure else None)
+  if code:
+    raise MediaError(f'FFmpeg frame extraction failed for {Path(video).name}: {errors or code}')
+  if measure and (samples := output_dir / 'samples.raw').is_file():
+    data = samples.read_bytes()
+    for start in range(0, len(data) - measure.size + 1, measure.size):
+      measure.sample(data[start : start + measure.size])
+  found = []
+  for prefix in ('periodic', 'scene'):
+    paths = sorted(output_dir.glob(f'{prefix}-*.jpg'))
+    times = _times(output_dir / f'{prefix}.txt')
+    if len(paths) != len(times):
+      raise MediaError(f'FFmpeg returned {len(paths)} frames but {len(times)} timestamps for {Path(video).name}')
+    found.append([{'time_s': second, 'path': path} for second, path in zip(times, paths)])
+  return found[0], found[1]
+
+
+# A screen page counts once the region stayed this long without a large change: animations, scrolling and the
+# transition between two slides settle first.
+PAGE_STABLE_S = 2.0
+
+
+def screen_pages(video, output_dir, region_filter, stable=PAGE_STABLE_S):
+  """Pages of the screen region at the source resolution: one frame per second, kept by mpdecimate when it differs
+  from the last kept one in more than 2 % of its 8x8 blocks (a mouse pointer stays below that), then only frames that
+  stayed unchanged for `stable` seconds."""
+  output_dir = Path(output_dir)
+  output_dir.mkdir(parents=True, exist_ok=True)
+  graph = f'{region_filter},fps=1,mpdecimate=hi=1000000:lo=384:frac=0.02,{STAMP}metadata=mode=print:file=pages.txt'
+  command = [tool('ffmpeg'), '-y', '-hide_banner', '-loglevel', 'error', '-i', str(video), '-map', '0:v:0']
+  command += ['-vf', graph, '-fps_mode', 'vfr', '-q:v', '2', 'page-%05d.jpg']
+  code, errors = _run_ffmpeg(command, output_dir)
+  paths = sorted(output_dir.glob('page-*.jpg'))
+  times = _times(output_dir / 'pages.txt')
+  if code or len(paths) != len(times):
+    raise MediaError(f'FFmpeg could not find screen pages in {Path(video).name}: {errors or code}')
+  stable_pages = [
+    {'time_s': second, 'path': path}
+    for index, (second, path) in enumerate(zip(times, paths))
+    if index == len(times) - 1 or times[index + 1] - second >= stable
+  ]
+  return merge_similar(stable_pages, output_dir)
+
+
+# Pages whose small grey copies differ in fewer than this share of pixels show the same content: a pointer, a typed
+# character, a pop-up. Two slides in one template can differ in as little as 4 %, so this stays well below; on a
+# 97-minute lecture 1.5 % kept 167 of 285 stable pages and 5 % kept 160 (2026-10-27).
+SAME_PAGE = 0.015
+THUMB = (160, 90)
+
+
+def merge_similar(pages, work_dir):
+  """Groups pages that differ little from the first page of their group; each group keeps its first time and its
+  last picture, which is the most complete (bullets that appear one by one, a finished line of typing). Comparing
+  with the group's first page, not its latest, keeps slow typing from drifting into one page."""
+  if len(pages) < 2:
+    return pages
+  work_dir = Path(work_dir)
+  listing = work_dir / 'thumbs.txt'
+  listing.write_text(''.join(f"file '{page['path'].as_posix()}'\n" for page in pages), encoding='utf-8')
+  width, height = THUMB
+  command = [tool('ffmpeg'), '-v', 'error', '-f', 'concat', '-safe', '0', '-i', str(listing)]
+  command += ['-vf', f'scale={width}:{height}:flags=area,format=gray', '-f', 'rawvideo', 'pipe:1']
+  result = subprocess.run(command, capture_output=True, check=False)
+  size = width * height
+  if result.returncode or len(result.stdout) != size * len(pages):
+    return pages  # keep them all rather than lose any
+  thumbs = [result.stdout[index * size : (index + 1) * size] for index in range(len(pages))]
+
+  def differs(a, b):
+    return sum(abs(x - y) > 20 for x, y in zip(a, b)) / size >= SAME_PAGE
+
+  merged, first = [], None
+  for page, thumb in zip(pages, thumbs):
+    if first is None or differs(first, thumb):
+      merged.append(dict(page))
+      first = thumb
+    else:
+      merged[-1]['path'] = page['path']
+  return merged
+
+
+def layout_picture(video, second, layout, output):
+  """A frame with the screen region outlined in green and the camera picture in red, to check the layout."""
+  boxes = [(layout.screen, 'green'), (layout.camera, 'red')]
+  drawn = ','.join(
+    f'drawbox=x={x}:y={y}:w={w}:h={h}:color={colour}:t=4' for box, colour in boxes if box for x, y, w, h in [box]
+  )
+  return frame_at(video, second, output, video_filter=drawn or None)
+
+
+def crop_video(video, output, region_filter):
+  """The screen region as its own video, for AutoSlides Extractor, which looks at whole frames."""
+  output = Path(output)
+  command = [tool('ffmpeg'), '-y', '-hide_banner', '-loglevel', 'error', '-i', str(video), '-map', '0:v:0']
+  command += ['-vf', region_filter, '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '18', '-an', str(output)]
+  result = subprocess.run(command, capture_output=True, text=True, encoding='utf-8', errors='replace', check=False)
+  if result.returncode or not output.is_file():
+    raise MediaError(
+      f'Could not crop the screen region of {Path(video).name}: {result.stderr.strip() or result.returncode}'
+    )
+  return output

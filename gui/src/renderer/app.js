@@ -295,7 +295,7 @@ for (const button of document.querySelectorAll('.tabs button')) {
 
 function renderProcess(video) {
   $('opt-interval').value = state.settings.frameInterval;
-  $('opt-max-frames').value = state.settings.maxFrames;
+  $('opt-max-frames').value = state.settings.maxFrames || '';
   const info = video.info;
   const facts = [];
   if (video.error) facts.push(['错误', video.error]);
@@ -335,7 +335,7 @@ function renderProcess(video) {
 $('run-process').onclick = async () => {
   const video = current();
   const interval = Number($('opt-interval').value) || 60;
-  const maxFrames = Number($('opt-max-frames').value) || 36;
+  const maxFrames = Number($('opt-max-frames').value) || null; // empty: as many as the video has
   state.settings = await window.va.saveSettings({ frameInterval: interval, maxFrames });
   const added = await addTask({
     kind: 'process',

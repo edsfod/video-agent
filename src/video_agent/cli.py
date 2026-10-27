@@ -86,7 +86,14 @@ def build_parser():
     '--scene-threshold', type=threshold_value, default=0.35, help='scene-change sensitivity from 0 to 1 (default: 0.35)'
   )
   process.add_argument(
-    '--max-frames', type=positive_int, default=36, help='maximum representative frames per video (default: 36)'
+    '--max-frames',
+    type=positive_int,
+    help='at most this many representative frames per video (default: as many as the video has, up to 500)',
+  )
+  process.add_argument(
+    '--screen-region',
+    metavar='X,Y,W,H',
+    help='the screen part of the frame, in pixels, when the detected layout is wrong (see layout.jpg)',
   )
   process.add_argument(
     '--extract-slides', action='store_true', help='run AutoSlides Extractor and save slide images; off by default'
@@ -367,6 +374,7 @@ def run(args):
         interval=args.frame_interval,
         scene_threshold=args.scene_threshold,
         max_frames=args.max_frames,
+        screen_region=args.screen_region,
         extract_slides=args.extract_slides,
         slide_extractor_path=args.slide_extractor,
         asr=args.asr,

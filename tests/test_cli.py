@@ -347,7 +347,9 @@ def test_no_scene_changes_is_not_an_error(tmp_path, monkeypatch, bundled):
   subprocess.run([*command, '-pix_fmt', 'yuv420p', str(still)], check=True)
   if bundled:
     monkeypatch.setattr(media.shutil, 'which', lambda name: None)
-  assert media.scene_frames(still, tmp_path / 'scenes', 0.35) == []
+  periodic, scenes = media.sample_frames(still, tmp_path / 'samples', 60, 0.35)
+  assert [item['time_s'] for item in periodic] == [0.0]
+  assert [item['time_s'] for item in scenes] == [0.0]  # frame 0 only, which keeps the output from being empty
 
 
 def test_versions_match():

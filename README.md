@@ -29,7 +29,7 @@ Video Agent 由三部分组成，按需取用：
 
 - **任何来源的视频**：直接选本地文件；也可以粘贴链接，用 [yt-dlp](https://github.com/yt-dlp/yt-dlp) 下载。下载和处理是两步，下载完不会自动开始处理。
 - **字幕优先**：先用视频自带的字幕或同名的 `.srt`、`.vtt` 文件（包括下载时一起存下的 `视频名.zh-CN.srt` 这类字幕）；都没有时，可以用必剪（B 站的语音识别）转录，但每次都要你明确同意上传音频。
-- **代表画面**：按时间间隔和场景变化抽取一组带时间点的画面，补上字幕里没有的图表、幻灯片和屏幕文字；写总结时可以按时间补截。
+- **屏幕页和代表画面**：自动识别画面布局，摄像头和屏幕拼在一起时只看屏幕那块，用原始分辨率截下每一页幻灯片、代码和文档（多少页就留多少页）；另外按时间间隔和场景变化抽取整幅画面。写总结时还可以按时间补截。
 - **PPT 提取（可选，默认关闭）**：需要时调用 [AutoSlides Extractor](https://github.com/bit-admin/AutoSlides-Extractor) 提取幻灯片。
 - **四种总结方式**，写出的总结用同一套规则和模板：
   - Claude Code 或 Codex 按插件里的 skill 写，会自己补截画面；
@@ -117,7 +117,7 @@ video-agent summarize "D:\Videos\lecture.mp4" -o D:\Video-Work
 
 `download` 会把网站提供的字幕存在视频旁边（不要字幕加 `--no-subs`），`process` 会自动用上；有多份时先用人工字幕、中文优先，最后才是 AI 字幕。B 站只给登录的账号看字幕：命令行用 `--cookies cookies.txt` 传入登录状态（Netscape 格式）。浏览器正开着时 yt-dlp 读不到它的 cookie，而且新版 Edge、Chrome 加密的 cookie yt-dlp 也解不开，所以桌面程序里改用自带的 B 站登录窗口。
 
-`process` 在工作区里为每个视频建一个文件夹，放字幕（`transcript.srt`、`transcript.txt`）、代表画面（`frames/`）、总结材料（`summary-context.md`）和 `manifest.json`，原视频不会被修改或移动。没有字幕时加 `--asr bcut --allow-remote-asr` 用必剪转录；加 `--extract-slides` 提取 PPT。
+`process` 在工作区里为每个视频建一个文件夹，放字幕（`transcript.srt`、`transcript.txt`）、代表画面（`frames/`）、总结材料（`summary-context.md`）和 `manifest.json`，原视频不会被修改或移动。没有字幕时加 `--asr bcut --allow-remote-asr` 用必剪转录；加 `--extract-slides` 另外用 AutoSlides Extractor 提取 PPT（会先裁出屏幕区域）。识别出的布局画在 `frames/<本次运行>/layout.jpg` 上（绿框是屏幕区域），认错了可以用 `--screen-region X,Y,宽,高` 手动指定。
 
 用网页上的聊天 AI 写总结时，`pack` 打出提示词（加 `--zip 文件.zip` 连画面一起打包，画面保留原来的相对路径），写好后用 `summarize --import 文件.md` 存成 `总结.md`，画面链接照样有效：
 

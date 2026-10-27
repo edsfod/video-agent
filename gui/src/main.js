@@ -53,7 +53,7 @@ function defaults() {
     cli: '',
     videos: [],
     frameInterval: 60,
-    maxFrames: 36,
+    maxFrames: null, // representative frames: no fixed cap unless the user sets one
     shell: '',
     closeToTray: true,
     checkUpdates: true,
@@ -63,11 +63,15 @@ function defaults() {
 }
 
 function loadSettings() {
+  let saved;
   try {
-    return { ...defaults(), ...JSON.parse(fs.readFileSync(settingsFile(), 'utf8')) };
+    saved = JSON.parse(fs.readFileSync(settingsFile(), 'utf8'));
   } catch {
     return defaults();
   }
+  // Up to 0.2.0 every processing run saved the old fixed cap of 36 frames; it was not a choice, so it no longer caps.
+  if (saved.maxFrames === 36) saved.maxFrames = null;
+  return { ...defaults(), ...saved };
 }
 
 function saveSettings(changes) {
@@ -202,7 +206,8 @@ function cliArgs(task) {
     case 'download':
       return ['download', task.url, '-o', path.join(task.workspace, '下载'), '--json'];
     case 'process': {
-      const args = ['process', task.video, ...out, '--json', '--frame-interval', String(task.interval), '--max-frames', String(task.maxFrames)];
+      const args = ['process', task.video, ...out, '--json', '--frame-interval', String(task.interval)];
+      if (task.maxFrames) args.push('--max-frames', String(task.maxFrames));
       if (task.bcut) args.push('--asr', 'bcut', '--allow-remote-asr'); // consent given for this one task
       if (task.slides) args.push('--extract-slides');
       return args;

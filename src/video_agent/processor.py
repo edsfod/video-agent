@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import quote
 
-from . import files, media, slide_extractor, transcript
+from . import files, layout, media, slide_extractor, transcript
 
 
 def slug(value):
@@ -69,7 +69,19 @@ def _copy_candidates(candidates, target, prefix):
   return result
 
 
-def _context(asset, video, info, rows, transcript_source, transcript_error, frames, slides):
+# Runaway limits, not targets (AGENTS.md): the frames follow the video, and reaching a limit is reported.
+MAX_FRAMES = 500
+MAX_PAGES = 500
+
+LAYOUT_TEXT = {
+  'screen': 'the whole frame is a screen recording',
+  'split': 'a screen region beside a camera picture',
+  'inset': 'a camera picture inside the screen (blacked out when looking for pages)',
+  'camera': 'a camera picture only; no screen pages are looked for',
+}
+
+
+def _context(asset, video, info, rows, transcript_source, transcript_error, frames, slides, pages=(), found=None):
   seconds = media.duration(info)
   lines = [
     '# Video summary context',
@@ -80,6 +92,8 @@ def _context(asset, video, info, rows, transcript_source, transcript_error, fram
     f'- Duration: {seconds:.1f} seconds',
     f'- Transcript source: {transcript_source}',
   ]
+  if found:
+    lines.append(f'- Layout: {LAYOUT_TEXT[found.kind]}')
   if transcript_error:
     lines.extend(['', f'- Transcript status: {transcript_error}'])
   lines.extend(['', '## Transcript', ''])
@@ -94,6 +108,22 @@ def _context(asset, video, info, rows, transcript_source, transcript_error, fram
       lines.append(f'- {item["time_s"]:.1f}s: ![frame]({relative})')
   else:
     lines.append('(No representative frames were extracted.)')
+  if pages:
+    lines.extend(
+      [
+        '',
+        '## Screen pages',
+        '',
+        (
+          'Each distinct page shown in the screen region (slides, code, documents), at the source resolution, '
+          'with the time it first appeared.'
+        ),
+        '',
+      ]
+    )
+    for item in pages:
+      relative = quote(item['path'].relative_to(asset).as_posix(), safe='/-._~')
+      lines.append(f'- {item["time_s"]:.1f}s: ![page]({relative})')
   if slides:
     lines.extend(['', '## Extracted slides', ''])
     for item in slides:
@@ -119,7 +149,8 @@ def process_video(
   *,
   interval=60.0,
   scene_threshold=0.35,
-  max_frames=36,
+  max_frames=None,
+  screen_region=None,
   extract_slides=False,
   slide_extractor_path=None,
   asr='none',
@@ -137,6 +168,7 @@ def process_video(
       interval=interval,
       scene_threshold=scene_threshold,
       max_frames=max_frames,
+      screen_region=screen_region,
       extract_slides=extract_slides,
       slide_extractor_path=slide_extractor_path,
       asr=asr,
@@ -154,6 +186,7 @@ def _process_locked(
   interval,
   scene_threshold,
   max_frames,
+  screen_region,
   extract_slides,
   slide_extractor_path,
   asr,
@@ -165,30 +198,68 @@ def _process_locked(
 
   frame_run = datetime.now(UTC).strftime('%Y%m%dT%H%M%SZ') + '-' + uuid.uuid4().hex[:6]
   frames_dir = asset / 'frames' / frame_run
-  status(f'{video.name}: sampling frames every {interval:g}s and at scene changes')
+  width, height = media.frame_size(info)
+  length = media.duration(info)
+  # The layout is read during the sampling pass; a region given by hand, or a video too short to tell, skips that.
+  measure = None
+  if screen_region is None and width and height and length >= 10:
+    measure = layout.Measure(*layout.grid_size(width, height))
+  status(f'{video.name}: sampling frames every {interval:g}s and at scene changes, and reading the layout')
+  slide_result, slide_error = None, ''
   with tempfile.TemporaryDirectory(prefix='video-agent-') as temporary:
     temporary = Path(temporary)
-    periodic = media.periodic_frames(video, temporary / 'periodic', interval)
-    try:
-      scenes = media.scene_frames(video, temporary / 'scenes', scene_threshold)
-    except media.MediaError as error:
-      status(f'{video.name}: scene detection unavailable; keeping periodic samples ({error})')
-      scenes = []
-    frame_candidates = _bounded(_unique(periodic + scenes), max_frames)
-    frames = _copy_candidates(frame_candidates, frames_dir, 'frame')
-
-  slide_result, slide_error = None, ''
-  if extract_slides:
-    try:
-      slide_result = slide_extractor.extract(
-        video,
-        asset / 'slide-extraction',
-        executable=slide_extractor_path,
-        status=lambda message: status(f'{video.name}: {message}'),
+    periodic, scenes = media.sample_frames(
+      video, temporary / 'samples', interval, scene_threshold, measure, sample_gap=max(10.0, length / 120)
+    )
+    frame_candidates = _unique(periodic + scenes)
+    frame_limit = max_frames or MAX_FRAMES
+    if len(frame_candidates) > frame_limit:
+      status(
+        f'{video.name}: {len(frame_candidates)} representative frames; keeping {frame_limit} spread over the video'
       )
-    except slide_extractor.SlideExtractorError as error:
-      slide_error = str(error)
-      status(f'{video.name}: slide extraction failed: {slide_error}')
+    frames = _copy_candidates(_bounded(frame_candidates, frame_limit), frames_dir, 'frame')
+
+    if screen_region:
+      found = layout.from_region(screen_region, width, height)
+    elif measure:
+      found = layout.to_source(layout.analyse(measure), width, height)
+    else:
+      found = layout.Layout('screen', width, height, [0, 0, width, height])
+    region = found.page_filter()
+    where = f' {found.screen[2]}x{found.screen[3]} at {found.screen[0]},{found.screen[1]}' if region else ''
+    status(f'{video.name}: layout: {LAYOUT_TEXT[found.kind]}{where}')
+    picture = frames_dir / 'layout.jpg'
+    try:
+      media.layout_picture(video, length / 2, found, picture)
+    except media.MediaError:
+      picture = None
+
+    pages, pages_found = [], 0
+    if region:
+      status(f'{video.name}: looking for screen pages')
+      page_candidates = media.screen_pages(video, temporary / 'pages', region)
+      pages_found = len(page_candidates)
+      if pages_found > MAX_PAGES:
+        status(f'{video.name}: {pages_found} screen pages; keeping {MAX_PAGES} spread over the video')
+      pages = _copy_candidates(_bounded(page_candidates, MAX_PAGES), frames_dir / 'screen', 'page')
+      status(f'{video.name}: {len(pages)} screen pages')
+
+    if extract_slides:
+      try:
+        source = video
+        if found.kind in ('split', 'inset'):
+          # AutoSlides Extractor compares whole frames; give it the screen region alone.
+          status(f'{video.name}: cropping the screen region for AutoSlides Extractor')
+          source = media.crop_video(video, temporary / 'screen.mp4', region)
+        slide_result = slide_extractor.extract(
+          source,
+          asset / 'slide-extraction',
+          executable=slide_extractor_path,
+          status=lambda message: status(f'{video.name}: {message}'),
+        )
+      except (slide_extractor.SlideExtractorError, media.MediaError) as error:
+        slide_error = str(error)
+        status(f'{video.name}: slide extraction failed: {slide_error}')
 
   status(f'{video.name}: obtaining timed subtitles')
   transcript_path = asset / 'transcript.srt'
@@ -220,7 +291,7 @@ def _process_locked(
         rows, transcript_source, transcript_error = [], 'unavailable', str(error)
 
   slides = slide_result['slides'] if slide_result else []
-  text = _context(asset, video, info, rows, transcript_source, transcript_error, frames, slides)
+  text = _context(asset, video, info, rows, transcript_source, transcript_error, frames, slides, pages, found)
   context_path = asset / 'summary-context.md'
   files.write_text(context_path, text)
   manifest = {
@@ -244,6 +315,18 @@ def _process_locked(
       'srt': 'transcript.srt' if transcript_path.is_file() else None,
     },
     'representative_frame_run': str(frames_dir.relative_to(asset)),
+    'layout': {
+      **found.as_manifest(),
+      'picture': picture.relative_to(asset).as_posix() if picture else None,
+      'given': bool(screen_region),
+    },
+    'screen_pages': [{'time_s': item['time_s'], 'path': item['path'].relative_to(asset).as_posix()} for item in pages],
+    'limits': {
+      'frames': frame_limit,
+      'frames_found': len(frame_candidates),
+      'pages': MAX_PAGES,
+      'pages_found': pages_found,
+    },
     'representative_frames': [
       {'time_s': item['time_s'], 'path': item['path'].relative_to(asset).as_posix()} for item in frames
     ],
