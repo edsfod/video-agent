@@ -73,11 +73,13 @@ FAKE_YT_DLP = textwrap.dedent("""
   if '--dump-single-json' in args:
     print(json.dumps({'_type': 'playlist' if 'list' in url else 'video', 'id': 'x'}))
     sys.exit(0)
-  if 'fail' in url:
+  if 'fail' in url or ('subtitle-error' in url and '--write-subs' in args):
     sys.exit(1)
   template = args[args.index('--output') + 1]
   path = Path(template.replace('%(title)s', 'Clip').replace('%(id)s', 'abc').replace('%(ext)s', 'mp4'))
   path.write_bytes(b'video')
+  if '--write-subs' in args:
+    path.with_suffix('.ai-zh.srt').write_text('1\\n00:00:01,000 --> 00:00:02,000\\nhi\\n', encoding='utf-8')
   print(path)
 """)
 
@@ -102,6 +104,60 @@ def test_download_returns_paths_and_refuses_playlists(fake_yt_dlp, tmp_path):
 
   paths, failed = download.download_urls(['https://example.com/list'], tmp_path / 'more', playlist=True, status=print)
   assert len(paths) == 1 and failed == 0
+
+
+def test_download_saves_subtitles_and_passes_cookies(fake_yt_dlp, tmp_path, monkeypatch):
+  seen = []
+  real_popen = download.subprocess.Popen
+
+  def spy(command, **options):
+    seen.append(command)
+    return real_popen(command, **options)
+
+  monkeypatch.setattr(download.subprocess, 'Popen', spy)
+  cookies = tmp_path / 'cookies.txt'
+  cookies.write_text('# Netscape HTTP Cookie File\n', encoding='utf-8')
+  _, failed = download.download_urls(
+    ['https://example.com/video'], tmp_path / 'out', cookies_path=cookies, status=lambda message: None
+  )
+  assert failed == 0 and (tmp_path / 'out' / 'Clip [abc].ai-zh.srt').is_file()
+  command = next(command for command in seen if '--no-simulate' in command)  # run() goes through Popen as well
+  assert command[command.index('--sub-langs') + 1] == 'all,-danmaku,-live_chat'
+  assert command[command.index('--cookies') + 1] == str(cookies.resolve())
+
+  with pytest.raises(download.DownloadError):
+    download.download_urls(['https://example.com/video'], tmp_path / 'out', cookies_path=tmp_path / 'missing.txt')
+
+
+def test_download_retries_without_subtitles(fake_yt_dlp, tmp_path):
+  messages = []
+  paths, failed = download.download_urls(
+    ['https://example.com/subtitle-error'], tmp_path / 'out', status=messages.append
+  )
+  assert [path.name for path in paths] == ['Clip [abc].mp4'] and failed == 0
+  assert any('retrying without subtitles' in message for message in messages)
+  assert not list((tmp_path / 'out').glob('*.srt'))
+
+  download.download_urls(['https://example.com/video'], tmp_path / 'bare', subtitles=False, status=print)
+  assert not list((tmp_path / 'bare').glob('*.srt'))
+
+
+def test_sidecar_prefers_human_chinese_tracks_and_skips_other_videos(tmp_path):
+  video = tmp_path / 'talk [BV1xx].mp4'
+  video.write_bytes(b'')
+
+  def subtitle(name, text):
+    (tmp_path / name).write_text(f'1\n00:00:01,000 --> 00:00:02,000\n{text}\n', encoding='utf-8')
+
+  subtitle('talk [BV1xx].part2.srt', 'other video')
+  assert transcript.sidecar(video) is None
+  subtitle('talk [BV1xx].ai-zh.srt', 'ai')
+  subtitle('talk [BV1xx].en-US.srt', 'english')
+  assert transcript.sidecar(video)[1] == 'sidecar:talk [BV1xx].en-US.srt'
+  subtitle('talk [BV1xx].zh-CN.srt', 'chinese')
+  assert transcript.sidecar(video) == ([(1.0, 2.0, 'chinese')], 'sidecar:talk [BV1xx].zh-CN.srt')
+  subtitle('talk [BV1xx].srt', 'plain')
+  assert transcript.sidecar(video)[1] == 'sidecar:talk [BV1xx].srt'
 
 
 @pytest.fixture

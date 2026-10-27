@@ -48,17 +48,24 @@ def executable(explicit=None):
   )
 
 
-def _base_command(program, config):
+# Subtitle tracks saved beside the video, where `process` finds them. Danmaku (Bilibili comments) and live chat are
+# not subtitles. Bilibili lists its subtitles, including the AI ones, only to a logged-in account (pass --cookies).
+SUBTITLE_LANGS = 'all,-danmaku,-live_chat'
+
+
+def _base_command(program, config, cookies):
   # yt-dlp looks for ffmpeg only on PATH; point it at ours so separate video and audio streams get merged.
   command = [*program, '--ignore-config', '--ffmpeg-location', media.tool('ffmpeg')]
   if config:
     command.extend(['--config-locations', str(config)])
+  if cookies:
+    command.extend(['--cookies', str(cookies)])
   return command
 
 
-def _is_playlist(program, url, config):
+def _is_playlist(program, url, config, cookies):
   command = [
-    *_base_command(program, config),
+    *_base_command(program, config, cookies),
     '--no-playlist',
     '--flat-playlist',
     '--dump-single-json',
@@ -84,8 +91,48 @@ def _is_playlist(program, url, config):
   return isinstance(info, dict) and info.get('_type') in ('playlist', 'multi_video')
 
 
+def _run(command, output):
+  """Runs one yt-dlp download; returns its exit code and the saved video paths it printed."""
+  process = subprocess.Popen(
+    command,
+    stdin=subprocess.DEVNULL,
+    stdout=subprocess.PIPE,
+    stderr=None,
+    text=True,
+    encoding='utf-8',
+    errors='replace',
+  )
+  try:
+    assert process.stdout is not None
+    paths = []
+    for line in process.stdout:
+      value = line.strip()
+      if not value:
+        continue
+      candidate = Path(value)
+      if not candidate.is_absolute():
+        candidate = output / candidate
+      if candidate.is_file():
+        paths.append(candidate.resolve())
+    return process.wait(), paths
+  except KeyboardInterrupt:
+    if process.poll() is None:
+      process.terminate()
+      process.wait()
+    raise
+
+
 def download_urls(
-  urls, output, *, format_selector='bv*+ba/b', playlist=False, executable_path=None, config_path=None, status=print
+  urls,
+  output,
+  *,
+  format_selector='bv*+ba/b',
+  playlist=False,
+  subtitles=True,
+  executable_path=None,
+  config_path=None,
+  cookies_path=None,
+  status=print,
 ):
   program = executable(executable_path)
   output = Path(output).expanduser().resolve()
@@ -93,13 +140,16 @@ def download_urls(
   config = Path(config_path).expanduser().resolve() if config_path else None
   if config is not None and not config.is_file():
     raise DownloadError(f'yt-dlp config file does not exist: {config}')
+  cookies = Path(cookies_path).expanduser().resolve() if cookies_path else None
+  if cookies is not None and not cookies.is_file():
+    raise DownloadError(f'cookies file does not exist: {cookies}')
   template = output / '%(title)s [%(id)s].%(ext)s'
   downloaded, failed = [], 0
 
   for url in urls:
     if not playlist:
       try:
-        if _is_playlist(program, url, config):
+        if _is_playlist(program, url, config, cookies):
           status('yt-dlp: URL resolves to a playlist; pass --playlist to download its entries')
           failed += 1
           continue
@@ -108,7 +158,7 @@ def download_urls(
         failed += 1
         continue
     command = [
-      *_base_command(program, config),
+      *_base_command(program, config, cookies),
       '--yes-playlist' if playlist else '--no-playlist',
       '--format',
       format_selector,
@@ -119,35 +169,14 @@ def download_urls(
       '--no-simulate',
       url,
     ]
-    status('yt-dlp: starting download')
-    process = None
+    subtitle_options = ['--write-subs', '--sub-langs', SUBTITLE_LANGS] if subtitles else []
+    status('yt-dlp: starting download' + (' with subtitles' if subtitles else ''))
     try:
-      process = subprocess.Popen(
-        command,
-        stdin=subprocess.DEVNULL,
-        stdout=subprocess.PIPE,
-        stderr=None,
-        text=True,
-        encoding='utf-8',
-        errors='replace',
-      )
-      assert process.stdout is not None
-      paths = []
-      for line in process.stdout:
-        value = line.strip()
-        if not value:
-          continue
-        candidate = Path(value)
-        if not candidate.is_absolute():
-          candidate = output / candidate
-        if candidate.is_file():
-          paths.append(candidate.resolve())
-      code = process.wait()
-    except KeyboardInterrupt:
-      if process is not None and process.poll() is None:
-        process.terminate()
-        process.wait()
-      raise
+      code, paths = _run([*command[:-1], *subtitle_options, url], output)
+      # yt-dlp gives up the whole video when a subtitle request fails, so try once more without subtitles.
+      if code != 0 and not paths and subtitles:
+        status('yt-dlp: download failed; retrying without subtitles')
+        code, paths = _run(command, output)
     except OSError as error:
       status(f'yt-dlp: could not run ({type(error).__name__})')
       failed += 1

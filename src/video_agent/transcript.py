@@ -63,14 +63,34 @@ def format_text(rows):
   return ''.join(lines)
 
 
+# The language part of `clip.<language>.srt`, as yt-dlp names subtitle files: `zh-CN`, `en`, `ai-zh`, `zh-Hans`.
+# Only language-like parts count, so `clip.part2.srt`, which belongs to `clip.part2.mp4`, is not taken for `clip.mp4`.
+LANGUAGE_TAG = re.compile(r'(ai-)?[a-z]{2,3}([-_][a-z0-9]{2,8})*', re.IGNORECASE)
+
+
+def _sidecar_language(video, path):
+  """'' for `clip.srt`, the language for `clip.<language>.srt`, None for files that are not this video's."""
+  name, prefix = path.name.casefold(), video.stem.casefold()
+  if path.suffix.lower() not in ('.srt', '.vtt') or not name.startswith(prefix + '.'):
+    return None
+  language = path.name[len(prefix) + 1 : -len(path.suffix)]
+  return language if language == '' or LANGUAGE_TAG.fullmatch(language) else None
+
+
 def sidecar(video):
+  """A subtitle file beside the video: `clip.srt` first, then Chinese, other human tracks, then AI ones (`ai-*`)."""
   video = Path(video)
-  for suffix in ('.srt', '.vtt'):
-    candidate = video.with_suffix(suffix)
-    if candidate.is_file():
-      rows = parse(candidate.read_text(encoding='utf-8-sig'))
-      if rows:
-        return rows, f'sidecar:{candidate.name}'
+  # Compared by name, not globbed: names such as `title [BV1xx].mp4` hold glob brackets.
+  found = []
+  for path in video.parent.iterdir():
+    language = _sidecar_language(video, path)
+    if language is not None and path.is_file():
+      bare = language.casefold().removeprefix('ai-')
+      found.append(((language != '', language.casefold().startswith('ai-'), not bare.startswith('zh'), language), path))
+  for _, candidate in sorted(found):
+    rows = parse(candidate.read_text(encoding='utf-8-sig'))
+    if rows:
+      return rows, f'sidecar:{candidate.name}'
   return None
 
 

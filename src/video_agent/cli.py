@@ -62,6 +62,12 @@ def build_parser():
     '--format', dest='format_selector', default='bv*+ba/b', help='yt-dlp format selector (default: bv*+ba/b)'
   )
   download.add_argument('--playlist', action='store_true', help='download playlists; default is one video only')
+  download.add_argument(
+    '--no-subs', action='store_true', help="don't save the site's subtitle tracks beside the video (saved by default)"
+  )
+  download.add_argument(
+    '--cookies', type=Path, help='Netscape cookies file for yt-dlp; Bilibili shows subtitles only to logged-in users'
+  )
   download.add_argument('--yt-dlp', type=Path, help='path to yt-dlp executable')
   download.add_argument('--yt-dlp-config', type=Path, help='explicit yt-dlp config file; other configs are ignored')
   download.add_argument('--json', action='store_true', help='print one JSON object per saved file; progress to stderr')
@@ -247,8 +253,10 @@ def run(args):
         args.output,
         format_selector=args.format_selector,
         playlist=args.playlist,
+        subtitles=not args.no_subs,
         executable_path=args.yt_dlp,
         config_path=args.yt_dlp_config,
+        cookies_path=args.cookies,
         status=_progress(args),
       )
     except DownloadError as error:
