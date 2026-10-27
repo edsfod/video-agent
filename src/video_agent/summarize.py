@@ -197,9 +197,24 @@ _TOOL_HINT = (
 )
 
 
-def _video_link(video):
-  name = video.name.replace('[', '\\[').replace(']', '\\]')
-  return f'[{name}](<{video.as_posix()}>)'
+# yt-dlp puts look-alike characters into file names for those Windows forbids; these two read as odd in a title.
+FILENAME_LOOKALIKES = str.maketrans({'⧸': '/', '⧹': '\\'})
+
+
+def video_name(video):
+  """The title shown for a video: its file name without the extension, with `⧸` and `⧹` turned back into slashes."""
+  return Path(video).stem.translate(FILENAME_LOOKALIKES)
+
+
+def length_text(seconds):
+  total = round(seconds)
+  hours, rest = divmod(total, 3600)
+  return f'{hours}:{rest // 60:02}:{rest % 60:02}' if hours else f'{rest // 60}:{rest % 60:02}'
+
+
+def video_line(video, seconds):
+  """The start of the summary's 视频 line; the name is plain text, so its brackets need no escaping."""
+  return f'视频：{video_name(video)} · [打开视频](<{Path(video).as_posix()}>) · 时长：{length_text(seconds)}'
 
 
 def _clean(text):
@@ -252,7 +267,7 @@ def _summarize_locked(
       f'Write {SUMMARY_NAME} for this video. Return only the Markdown of the file, with no preamble.',
       (
         f'{SUMMARY_NAME} lives in the folder that holds the frames, so link frames by the relative paths given with '
-        f'each image. Link the source video exactly as {_video_link(video)}'
+        f'each image. Start the 视频 line exactly with: {video_line(video, media.duration(info))}'
       ),
       _TOOL_HINT if tools else '',
       f'The user asked: {request}' if request else '',

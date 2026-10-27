@@ -5,7 +5,7 @@ import json
 import pytest
 
 from video_agent.processor import asset_folder, process_video
-from video_agent.summarize import SummaryError, summarize_video, template
+from video_agent.summarize import SummaryError, summarize_video, template, video_line
 
 SUMMARY = '# 测试视频\n\n## 概要\n\n一段测试视频，`00:00:03` 展示图表。[画面](frames/extra/frame-00-00-03.jpg)\n'
 
@@ -134,3 +134,12 @@ def test_a_running_writer_blocks_process_and_summarize_but_not_frame(processed, 
     assert cli.main(['frame', str(video), '3', '-o', str(workspace)]) == 0
   assert [path.name for path in (asset / 'frames' / 'extra').iterdir()] == ['frame-00-00-03.jpg']
   assert not list(asset.rglob('*.part*'))
+
+
+def test_video_line_reads_like_a_title():
+  video = 'C:/下载/Agent-native 开发 [08-Raw⧸26生成式软件工程⧸NJU] [BV11LWw6VEHW].mp4'
+  assert video_line(video, 5829.4) == (
+    '视频：Agent-native 开发 [08-Raw/26生成式软件工程/NJU] [BV11LWw6VEHW] · '
+    '[打开视频](<C:/下载/Agent-native 开发 [08-Raw⧸26生成式软件工程⧸NJU] [BV11LWw6VEHW].mp4>) · 时长：1:37:09'
+  )
+  assert video_line('C:/v/clip.mp4', 65).endswith('时长：1:05')
