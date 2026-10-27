@@ -1,0 +1,10 @@
+# One line ending everywhere: LF in the repository and in working copies, whatever core.autocrlf says, so files
+# written by git and by editors or tools agree. Windows batch files are the exception.
+* text=auto eol=lf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.png binary
+*.webp binary
+*.jpg binary
+*.ico binary
+*.exe binary

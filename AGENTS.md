@@ -9,7 +9,8 @@ This project grew out of [edsfod/yanhe-agent](https://github.com/edsfod/yanhe-ag
 - Use yt-dlp as the first optional downloader adapter. Do not use Media Downloader as a backend; it is a GUI frontend. A future project GUI must call the shared core.
 - Keep subtitle acquisition a primary stage; use existing subtitle tracks or sidecar files where suitable, and keep ASR backends replaceable.
 - Require an explicit `--allow-remote-asr` flag before sending audio to a remote recognition provider.
-- When preparing a summary, extract a bounded set of timestamped representative frames independently of slide extraction.
+- When preparing a summary, extract timestamped representative frames independently of slide extraction. Their number follows the video, enough to cover every distinct screen page (slides, code, documents) and scene; do not cut them to a fixed small count. A high limit only stops runaway output and is reported when reached (user decision, 2026-10-27).
+- Detect the layout before looking for page changes: where a camera picture sits beside or inside the screen, look for changes in the screen region only, at the source resolution. Built-in layout detection and page detection run on every `process`.
 - Keep slide extraction optional and disabled by default. Run AutoSlides Extractor only when the user passes `--extract-slides`.
 - Pass explicit AutoSlides Extractor settings rather than inheriting saved GUI preferences; keep the external executable behind a replaceable adapter.
 - Do not treat codec keyframes or scene-change candidates as guaranteed semantically important frames.
