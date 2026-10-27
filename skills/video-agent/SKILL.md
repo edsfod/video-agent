@@ -27,4 +27,16 @@ When a command fails, tell the user what it said instead of working around it: d
 5. **Write the summary** as `总结.md` in that video's folder. Run `<video-agent> template` once and follow the rules and template it prints (the user may have made their own version; it prints that one); the `summarize` command uses the same text, so every route writes the same kind of summary. For several related videos, also write `合集总结.md` in the workspace.
 6. **Reply** with the short overview, the main points with timestamps, and the path of `总结.md`. Mention anything marked `需确认`.
 
+## A collection
+
+Several related videos (a course, a series, a playlist, a workshop) form a collection, with an overview (`合集总结.md`) and, when the user wants to study or revise, a study guide with self-test questions (`学习提纲.md`), both in `<workspace>/合集/<name>/`. Use one when the user names a series or a set of videos, or downloads a playlist (`<video-agent> download "<URL>" --playlist -o <folder> --collection "<name>" --workspace <workspace>` fills it in order).
+
+1. **Gather the videos**: `<video-agent> collection create "<name>" <videos>... -o <workspace>`, or `collection add` to an existing one; `collection show "<name>" -o <workspace>` prints each video's state as JSON.
+2. **Process** them (`process` takes several at once).
+3. **Leave out empty ones.** `show` marks videos that are very short or almost wordless as `maybe_empty`; look at their transcript and frames, and for one with nothing to summarize (a cancelled session, an empty room, a duplicate) run `collection skip "<name>" "<video>" --reason "<why>" -o <workspace>`. The reason appears in the overview.
+4. **Shared terms.** A name or term misheard across the videos goes into `collection terms "<name>" --replace <wrong> <right> -o <workspace>`, which cleans every video's transcript, including videos processed later; the rules of step 3 above apply.
+5. **Summarize each video** as above. For many videos, hand a few to each subagent (the cheapest that can see images and write files), giving it the workspace, its videos and `<video-agent> template`, and asking for each `总结.md` and a report of its 需留意 items with timestamps.
+6. **Write the overview** from the template in `<video-agent> template` into the collection folder, linking each video's summary as `../../<video folder>/总结.md`; then, when asked, the study guide. Update the overview whenever a video's summary changes.
+7. **Reply** with the 需留意 items, the skipped videos and why, and the paths of the files.
+
 To answer a question about a video that is already processed, read its `总结.md` first, then the transcript (`transcript.clean.txt` when there is one, else `transcript.txt`) and the frames, and cite timestamps.

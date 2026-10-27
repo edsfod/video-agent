@@ -128,6 +128,16 @@ video-agent pack "D:\Videos\lecture.mp4" -o D:\Video-Work --zip D:\lecture-材�
 video-agent summarize "D:\Videos\lecture.mp4" -o D:\Video-Work --import D:\总结.md
 ```
 
+几个相关的视频（一门课、一个系列、一个播放列表）可以组成合集：先给每个视频写总结，再写合集总结（需留意的事项、各集一览、主线），需要复习时写学习提纲（重点、按主题的要点、带答案的自测题）。合集共用一份术语改正，几乎没有内容的视频可以跳过并写明原因：
+
+```powershell
+video-agent collection create "机器学习" D:\Videos\ml-01.mp4 D:\Videos\ml-02.mp4 -o D:\Video-Work
+video-agent collection terms "机器学习" --replace 剃度下降 梯度下降 -o D:\Video-Work
+video-agent summarize --collection "机器学习" -o D:\Video-Work
+video-agent summarize --collection "机器学习" --guide -o D:\Video-Work
+video-agent download "https://www.bilibili.com/video/BV..." --playlist -o D:\Videos --collection "机器学习" --workspace D:\Video-Work
+```
+
 字幕里反复识别错的名字、术语可以用 `fix` 改正，原始字幕不动，另存整理版 `transcript.clean.*`，之后的总结都用它；`--remove` 撤销某一条：
 
 ```powershell

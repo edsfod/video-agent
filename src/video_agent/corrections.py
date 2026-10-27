@@ -1,8 +1,9 @@
 """The cleaned transcript: the original with recurring mishearings corrected (user decision, 2026-10-28).
 
 `transcript.srt` and `transcript.txt` stay as they were acquired. `corrections.json` in the video's folder lists
-wrong -> right pairs, and `transcript.clean.srt` / `.txt` are always rebuilt from the original and those pairs, so a
-pair can be taken back and nothing is ever lost. Wherever a cleaned transcript exists it is the one used: the
+wrong -> right pairs, the video's own and those of each collection it belongs to (shared terms), and
+`transcript.clean.srt` / `.txt` are always rebuilt from the original and those pairs, so a pair can be taken back and
+nothing is ever lost. Wherever a cleaned transcript exists it is the one used: the
 summary context, the window's transcript view, every summary route. Only words are replaced; sentences are not
 rewritten, so the cleaned transcript is still what was said.
 """
@@ -19,20 +20,52 @@ CLEAN = 'transcript.clean'
 WORD = re.compile(r'[A-Za-z0-9_.+-]+')
 
 
-def load(asset):
-  """The video's wrong -> right pairs, in the order they were given."""
+def _read(asset):
   path = Path(asset) / CORRECTIONS
-  if not path.is_file():
-    return []
-  return [tuple(pair) for pair in json.loads(path.read_text(encoding='utf-8')).get('replace', [])]
+  data = json.loads(path.read_text(encoding='utf-8')) if path.is_file() else {}
+  return {'replace': data.get('replace', []), 'shared': data.get('shared', {})}
+
+
+def _write(asset, data):
+  path = Path(asset) / CORRECTIONS
+  if data['replace'] or data['shared']:
+    files.write_text(path, json.dumps(data, ensure_ascii=False, indent=2) + '\n')
+  else:
+    path.unlink(missing_ok=True)
+
+
+def load(asset):
+  """The video's own wrong -> right pairs, in the order they were given."""
+  return [tuple(pair) for pair in _read(asset)['replace']]
 
 
 def save(asset, pairs):
-  path = Path(asset) / CORRECTIONS
+  data = _read(asset)
+  data['replace'] = [list(pair) for pair in pairs]
+  _write(asset, data)
+
+
+def shared(asset):
+  """The pairs of the collections the video belongs to, by collection."""
+  return {name: [tuple(pair) for pair in pairs] for name, pairs in _read(asset)['shared'].items()}
+
+
+def set_shared(asset, collection, pairs):
+  """Stores a collection's terms with the video (None or [] removes them); rebuild applies them."""
+  data = _read(asset)
   if pairs:
-    files.write_text(path, json.dumps({'replace': [list(pair) for pair in pairs]}, ensure_ascii=False, indent=2) + '\n')
+    data['shared'][collection] = [list(pair) for pair in pairs]
   else:
-    path.unlink(missing_ok=True)
+    data['shared'].pop(collection, None)
+  _write(asset, data)
+
+
+def all_pairs(asset):
+  """Every pair that applies: the collections' terms first, then the video's own, which win on the same form."""
+  own = load(asset)
+  mine = {wrong for wrong, _ in own}
+  common = [pair for pairs in shared(asset).values() for pair in pairs if pair[0] not in mine]
+  return [*common, *own]
 
 
 def _pattern(wrong):
@@ -63,12 +96,12 @@ def original_rows(asset):
   return transcript.parse(path.read_text(encoding='utf-8-sig', errors='replace')) if path.is_file() else None
 
 
-def rebuild(asset, shared=()):
-  """Writes the cleaned transcript from the original, the `shared` pairs (a collection's terms) and the video's own,
-  or removes it when there are no pairs. Returns the changes."""
+def rebuild(asset):
+  """Writes the cleaned transcript from the original and all_pairs, or removes it when there are none. Returns the
+  changes."""
   asset = Path(asset)
   rows = original_rows(asset)
-  pairs = [*shared, *load(asset)]
+  pairs = all_pairs(asset)
   if rows is None or not pairs:
     for suffix in ('.srt', '.txt'):
       (asset / f'{CLEAN}{suffix}').unlink(missing_ok=True)

@@ -162,7 +162,7 @@ def transcript_entry(asset, source, segments, error):
     'error': error or None,
     'srt': 'transcript.srt' if (asset / 'transcript.srt').is_file() else None,
     'clean': clean.name if clean.is_file() else None,
-    'corrections': len(corrections.load(asset)),
+    'corrections': len(corrections.all_pairs(asset)),
   }
 
 

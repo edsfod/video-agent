@@ -389,3 +389,12 @@ def test_video_lock_is_released_when_its_process_is_killed(tmp_path):
     holder.wait()
   with files.video_lock(tmp_path, 'test'):
     pass
+
+
+def test_a_playlist_download_can_fill_a_collection(fake_yt_dlp, tmp_path):
+  from video_agent import collection
+
+  workspace = tmp_path / 'work'
+  args = ['download', 'https://example.com/list', '--playlist', '-o', str(tmp_path / 'dl'), '--collection', '系列']
+  assert cli.main([*args, '--workspace', str(workspace)]) == 0
+  assert [Path(video).name for video in collection.load(workspace, '系列')['videos']] == ['Clip [abc].mp4']

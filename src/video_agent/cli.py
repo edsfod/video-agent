@@ -6,7 +6,7 @@ import json
 import sys
 from pathlib import Path
 
-from . import corrections, files, processor, settings
+from . import collection, corrections, files, processor, settings
 from . import summarize as summaries
 from .download import DownloadError, download_urls
 from .media import MediaError, duration, parse_clock, probe, save_frame
@@ -73,6 +73,17 @@ def build_parser():
   download.add_argument('--yt-dlp', type=Path, help='path to yt-dlp executable')
   download.add_argument('--yt-dlp-config', type=Path, help='explicit yt-dlp config file; other configs are ignored')
   download.add_argument('--json', action='store_true', help='print one JSON object per saved file; progress to stderr')
+  download.add_argument(
+    '--collection',
+    metavar='NAME',
+    help='add the saved files, in order, to this collection of --workspace (made if missing); for playlists and series',
+  )
+  download.add_argument(
+    '--workspace',
+    type=Path,
+    default=Path.cwd() / 'video-agent-output',
+    help='the workspace that holds --collection (default: video-agent-output)',
+  )
 
   inspect = commands.add_parser('inspect', help='inspect streams and duration without changing the video')
   inspect.add_argument('video', type=Path)
@@ -131,7 +142,11 @@ def build_parser():
   )
 
   summarize = commands.add_parser('summarize', help='optionally write 总结.md with a model API from processed evidence')
-  summarize.add_argument('video', type=Path)
+  summarize.add_argument('video', type=Path, nargs='?', help='the video; leave out with --collection')
+  summarize.add_argument(
+    '--collection', metavar='NAME', help="write the collection overview (合集总结.md) from its videos' summaries"
+  )
+  summarize.add_argument('--guide', action='store_true', help='with --collection: write the study guide (学习提纲.md)')
   summarize.add_argument(
     '-o',
     '--output',
@@ -167,7 +182,9 @@ def build_parser():
   packing = commands.add_parser(
     'pack', help='the summary prompt for a chat AI: print it, or zip it with the frames (--zip)'
   )
-  packing.add_argument('video', type=Path)
+  packing.add_argument('video', type=Path, nargs='?', help='the video; leave out with --collection')
+  packing.add_argument('--collection', metavar='NAME', help="print the prompt for the collection's overview")
+  packing.add_argument('--guide', action='store_true', help='with --collection: for the study guide instead')
   packing.add_argument(
     '-o',
     '--output',
@@ -192,6 +209,45 @@ def build_parser():
   keys.add_argument('--set-key', action='store_true', help='read an API key and save it in Windows Credential Manager')
   keys.add_argument('--delete-key', action='store_true', help='remove the saved API key')
   config.add_argument('--json', action='store_true', help='print the resulting settings as JSON')
+
+  grouping = commands.add_parser(
+    'collection', help='group related videos (a course, a series, a playlist) for an overview and a study guide'
+  )
+  actions = grouping.add_subparsers(dest='action', required=True)
+
+  def workspace_option(parser):
+    parser.add_argument(
+      '-o',
+      '--output',
+      type=Path,
+      default=Path.cwd() / 'video-agent-output',
+      help='the workspace passed to process (default: video-agent-output)',
+    )
+
+  for action, text in (
+    ('create', 'make a collection, optionally with videos'),
+    ('add', 'add videos, at the end or at --at'),
+    ('remove', 'take videos out (their folders and summaries stay)'),
+    ('show', 'each video with its state: processed, summarized, length, share of speech, maybe empty, skipped'),
+    ('delete', "remove the collection's own folder (the videos' folders and summaries stay)"),
+    ('skip', 'mark a video as skipped, with --reason (an empty reason takes it back)'),
+    ('terms', "shared corrections, applied to every video's cleaned transcript"),
+    ('list', 'the collections in the workspace'),
+  ):
+    sub = actions.add_parser(action, help=text)
+    if action != 'list':
+      sub.add_argument('name')
+    if action in ('create', 'add', 'remove'):
+      sub.add_argument('videos', type=Path, nargs='*' if action == 'create' else '+')
+    if action == 'add':
+      sub.add_argument('--at', type=positive_int, metavar='N', help='insert before the Nth video (1 = first)')
+    if action == 'skip':
+      sub.add_argument('video', type=Path)
+      sub.add_argument('--reason', default='skipped', help='why, as shown in the overview; empty to take it back')
+    if action == 'terms':
+      sub.add_argument('--replace', nargs=2, action='append', default=[], metavar=('WRONG', 'RIGHT'))
+      sub.add_argument('--remove', action='append', default=[], metavar='WRONG')
+    workspace_option(sub)
 
   fixing = commands.add_parser(
     'fix',
@@ -317,6 +373,29 @@ def _show(args):
   return 0
 
 
+def _collection(args):
+  workspace, action = args.output, args.action
+  if action == 'list':
+    _emit([collection.status(workspace, name) for name in collection.names(workspace)])
+    return 0
+  if action == 'create':
+    collection.create(workspace, args.name, args.videos)
+  elif action == 'add':
+    collection.add(workspace, args.name, args.videos, at=args.at - 1 if args.at else None)
+  elif action == 'remove':
+    collection.remove(workspace, args.name, args.videos)
+  elif action == 'delete':
+    collection.delete(workspace, args.name)
+    print(f'deleted collection {args.name}')
+    return 0
+  elif action == 'skip':
+    collection.skip(workspace, args.name, args.video, args.reason)
+  elif action == 'terms':
+    collection.set_terms(workspace, args.name, args.replace, args.remove)
+  _emit(collection.status(workspace, args.name))
+  return 0
+
+
 def _fix(args):
   video, _ = probe(args.video)
   asset = asset_folder(args.output, video)
@@ -384,6 +463,11 @@ def run(args):
         _emit({'path': str(path)})
       else:
         print(f'Next: process this local file separately: {path}')
+    if args.collection and paths:
+      if args.collection not in collection.names(args.workspace):
+        collection.create(args.workspace, args.collection)
+      collection.add(args.workspace, args.collection, paths)
+      print(f'added {len(paths)} videos to collection {args.collection}', file=sys.stderr)
     return 1 if failures else 0
 
   if args.command == 'inspect':
@@ -420,11 +504,45 @@ def run(args):
   if args.command == 'config':
     return _config(args)
 
+  if args.command == 'collection':
+    return _collection(args)
+
+  if args.command in ('summarize', 'pack') and not args.video and not args.collection:
+    print(f'{args.command}: give a video or --collection NAME')
+    return 2
+
   if args.command == 'summarize' and args.import_from:
     # Bytes, not text: the GUI sends UTF-8, whatever code page a frozen build would decode stdin with.
     source = sys.stdin.buffer.read() if args.import_from == '-' else Path(args.import_from).read_bytes()
     text = source.decode('utf-8-sig')
-    print(import_summary(args.video, args.output, text, overwrite=args.overwrite))
+    if args.collection:
+      target = summaries.import_collection(
+        args.output, args.collection, text, guide=args.guide, overwrite=args.overwrite
+      )
+    else:
+      target = import_summary(args.video, args.output, text, overwrite=args.overwrite)
+    print(target)
+    return 0
+
+  if args.command == 'pack' and args.collection:
+    sys.stdout.write(
+      summaries.collection_material(args.output, args.collection, guide=args.guide, request=args.request)
+    )
+    return 0
+
+  if args.command == 'summarize' and args.collection:
+    chosen = settings.resolve(args.provider, args.model, args.base_url)
+    print(
+      summaries.summarize_collection(
+        args.output,
+        args.collection,
+        chosen,
+        settings.get_key(chosen['provider']),
+        guide=args.guide,
+        request=args.request,
+        overwrite=args.overwrite,
+      )
+    )
     return 0
 
   if args.command == 'pack':

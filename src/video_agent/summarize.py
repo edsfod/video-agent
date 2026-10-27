@@ -491,3 +491,114 @@ def pack(video, workspace, target, *, request='', max_images=40):
   finally:
     temporary.unlink(missing_ok=True)
   return target, len(entries)
+
+
+def _collection_evidence(workspace, name):
+  """Each video's summary in order, the skipped ones and the shared terms, as Markdown, and the videos that still lack
+  a summary. The summaries already link their pictures, so a collection file is written from text."""
+  from . import collection
+
+  info = collection.status(workspace, name)
+  parts, missing = [], []
+  for member in info['videos']:
+    folder = Path(member['folder']).name
+    length = length_text(member['duration_s']) if member['duration_s'] else 'not processed'
+    head = f'### {member["index"]}. {video_name(member["video"])} ({length}); its folder: ../../{folder}/'
+    if member['skipped']:
+      parts += [head, f'Skipped: {member["skipped"]}', '']
+    elif member['summary']:
+      parts += [head, Path(member['summary']).read_text(encoding='utf-8').strip(), '']
+    else:
+      missing.append(member['video'])
+      parts += [head, '(No summary yet.)', '']
+  if info['terms']:
+    parts += [
+      '### Shared terms of the cleaned transcripts',
+      *(f'- {wrong} -> {right}' for wrong, right in info['terms']),
+    ]
+  return info, '\n'.join(parts), missing
+
+
+def _collection_target(workspace, name, guide):
+  from . import collection
+
+  return collection.folder(workspace, name) / (collection.GUIDE if guide else collection.OVERVIEW)
+
+
+def collection_material(workspace, name, *, guide=False, request=''):
+  """The prompt for a chat AI to write the collection overview or study guide."""
+  target = _collection_target(workspace, name, guide)
+  _, evidence, missing = _collection_evidence(workspace, name)
+  notes = (
+    [f'还没有总结的视频：{"、".join(video_name(video) for video in missing)}。这几集只能按标题提一句。']
+    if missing
+    else []
+  )
+  return '\n\n'.join(
+    part
+    for part in (
+      f'请按下面的规则和模板，为合集「{name}」写 {target.name}（Markdown）。只输出文件内容，前后不要加说明。',
+      f'我的要求：{request}' if request else '',
+      *notes,
+      template(),
+      '---',
+      f'合集「{name}」各集的总结，按顺序：',
+      evidence,
+    )
+    if part
+  )
+
+
+def summarize_collection(workspace, name, config, key, *, guide=False, request='', overwrite=False, status=print):
+  """Writes 合集总结.md or 学习提纲.md with a model API from the members' summaries."""
+  from . import collection
+
+  if config['provider'] == 'anthropic' and not key:
+    raise SummaryError('No API key for anthropic; run: video-agent config --provider anthropic --set-key')
+  target = _collection_target(workspace, name, guide)
+  with collection.lock(workspace, name, 'summarize the collection'):
+    if target.exists() and not overwrite:
+      raise SummaryError(f'{target} already exists; pass --overwrite to replace it')
+    _, evidence, missing = _collection_evidence(workspace, name)
+    if missing:
+      raise SummaryError(
+        'These videos have no summary yet; summarize or skip them first: '
+        + ', '.join(video_name(video) for video in missing)
+      )
+    intro = '\n\n'.join(
+      part
+      for part in (
+        (
+          f'Write {target.name} for the collection "{name}", in the folder {target.parent.name}/ of the workspace. '
+          "Return only the Markdown of the file, with no preamble. Link each video's summary by the relative path "
+          'given with it (../../<folder>/总结.md).'
+        ),
+        f'The user asked: {request}' if request else '',
+        'The summaries of the videos follow, in order.',
+        evidence,
+      )
+      if part
+    )
+    status(f'{name}: asking {config["provider"]} model {config["model"]} for {target.name}')
+    call = _anthropic if config['provider'] == 'anthropic' else _openai
+    text = _clean(call(_session(), config, key, template(), intro, [], None))
+    if len(text.strip()) < 40:
+      raise SummaryError('The model returned no usable text')
+    files.write_text(target, text)
+  return target
+
+
+def import_collection(workspace, name, text, *, guide=False, overwrite=False):
+  """Saves a collection overview or study guide written elsewhere, as import_summary does for one video."""
+  from . import collection
+
+  collection.load(workspace, name)
+  target = _collection_target(workspace, name, guide)
+  text = _clean(text)
+  if len(text.strip()) < 40:
+    raise SummaryError('The text to import is empty or too short')
+  with collection.lock(workspace, name, 'import into the collection'):
+    if target.exists() and not overwrite:
+      raise SummaryError(f'{target} already exists; pass --overwrite to replace it')
+    files.write_text(target, text)
+  return target
