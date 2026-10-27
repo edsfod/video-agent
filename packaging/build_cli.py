@@ -66,11 +66,12 @@ work = OUT / 'smoke'
 shutil.rmtree(work, ignore_errors=True)
 work.mkdir(parents=True)
 clip = work / 'clip.mp4'
+# Test picture and sound from filter sources: the LGPL build has no lavfi input device (--disable-devices).
 subprocess.run(
   [
     str(FFMPEG / 'bin' / 'ffmpeg.exe'),
-    *('-v', 'error', '-f', 'lavfi', '-i', 'testsrc=size=320x180:rate=5:duration=12'),
-    *('-f', 'lavfi', '-i', 'sine=duration=12', '-c:v', 'mpeg4', '-c:a', 'aac', str(clip)),
+    *('-v', 'error', '-filter_complex', 'testsrc=size=320x180:rate=5:duration=12[v];sine=duration=12[a]'),
+    *('-map', '[v]', '-map', '[a]', '-c:v', 'mpeg4', '-c:a', 'aac', str(clip)),
   ],
   check=True,
 )
