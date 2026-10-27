@@ -225,6 +225,13 @@ function cliArgs(task) {
     }
     case 'frame':
       return ['frame', task.video, ...task.times, ...out];
+    case 'collection': {
+      const args = ['summarize', '--collection', task.collection, ...out];
+      if (task.guide) args.push('--guide');
+      if (task.request) args.push('--request', task.request);
+      if (task.overwrite) args.push('--overwrite');
+      return args;
+    }
     case 'summary': {
       const args = ['summarize', task.video, ...out];
       if (task.request) args.push('--request', task.request);
@@ -237,7 +244,7 @@ function cliArgs(task) {
 }
 
 function startTask(task) {
-  if (task.kind === 'summary' && task.route !== 'api') return startAgent(task);
+  if (['summary', 'collection'].includes(task.kind) && task.route !== 'api') return startAgent(task);
   const [command, ...prefix] = cliCommand();
   const args = [...prefix, ...cliArgs(task)];
   const options = { cwd: task.workspace, title: task.title };
@@ -262,12 +269,19 @@ function startTask(task) {
 function startAgent(task) {
   const { agent, video, folder, request, overwrite, workspace, title } = task;
   const skill = path.join(pluginRoot(), 'skills', 'video-agent', 'SKILL.md');
-  const text = [
-    `总结这个视频：${video}`,
-    `工作区是 ${workspace}，这个视频已经用 process 处理过，处理结果在 ${folder}。直接用这个文件夹，不要再运行 process，也不要上传音频。`,
-    overwrite ? '已有的 总结.md 按要求重写。' : '',
-    request ? `用户的要求：${request}` : '',
-  ].filter(Boolean).join('\n');
+  const file = task.guide ? '学习提纲.md' : '合集总结.md';
+  const text = (task.kind === 'collection'
+    ? [
+        `为合集「${task.collection}」写 ${file}，按 skill 里「A collection」的做法。`,
+        `工作区是 ${workspace}，合集文件夹是 ${folder}。先运行 video-agent collection show "${task.collection}" -o "${workspace}" 看各集的状态；还没有总结的视频先按 skill 写总结，几乎没有内容的视频用 collection skip 跳过并写明原因。不要上传音频。`,
+        overwrite ? `已有的 ${file} 按要求重写。` : '',
+      ]
+    : [
+        `总结这个视频：${video}`,
+        `工作区是 ${workspace}，这个视频已经用 process 处理过，处理结果在 ${folder}。直接用这个文件夹，不要再运行 process，也不要上传音频。`,
+        overwrite ? '已有的 总结.md 按要求重写。' : '',
+      ]
+  ).concat(request ? [`用户的要求：${request}`] : []).filter(Boolean).join('\n');
   if (agent === 'claude') {
     const prompt = `用 video-agent skill 完成下面的任务。\n${text}`;
     startJob(task.id, 'claude', [

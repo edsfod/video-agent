@@ -12,7 +12,8 @@
 // - Tasks start in the order they were added; one that has to wait does not hold back later ones that may run.
 
 const DEFAULT_LIMITS = { download: 3, process: 1, summary: 2 };
-const EXCLUSIVE = new Set(['process', 'summary']);
+// Collection tasks write the collection's own files; their `video` is "合集:<name>", so one runs per collection.
+const EXCLUSIVE = new Set(['process', 'summary', 'collection']);
 const ACTIVE = new Set(['queued', 'running']);
 const OUTPUT_LIMIT = 512 * 1024; // characters of output kept per task for the window; the log file has all of it
 
@@ -24,6 +25,7 @@ function videoKey(video) {
 function workKey(spec) {
   if (spec.kind === 'download') return `download|${spec.url.trim()}`;
   if (spec.kind === 'frame') return `frame|${videoKey(spec.video)}|${spec.times.join(' ')}`;
+  if (spec.kind === 'collection') return `collection|${spec.collection}|${spec.guide ? 'guide' : 'overview'}`;
   return `${spec.kind}|${videoKey(spec.video)}`;
 }
 

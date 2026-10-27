@@ -21,6 +21,8 @@
         </form>
         <label class="check download-then"><input id="download-then-process" type="checkbox" /><span>下载完自动处理</span></label>
         <div id="download-hint" class="download-hint" hidden>没有登录 B 站，只能下载视频，拿不到字幕。<a href="#" id="download-login">登录</a></div>
+        <div class="list-title row-title"><span>合集</span><button id="new-collection" class="ghost small" type="button">新建</button></div>
+        <div id="collection-list" class="video-list collection-list"></div>
         <div class="list-title">视频</div>
         <div id="video-list" class="video-list"></div>
         <div class="sidebar-foot">
@@ -46,6 +48,7 @@
             <div class="actions">
               <button id="reveal-video" class="ghost">打开所在文件夹</button>
               <button id="reveal-folder" class="ghost">打开处理结果</button>
+              <button id="join-collection" class="ghost">加入合集…</button>
               <button id="remove-video" class="ghost">移出列表</button>
             </div>
           </header>
@@ -156,6 +159,65 @@
               <span class="muted">在这个视频的处理结果文件夹里打开；可以运行 video-agent，或交互式的 claude、codex。</span>
             </div>
             <div id="terminal" class="terminal"></div>
+          </div>
+        </section>
+
+        <section id="collection" class="video" hidden>
+          <header class="video-head">
+            <div class="video-title">
+              <h1 id="collection-name"></h1>
+              <div id="collection-path" class="muted path"></div>
+            </div>
+            <div class="actions">
+              <button id="collection-folder" class="ghost">打开合集文件夹</button>
+              <button id="collection-delete" class="ghost">删除合集</button>
+            </div>
+          </header>
+          <div class="panel">
+            <div class="card">
+              <h2>各集</h2>
+              <div id="collection-members" class="members"></div>
+              <div class="row">
+                <select id="collection-add-choice"></select>
+                <button id="collection-add">加入</button>
+                <span class="spacer"></span>
+                <button id="collection-process-all">处理未处理的</button>
+                <button id="collection-summarize-all">总结没总结的</button>
+              </div>
+              <p id="collection-state" class="muted small-text"></p>
+            </div>
+            <div class="card">
+              <h2>合集总结和学习提纲</h2>
+              <p class="muted small-text">根据各集的总结来写，所以先给每一集写好总结。合集总结列出各集都提到的需留意事项、各集一览和主线；学习提纲按主题列重点，附带答案的自测题。</p>
+              <div class="row">
+                <select id="collection-route">
+                  <option value="claude">Claude Code</option>
+                  <option value="codex">Codex</option>
+                  <option value="api">模型 API</option>
+                  <option value="copy">复制材料（网页 AI）</option>
+                </select>
+                <button id="collection-overview" class="primary">生成合集总结</button>
+                <button id="collection-guide">生成学习提纲</button>
+                <button id="collection-import" hidden>导入…</button>
+              </div>
+              <textarea id="collection-request" rows="2" placeholder="要求（可不填），例如：学习提纲只覆盖第 3 到 6 集，多出几道计算题"></textarea>
+            </div>
+            <details id="collection-terms-box" class="card corrections">
+              <summary>合集共用的术语改正 <span id="collection-terms-count" class="muted"></span></summary>
+              <p class="muted small-text">每一集的整理版字幕都会套用这些改正，之后加入或处理的视频也会。只填每次出现都错的写法。</p>
+              <div id="collection-terms" class="corrections-list"></div>
+              <form id="collection-terms-form" class="row">
+                <input id="collection-term-wrong" type="text" placeholder="错的写法" spellcheck="false" />
+                <span class="muted">→</span>
+                <input id="collection-term-right" type="text" placeholder="正确写法" spellcheck="false" />
+                <button type="submit">改正</button>
+              </form>
+            </details>
+            <nav class="tabs doc-tabs">
+              <button data-doc="overview" class="active">合集总结</button>
+              <button data-doc="guide">学习提纲</button>
+            </nav>
+            <article id="collection-doc" class="markdown"></article>
           </div>
         </section>
 
@@ -276,6 +338,30 @@
         <p class="muted small-text">这是 Agent 总结视频时照着做的流程，管着上传音频前先征得同意、命令怎么写等，改坏了会出问题，而且每次更新都会覆盖，所以只能查看。想改总结的写法，在设置里编辑「总结规则和模板」。</p>
         <article id="skill-text" class="markdown skill-text"></article>
       </div>
+    </dialog>
+
+    <dialog id="collection-dialog">
+      <form method="dialog" class="settings">
+        <h2 id="collection-dialog-title">加入合集</h2>
+        <label id="collection-dialog-pick">加入已有的合集<select id="collection-dialog-choice"></select></label>
+        <label><span id="collection-dialog-new">或者新建一个合集，名字</span><input id="collection-dialog-name" type="text" spellcheck="false" placeholder="例如：机器学习 2026 秋" /></label>
+        <div class="row end">
+          <button value="cancel" class="ghost">取消</button>
+          <button value="save" class="primary">确定</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="skip-dialog">
+      <form method="dialog" class="settings">
+        <h2>跳过这一集</h2>
+        <p id="skip-dialog-video" class="muted small-text"></p>
+        <label>原因（写进合集总结）<input id="skip-dialog-reason" type="text" spellcheck="false" placeholder="例如：没上课，只有空教室" /></label>
+        <div class="row end">
+          <button value="cancel" class="ghost">取消</button>
+          <button value="save" class="primary">跳过</button>
+        </div>
+      </form>
     </dialog>
 
     <dialog id="logs">

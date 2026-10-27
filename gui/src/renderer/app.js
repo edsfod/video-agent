@@ -10,6 +10,10 @@ const state = {
   route: 'claude',
   tasks: [], // the queue in the main process (tasks.js), without output
   shown: null, // { id, buffer, loading }: the task whose output the panel shows
+  collections: [], // `video-agent collection list`: each with its videos and their states
+  view: 'video', // or 'collection', with state.collection its name
+  collection: null,
+  doc: 'overview', // the collection file shown: overview (合集总结) or guide (学习提纲)
   term: null,
   bilibili: { loggedIn: false }, // { loggedIn, name? }
 };
@@ -141,6 +145,7 @@ window.va.onTasks((tasks) => {
 });
 
 async function taskFinished(task) {
+  loadCollections(); // a member's state or a collection file may have changed
   if (task.kind === 'download') {
     if (task.paths.length && $('download-url').value.trim() === task.url) $('download-url').value = '';
     if (task.paths.length) await addVideos(task.paths);
@@ -229,7 +234,8 @@ function renderList() {
   const list = $('video-list');
   list.replaceChildren(
     ...state.videos.map((video) => {
-      const item = element('div', { className: 'video-item' + (video.path === state.current ? ' active' : '') }, [
+      const active = state.view === 'video' && video.path === state.current;
+      const item = element('div', { className: 'video-item' + (active ? ' active' : '') }, [
         element('span', { className: 'name', textContent: baseName(video.path), title: video.path }),
         badge(video),
       ]);
@@ -253,6 +259,7 @@ async function refresh(video) {
 }
 
 async function select(path) {
+  state.view = 'video';
   state.current = path;
   renderList();
   renderVideo();
@@ -261,6 +268,12 @@ async function select(path) {
 // ---------- video view ----------
 
 function renderVideo() {
+  $('collection').hidden = state.view !== 'collection';
+  if (state.view === 'collection') {
+    $('empty').hidden = true;
+    $('video').hidden = true;
+    return renderCollection();
+  }
   const video = current();
   $('empty').hidden = !!video;
   $('video').hidden = !video;
@@ -272,10 +285,10 @@ function renderVideo() {
 }
 
 function renderTab() {
-  for (const button of document.querySelectorAll('.tabs button')) {
+  for (const button of document.querySelectorAll('#video .tabs button')) {
     button.classList.toggle('active', button.dataset.tab === state.tab);
   }
-  for (const panel of document.querySelectorAll('.panel')) {
+  for (const panel of document.querySelectorAll('#video .panel')) {
     panel.hidden = panel.dataset.panel !== state.tab;
     if (!panel.hidden) panel.scrollTop = 0;
   }
@@ -286,7 +299,7 @@ function renderTab() {
   ](video);
 }
 
-for (const button of document.querySelectorAll('.tabs button')) {
+for (const button of document.querySelectorAll('#video .tabs button')) {
   button.onclick = () => {
     state.tab = button.dataset.tab;
     renderTab();
@@ -671,14 +684,20 @@ function busyWriting(video) {
 }
 
 let importFile = null;
+let importTarget = null; // null for the current video, or { collection, guide }
 
 $('import-summary').onclick = () => {
   if (busyWriting(current())) return alert('这个视频正在处理或总结，等任务结束再导入。');
+  importTarget = null;
+  openImport();
+};
+
+function openImport() {
   importFile = null;
   $('import-text').value = '';
   $('import-file-name').textContent = '';
   $('import-dialog').showModal();
-};
+}
 
 $('import-file').onclick = async () => {
   importFile = await window.va.pickFile('选择总结文件', [{ name: 'Markdown', extensions: ['md', 'markdown', 'txt'] }]);
@@ -687,9 +706,10 @@ $('import-file').onclick = async () => {
 
 $('import-dialog').addEventListener('close', async () => {
   if ($('import-dialog').returnValue !== 'save') return;
-  const video = current();
   const text = $('import-text').value;
   if (!importFile && !text.trim()) return;
+  if (importTarget) return importCollection(text);
+  const video = current();
   if (video.info.summary && !confirm('已经有总结了，要用导入的内容覆盖吗？')) return;
   const args = ['summarize', video.path, '-o', state.settings.workspace, '--import', importFile || '-'];
   if (video.info.summary) args.push('--overwrite');
@@ -697,6 +717,303 @@ $('import-dialog').addEventListener('close', async () => {
   if (result.code !== 0) return alert(`没有导入：${(result.err || result.out).trim()}`);
   summaryState('已导入总结。');
   await refresh(video);
+});
+
+// ---------- collections ----------
+// A collection is an ordered set of related videos with an overview and a study guide (ARCHITECTURE.md,
+// "Collections"); everything goes through `video-agent collection`, `summarize --collection` and `pack --collection`.
+
+const collectionArgs = (...args) => ['collection', ...args, '-o', state.settings.workspace];
+const currentCollection = () => state.collections.find((item) => item.name === state.collection) || null;
+const memberOf = (item, path) => item.videos.find((member) => sameVideo(member.video, path));
+
+async function loadCollections() {
+  const result = await window.va.cliJson(collectionArgs('list'));
+  state.collections = Array.isArray(result) ? result : [];
+  renderCollectionList();
+  if (state.view === 'collection') renderVideo();
+}
+
+function renderCollectionList() {
+  $('collection-list').replaceChildren(
+    ...state.collections.map((item) => {
+      const active = state.view === 'collection' && item.name === state.collection;
+      const row = element('div', { className: 'video-item' + (active ? ' active' : '') }, [
+        element('span', { className: 'name', textContent: item.name, title: item.folder }),
+        element('span', { className: 'badge', textContent: `${item.videos.length} 集` }),
+      ]);
+      row.onclick = () => openCollection(item.name);
+      return row;
+    }),
+  );
+}
+
+function openCollection(name) {
+  state.view = 'collection';
+  state.collection = name;
+  renderList();
+  renderCollectionList();
+  renderVideo();
+}
+
+async function collectionCommand(args, done = '') {
+  const result = await window.va.cliJson(collectionArgs(...args));
+  $('collection-state').textContent = result.error ? `没有成功：${result.error}` : done;
+  await loadCollections();
+  return !result.error;
+}
+
+function memberBadges(member) {
+  const badges = [];
+  const add = (text, kind = '') => badges.push(element('span', { className: `badge ${kind}`, textContent: text }));
+  if (member.skipped) add(`已跳过：${member.skipped}`);
+  else if (member.summary) add('已总结', 'done');
+  else add(member.processed ? '已处理' : '未处理');
+  if (member.maybe_empty && !member.skipped) add('可能是空的', 'busy');
+  return badges;
+}
+
+async function renderCollection() {
+  const item = currentCollection();
+  if (!item) {
+    state.view = 'video';
+    return renderVideo();
+  }
+  $('collection-name').textContent = item.name;
+  $('collection-path').textContent = item.folder;
+  $('collection-members').replaceChildren(
+    ...item.videos.map((member) => {
+      const name = element('span', { className: 'name', textContent: member.name, title: member.video });
+      name.onclick = () => {
+        if (!state.videos.some((video) => sameVideo(video.path, member.video))) addVideos([member.video]);
+        else select(state.videos.find((video) => sameVideo(video.path, member.video)).path);
+      };
+      const skip = element('button', { className: 'ghost small', textContent: member.skipped ? '不跳过' : '跳过' });
+      skip.onclick = () => (member.skipped ? collectionCommand(['skip', item.name, member.video, '--reason', '']) : askSkip(member));
+      const out = element('button', { className: 'ghost small', textContent: '移出', title: '只是移出合集，视频和它的总结都还在' });
+      out.onclick = () => collectionCommand(['remove', item.name, member.video]);
+      return element('div', { className: 'member' + (member.skipped ? ' skipped' : '') }, [
+        element('span', { className: 'index', textContent: String(member.index) }),
+        name,
+        ...memberBadges(member),
+        skip,
+        out,
+      ]);
+    }),
+  );
+  if (!item.videos.length) {
+    $('collection-members').replaceChildren(element('p', { className: 'muted', textContent: '还没有视频。在下面选一个加进来，或在视频页点「加入合集」。' }));
+  }
+  const others = state.videos.filter((video) => !memberOf(item, video.path));
+  $('collection-add-choice').replaceChildren(...others.map((video) => element('option', { value: video.path, textContent: baseName(video.path) })));
+  $('collection-add').disabled = !others.length;
+  const live = item.videos.filter((member) => !member.skipped);
+  $('collection-process-all').disabled = !live.some((member) => !member.processed);
+  $('collection-summarize-all').disabled = !live.some((member) => member.processed && !member.summary);
+  for (const option of $('collection-route').options) {
+    option.disabled = (option.value === 'claude' && !state.env.claude) || (option.value === 'codex' && !state.env.codex);
+  }
+  if ($('collection-route').selectedOptions[0]?.disabled) $('collection-route').value = 'api';
+  const copying = $('collection-route').value === 'copy';
+  $('collection-overview').textContent = copying ? '复制合集总结的材料' : item.overview ? '重新生成合集总结' : '生成合集总结';
+  $('collection-guide').textContent = copying ? '复制学习提纲的材料' : item.guide ? '重新生成学习提纲' : '生成学习提纲';
+  $('collection-import').hidden = !copying;
+  $('collection-summarize-all').title = copying ? '复制材料这条路线不能批量总结；换一种总结方式' : '';
+  $('collection-terms-count').textContent = item.terms.length ? `（${item.terms.length} 条）` : '';
+  $('collection-terms').replaceChildren(
+    ...item.terms.map(([wrong, right]) => {
+      const undo = element('button', { className: 'ghost small', textContent: '撤销' });
+      undo.onclick = () => collectionCommand(['terms', item.name, '--remove', wrong], `已撤销 ${wrong}`);
+      return element('span', { className: 'correction' }, [element('span', { textContent: `${wrong} → ${right}` }), undo]);
+    }),
+  );
+  for (const button of document.querySelectorAll('.doc-tabs button')) button.classList.toggle('active', button.dataset.doc === state.doc);
+  const file = state.doc === 'guide' ? item.guide : item.overview;
+  const article = $('collection-doc');
+  if (!file) {
+    article.replaceChildren(element('p', { className: 'placeholder', textContent: state.doc === 'guide' ? '还没有学习提纲。' : '还没有合集总结。' }));
+    return;
+  }
+  article.innerHTML = DOMPurify.sanitize(marked.parse((await window.va.read(file)) || ''));
+  for (const link of article.querySelectorAll('a[href]')) {
+    const href = link.getAttribute('href');
+    link.onclick = (event) => {
+      event.preventDefault();
+      if (/^https?:/.test(href)) return window.va.external(href);
+      // Links to a video's summary open that video.
+      const target = decodeURIComponent(href.replace(/^<|>$/g, '').replace(/#.*$/, ''));
+      const member = item.videos.find((entry) => target.includes(baseName(entry.folder)));
+      if (member && /总结\.md$/.test(target)) {
+        const known = state.videos.find((video) => sameVideo(video.path, member.video));
+        if (known) {
+          state.tab = 'summary';
+          return select(known.path);
+        }
+      }
+      window.va.open(joinPath(item.folder, target));
+    };
+  }
+}
+
+for (const button of document.querySelectorAll('.doc-tabs button')) {
+  button.onclick = () => {
+    state.doc = button.dataset.doc;
+    renderCollection();
+  };
+}
+
+$('collection-route').onchange = () => renderCollection();
+$('collection-folder').onclick = () => currentCollection() && window.va.open(currentCollection().folder);
+$('collection-delete').onclick = async () => {
+  const item = currentCollection();
+  if (!item || !confirm(`删除合集「${item.name}」吗？各个视频和它们的总结都会保留，只删合集自己的文件（合集总结、学习提纲、共用术语）。`)) return;
+  state.view = 'video';
+  await collectionCommand(['delete', item.name]);
+  renderVideo();
+};
+$('collection-add').onclick = () => {
+  const path = $('collection-add-choice').value;
+  if (path) collectionCommand(['add', currentCollection().name, path]);
+};
+$('collection-process-all').onclick = async () => {
+  for (const member of currentCollection().videos.filter((entry) => !entry.skipped && !entry.processed)) {
+    if (!state.videos.some((video) => sameVideo(video.path, member.video))) await addVideos([member.video]);
+    await addTask({
+      kind: 'process',
+      title: `处理：${baseName(member.video)}`,
+      video: member.video,
+      interval: state.settings.frameInterval,
+      maxFrames: state.settings.maxFrames || null,
+    });
+  }
+};
+$('collection-summarize-all').onclick = async () => {
+  const route = $('collection-route').value;
+  if (route === 'copy') return alert('复制材料这条路线要一集一集地在网页 AI 里写，不能批量。换成 Claude Code、Codex 或模型 API。');
+  const name = { api: '模型 API', claude: 'Claude Code', codex: 'Codex' }[route];
+  for (const member of currentCollection().videos.filter((entry) => !entry.skipped && entry.processed && !entry.summary)) {
+    await addTask({
+      kind: 'summary',
+      title: `总结（${name}）：${baseName(member.video)}`,
+      route,
+      agent: route === 'api' ? undefined : route,
+      video: member.video,
+      folder: member.folder,
+      request: '',
+      overwrite: false,
+    });
+  }
+};
+
+async function writeCollectionFile(guide) {
+  const item = currentCollection();
+  const route = $('collection-route').value;
+  const request = $('collection-request').value.trim();
+  const file = guide ? '学习提纲' : '合集总结';
+  if (route === 'copy') {
+    const args = ['pack', '--collection', item.name, '-o', state.settings.workspace, '--request', request];
+    if (guide) args.push('--guide');
+    const result = await window.va.cliText(args);
+    if (result.code !== 0) return ($('collection-state').textContent = `没有复制：${(result.err || result.out).trim()}`);
+    await window.va.copy(result.out);
+    $('collection-state').textContent = `已复制${file}的材料（${result.out.length} 个字符）。在网页 AI 里写好后点「导入…」存回来。`;
+    return;
+  }
+  const exists = guide ? item.guide : item.overview;
+  if (exists && !confirm(`已经有${file}了，要重新生成并覆盖吗？`)) return;
+  const missing = item.videos.filter((member) => !member.skipped && !member.summary);
+  if (route === 'api' && missing.length) {
+    return alert(`还有 ${missing.length} 集没有总结：${missing.map((member) => member.name).join('、')}。先点「总结没总结的」，或把没内容的跳过。`);
+  }
+  const name = { api: '模型 API', claude: 'Claude Code', codex: 'Codex' }[route];
+  await addTask({
+    kind: 'collection',
+    title: `${file}（${name}）：${item.name}`,
+    collection: item.name,
+    video: `合集:${item.name}`,
+    folder: item.folder,
+    guide,
+    route,
+    agent: route === 'api' ? undefined : route,
+    request,
+    overwrite: !!exists,
+  });
+}
+$('collection-overview').onclick = () => writeCollectionFile(false);
+$('collection-guide').onclick = () => writeCollectionFile(true);
+$('collection-import').onclick = () => {
+  importTarget = { collection: currentCollection().name, guide: state.doc === 'guide' };
+  openImport();
+};
+
+async function importCollection(text) {
+  const { collection, guide } = importTarget;
+  const item = state.collections.find((entry) => entry.name === collection);
+  const exists = guide ? item?.guide : item?.overview;
+  if (exists && !confirm('已经有了，要用导入的内容覆盖吗？')) return;
+  const args = ['summarize', '--collection', collection, '-o', state.settings.workspace, '--import', importFile || '-'];
+  if (guide) args.push('--guide');
+  if (exists) args.push('--overwrite');
+  const result = await window.va.cliText(args, importFile ? '' : text);
+  if (result.code !== 0) return alert(`没有导入：${(result.err || result.out).trim()}`);
+  $('collection-state').textContent = `已导入${guide ? '学习提纲' : '合集总结'}。`;
+  await loadCollections();
+}
+
+$('collection-terms-form').onsubmit = async (event) => {
+  event.preventDefault();
+  const wrong = $('collection-term-wrong').value.trim();
+  const right = $('collection-term-right').value.trim();
+  if (!wrong || !right || wrong === right) return;
+  if (await collectionCommand(['terms', currentCollection().name, '--replace', wrong, right], `已改正 ${wrong} → ${right}，各集的整理版字幕已更新`)) {
+    $('collection-term-wrong').value = '';
+    $('collection-term-right').value = '';
+    await Promise.all(state.videos.map(refresh));
+  }
+};
+
+// One dialog to make a collection (from the sidebar) or to put the current video into one (from the video view).
+let joining = null; // the video to add, or null when only making a collection
+
+function openCollectionDialog(video) {
+  joining = video;
+  $('collection-dialog-title').textContent = video ? `把「${baseName(video)}」加入合集` : '新建合集';
+  $('collection-dialog-pick').hidden = !video || !state.collections.length;
+  $('collection-dialog-choice').replaceChildren(
+    element('option', { value: '', textContent: '（新建）' }),
+    ...state.collections.map((item) => element('option', { value: item.name, textContent: item.name })),
+  );
+  $('collection-dialog-new').textContent = video ? '或者新建一个合集，名字' : '合集的名字';
+  $('collection-dialog-name').value = '';
+  $('collection-dialog').showModal();
+}
+
+$('new-collection').onclick = () => openCollectionDialog(null);
+$('join-collection').onclick = () => current() && openCollectionDialog(current().path);
+$('collection-dialog').addEventListener('close', async () => {
+  if ($('collection-dialog').returnValue !== 'save') return;
+  const existing = joining ? $('collection-dialog-choice').value : '';
+  const name = existing || $('collection-dialog-name').value.trim();
+  if (!name) return;
+  const videos = joining ? [joining] : [];
+  const ok = existing
+    ? await collectionCommand(['add', name, ...videos])
+    : await collectionCommand(['create', name, ...videos]);
+  if (ok) openCollection(name);
+  else alert($('collection-state').textContent);
+});
+
+let skipping = null;
+function askSkip(member) {
+  skipping = member;
+  $('skip-dialog-video').textContent = member.name;
+  $('skip-dialog-reason').value = member.maybe_empty ? '几乎没有内容' : '';
+  $('skip-dialog').showModal();
+}
+$('skip-dialog').addEventListener('close', () => {
+  if ($('skip-dialog').returnValue !== 'save' || !skipping) return;
+  const reason = $('skip-dialog-reason').value.trim() || '跳过';
+  collectionCommand(['skip', currentCollection().name, skipping.video, '--reason', reason]);
 });
 
 // ---------- terminal ----------
@@ -1028,6 +1345,7 @@ async function init() {
   renderList();
   if (state.videos.length) select(state.videos[0].path);
   else renderVideo();
+  loadCollections();
   await Promise.all(state.videos.map(refresh));
 }
 

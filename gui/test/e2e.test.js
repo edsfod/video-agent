@@ -161,6 +161,25 @@ test('copy material puts the rules and transcript on the clipboard', async () =>
   assert.match(copied, /我们看看这张图表/);
 });
 
+test('a collection lists its videos and copies the material for its overview', async () => {
+  await page.click('#new-collection');
+  await page.fill('#collection-dialog-name', '测试合集');
+  await page.click('#collection-dialog button[value=save]');
+  await page.waitForSelector('#collection:not([hidden]) #collection-name:text("测试合集")');
+  await page.selectOption('#collection-add-choice', { index: 0 });
+  await page.click('#collection-add');
+  await page.waitForSelector('#collection-members .member .badge:text("已总结")');
+  assert.match(await page.textContent('#collection-list'), /测试合集1 集/);
+  await page.selectOption('#collection-route', 'copy');
+  await page.click('#collection-overview');
+  await page.waitForFunction(() => document.querySelector('#collection-state').textContent.includes('已复制'));
+  const copied = await app.evaluate(({ clipboard }) => clipboard.readText());
+  assert.match(copied, /为合集「测试合集」写 合集总结\.md/);
+  assert.match(copied, /# 测试视频/);
+  await page.click('#video-list .video-item');
+  await page.waitForSelector('#video:not([hidden])');
+});
+
 test('settings show which summary rules are in use and the skill read-only', async () => {
   await page.click('#open-settings');
   await page.waitForFunction(() => document.querySelector('#rules-status').textContent === '正在用默认规则。');

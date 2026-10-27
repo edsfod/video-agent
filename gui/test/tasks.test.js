@@ -145,3 +145,16 @@ test('startable is a pure function of the list and the limits', () => {
   assert.deepEqual(startable(list, { process: 2, summary: 2 }).map((task) => task.kind), ['process']);
   assert.deepEqual(startable(list, { process: 1, summary: 2 }).map((task) => task.kind), ['summary']);
 });
+
+test('one collection task at a time per collection, never the same file twice', () => {
+  const { tasks, add } = queue();
+  const overview = add({ kind: 'collection', collection: 'A', video: '合集:A' });
+  const guide = add({ kind: 'collection', collection: 'A', video: '合集:A', guide: true });
+  const other = add({ kind: 'collection', collection: 'B', video: '合集:B' });
+  assert.equal(tasks.get(overview.id).status, 'running');
+  assert.equal(tasks.get(guide.id).status, 'queued');
+  assert.equal(tasks.get(other.id).status, 'running');
+  assert.equal(tasks.add({ kind: 'collection', title: 'x', collection: 'A', video: '合集:A' }).added, false);
+  tasks.exited(overview.id, 0);
+  assert.equal(tasks.get(guide.id).status, 'running');
+});
