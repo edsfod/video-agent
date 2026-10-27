@@ -77,7 +77,7 @@ test.before(async () => {
   });
   page = await app.firstWindow();
   page.on('dialog', (dialog) => dialog.accept());
-  await page.waitForSelector('.video-item .badge:text("未处理")');
+  await page.waitForSelector('#video-list .video-item .badge:text("未处理")');
 });
 
 test.after(async () => {
@@ -88,7 +88,7 @@ test.after(async () => {
 
 test('process the video from the window', async () => {
   await page.click('#run-process');
-  await page.waitForSelector('.video-item .badge:text("已处理")', { timeout: 60_000 });
+  await page.waitForSelector('#video-list .video-item .badge:text("已处理")', { timeout: 60_000 });
   const facts = await page.textContent('#facts');
   assert.match(facts, /2 段 · 字幕文件：sample clip \[e2e\]\.srt/);
   assert.match(facts, /布局整个画面是屏幕/);
@@ -101,7 +101,7 @@ test('the same processing is queued once, and the queue empties when it ends', a
   await page.waitForFunction(() => document.querySelector('#task-note').textContent.includes('已经在队列里'));
   assert.equal(await page.locator('.task-item', { hasText: '处理：' }).count(), 2); // the first run and this one
   await page.waitForFunction(() => document.querySelector('#open-tasks').textContent === '任务', null, { timeout: 60_000 });
-  await page.waitForSelector('.video-item .badge:text("已处理")');
+  await page.waitForSelector('#video-list .video-item .badge:text("已处理")');
 });
 
 test('transcript tab lists the lines', async () => {
@@ -146,7 +146,7 @@ test('summary through the model API, with one frame tool round', async () => {
   assert.equal(model.requests.length, 2);
   assert.equal(model.requests[0].tools[0].function.name, 'frame');
   assert.equal(model.requests[1].messages.at(-1).content[1].type, 'image_url');
-  await page.waitForSelector('.video-item .badge:text("已总结")');
+  await page.waitForSelector('#video-list .video-item .badge:text("已总结")');
   await page.click('#summary a');
   await page.waitForSelector('#lightbox[open]');
   await page.click('#lightbox');
@@ -287,5 +287,5 @@ test('the Bilibili login is exported as a Netscape cookies file for yt-dlp', asy
 test('remove the video from the list', async () => {
   await page.click('#remove-video');
   await page.waitForSelector('#empty:not([hidden])');
-  assert.equal(await page.locator('.video-item').count(), 0);
+  assert.equal(await page.locator('#video-list .video-item').count(), 0);
 });

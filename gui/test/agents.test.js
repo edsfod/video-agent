@@ -32,7 +32,7 @@ for (const agent of ['claude', 'codex']) {
     const app = await electron.launch({ executablePath: require('electron'), args: ['.', `--user-data=${userData}`], cwd: GUI });
     try {
       const page = await app.firstWindow();
-      await page.waitForSelector('.video-item .badge:text("已处理")');
+      await page.waitForSelector('#video-list .video-item .badge:text("已处理")');
       await page.click('.tabs button[data-tab=summary]');
       await page.check(`input[name=route][value=${agent}]`);
       await page.fill('#summary-request', '写得简短一些');
