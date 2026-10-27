@@ -47,11 +47,12 @@ jobs:
         env:
           UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
       - run: uv build --wheel
+      - run: cp build/ffmpeg/BUILD.txt build/ffmpeg/FFmpeg-BUILD.txt # the name the notes and THIRD-PARTY-NOTICES use
       - run: >
           gh release create "$GITHUB_REF_NAME" --draft --verify-tag
           --title "Video Agent ${GITHUB_REF_NAME#v}" --notes-file "docs/releases/$GITHUB_REF_NAME.md"
           gui/dist/Video-Agent-Setup-*.exe gui/dist/Video-Agent-Setup-*.exe.blockmap
           gui/dist/latest.yml gui/dist/latest.yml.sig dist/*.whl
-          build/ffmpeg/source/*.tar.xz "build/ffmpeg/BUILD.txt#FFmpeg-BUILD.txt"
+          build/ffmpeg/source/*.tar.xz build/ffmpeg/FFmpeg-BUILD.txt
         env:
           GH_TOKEN: ${{ github.token }}

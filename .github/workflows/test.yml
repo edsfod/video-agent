@@ -4,6 +4,13 @@ on:
   push:
   pull_request:
 
+# A newer push to the same branch replaces a run still going, so a fixed intermediate commit does not report a
+# failure. The FFmpeg build is cached as soon as it succeeds; a cold build cut short only happens when
+# packaging/ffmpeg/build.sh changes twice within its 15 minutes.
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   cli:
     runs-on: windows-latest # Windows only (ARCHITECTURE.md)
