@@ -80,6 +80,7 @@
               </label>
               <div class="row">
                 <button id="run-process" class="primary">开始处理</button>
+                <button id="run-compress" type="button" class="ghost" title="用 AV1 重新编码并替换这个视频文件，分辨率不变">压缩这个视频…</button>
                 <span id="process-state" class="muted"></span>
               </div>
             </div>
@@ -125,6 +126,7 @@
             <form id="frame-form" class="toolbar">
               <input id="frame-times" type="text" placeholder="补截画面的时间，如 1:10 4:49" />
               <button type="submit">截取</button>
+              <button id="import-slides" type="button" class="ghost" title="选一个放着课件图片（PNG、JPEG）的文件夹，例如 AutoSlides 的 slides_… 文件夹；没有时间表的按画面对上时间">导入课件…</button>
               <span class="muted">屏幕页是屏幕区域里出现过的每一页；整幅画面按间隔和场景变化抽取，需要时按时间补截。</span>
             </form>
             <h3 id="pages-title" class="frames-title" hidden></h3>
@@ -290,6 +292,10 @@
         </label>
         <label class="check"><input id="set-close-to-tray" type="checkbox" /><span>关闭窗口时收到托盘，任务继续在后台运行</span></label>
         <div id="env-info" class="muted small-text"></div>
+        <h3>压缩视频</h3>
+        <p class="muted small-text">用 AV1 重新编码，分辨率不变，看不出画质差别：屏幕录像（画面基本不动）降到每秒 10 帧，大约剩原来的五分之一；摄像头画面大约剩一半多。已经是 AV1、HEVC 的视频（比如 B 站的）不再压缩。压好的文件先和原文件核对时长，再替换原文件，路径不变，处理结果和总结照常可用。压一节一个半小时的课要几分钟。</p>
+        <label class="check"><input id="set-compress-downloads" type="checkbox" /><span>压缩下载的视频（下载完先压缩，再处理）</span></label>
+        <label class="check"><input id="set-compress-local" type="checkbox" /><span>也压缩从本地添加的视频<br /><small class="warn">会用压缩后的文件替换你电脑上的原视频，原文件不保留。</small></span></label>
         <h3>哔哩哔哩账号</h3>
         <p class="muted small-text">B 站只给登录的账号看字幕（包括 AI 字幕）。在这里登录一次，之后下载 B 站视频会把字幕一起存下来，处理时直接用，不用转录。登录状态只存在本机，只在下载 B 站视频时交给 yt-dlp。</p>
         <span class="row">
@@ -363,6 +369,20 @@
         <div class="row end">
           <button value="cancel" class="ghost">取消</button>
           <button id="import-save" value="save" class="primary">导入</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="nosubs-dialog">
+      <form method="dialog" class="settings">
+        <h2>这些视频没有找到字幕</h2>
+        <p class="muted small-text">视频旁边没有同名的字幕文件，视频里也没有字幕轨：</p>
+        <ul id="nosubs-list" class="small-text"></ul>
+        <p class="muted small-text">可以用必剪（B 站）转录，这会把视频的音轨上传到哔哩哔哩；也可以先只处理画面，之后在「字幕」里点「导入字幕…」。</p>
+        <div class="row end">
+          <button value="later" class="ghost">先不处理</button>
+          <button value="pictures">只处理画面</button>
+          <button value="bcut" class="primary">用必剪转录</button>
         </div>
       </form>
     </dialog>

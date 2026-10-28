@@ -157,12 +157,18 @@ SHEET_SIDES = (1, 2, 3)  # pages per row on a contact sheet; 1 sends each page a
 MIN_FRAMES = 8  # representative frames kept beside the pages, for the speaker and the room
 
 
+def _pages(manifest):
+  """(time, path) of what was on screen: slides with a time when there are any, else the screen pages."""
+  kind, items = processor.shown_pictures(manifest)
+  return [] if kind == 'frame' else [(item['time_s'], item['path']) for item in items]
+
+
 def _evidence_plan(asset, manifest, budget, work_dir):
   """What goes into `budget` images: every screen page, alone or on 2x2 or 3x3 contact sheets when there are too
   many, then representative and extra frames in the room left (at least MIN_FRAMES where there are). Pages are
   dropped, evenly, only when even 3x3 sheets do not fit. Returns ('page' | 'sheet' | 'frame', file, [(second,
   relative)]) per image, pages per row, and the number of pages left out."""
-  pages = [(item['time_s'], item['path']) for item in manifest.get('screen_pages') or []]
+  pages = _pages(manifest)
   frames = _evidence_frames(asset, manifest, 10**6)
   room = max(1, budget - min(len(frames), MIN_FRAMES))
   side = next((value for value in SHEET_SIDES if math.ceil(len(pages) / value**2) <= room), SHEET_SIDES[-1])
@@ -598,7 +604,7 @@ def material(video, workspace, *, request='', max_images=40, work_dir=None, max_
   pages in SHEET_FOLDER for chat AIs that take few images. With `max_files` as well, at most that many files with the
   prompt: numbered pictures in one folder, as `_numbered_pictures` chooses them."""
   video, info, asset, manifest = _processed(video, workspace)
-  pages = [(item['time_s'], item['path']) for item in manifest.get('screen_pages') or []]
+  pages = _pages(manifest)
   frames = _evidence_frames(asset, manifest, max_images)
   entries, notes = [], []
   if work_dir is not None:

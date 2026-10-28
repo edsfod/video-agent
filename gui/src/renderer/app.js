@@ -218,23 +218,37 @@ async function addVideos(paths, { show = true } = {}) {
 }
 
 // Videos the user adds from disk are processed at once when 下载或添加后自动处理 is on, so a subtitle file beside one
-// (same name) is read in without a click (user request, 2026-10-28). BCut stays off for them: a local video's audio is
-// uploaded only when the user asks in 处理, where the box says so.
+// (same name) is read in without a click (user request, 2026-10-28). A local video's audio is not uploaded by default:
+// for those without subtitles the window asks first (BCut, the pictures only, or later).
 async function addLocalVideos(paths) {
   if (!paths?.length) return;
   await addVideos(paths);
   if (state.settings.processAfterDownload === false) return;
-  for (const video of state.videos.filter((entry) => paths.some((path) => sameVideo(entry.path, path)))) {
-    if (!video.info || video.info.processed) continue;
-    await addTask({
-      kind: 'process',
-      title: `处理：${baseName(video.path)}`,
+  const fresh = state.videos.filter(
+    (entry) => paths.some((path) => sameVideo(entry.path, path)) && entry.info && !entry.info.processed,
+  );
+  // With 也压缩本地添加的视频 on (the user agreed to have the files replaced), a video is compressed first.
+  const process = (video, bcut) => {
+    const compress = state.settings.compressLocal === true;
+    return addTask({
+      kind: compress ? 'compress' : 'process',
+      title: `${compress ? '压缩' : '处理'}：${baseName(video.path)}`,
       video: video.path,
+      then: compress ? 'process' : undefined,
       interval: state.settings.frameInterval,
       maxFrames: state.settings.maxFrames,
-      bcut: false,
+      bcut,
     });
-  }
+  };
+  for (const video of fresh.filter((entry) => entry.info.subtitles)) await process(video, false);
+  const bare = fresh.filter((entry) => !entry.info.subtitles);
+  if (!bare.length) return;
+  $('nosubs-list').replaceChildren(...bare.map((video) => element('li', { textContent: baseName(video.path) })));
+  $('nosubs-dialog').returnValue = '';
+  $('nosubs-dialog').showModal();
+  await new Promise((resolve) => $('nosubs-dialog').addEventListener('close', resolve, { once: true }));
+  const choice = $('nosubs-dialog').returnValue;
+  if (choice === 'bcut' || choice === 'pictures') for (const video of bare) await process(video, choice === 'bcut');
 }
 
 async function persistList() {
@@ -244,7 +258,7 @@ async function persistList() {
 function badge(video) {
   const task = videoTask(video);
   if (task) {
-    const doing = task.status === 'queued' ? '排队中' : { process: '处理中', summary: '总结中', frame: '补截中' }[task.kind];
+    const doing = task.status === 'queued' ? '排队中' : { process: '处理中', summary: '总结中', frame: '补截中', compress: '压缩中' }[task.kind];
     return element('span', { className: 'badge busy', textContent: doing });
   }
   if (video.error) return element('span', { className: 'badge error', textContent: '无法读取' });
@@ -384,7 +398,9 @@ function renderProcess(video) {
       if (manifest.layout) facts.push(['布局', LAYOUT_TEXT[manifest.layout.kind] + (manifest.layout.given ? '（手动指定）' : '')]);
       if (manifest.screen_pages) facts.push(['屏幕页', `${manifest.screen_pages.length} 页`]);
       facts.push(['整幅画面', `${manifest.representative_frames.length} 张，补截 ${info.extra_frames.length} 张`]);
-      if (manifest.slide_extraction.enabled) facts.push(['PPT', `${manifest.slide_extraction.slides.length} 张`]);
+      const slides = manifest.slide_extraction;
+      if (slides.imported) facts.push(['课件', `${slides.slides.length} 张`, '', slides.imported]);
+      else if (slides.enabled) facts.push(['PPT', `${slides.slides.length} 张`]);
       facts.push(['总结', info.summary ? '已生成' : '还没有']);
       facts.push(['处理结果', info.folder, 'wide']);
     }
@@ -406,6 +422,7 @@ function renderProcess(video) {
 const LANGUAGES = { 'ai-zh': 'B 站 AI 字幕', zh: '中文字幕', 'zh-hans': '中文字幕', 'zh-cn': '中文字幕', 'zh-hant': '繁体中文字幕', en: '英文字幕' };
 function subtitleSource(source) {
   if (source.startsWith('embedded:')) return `内嵌字幕（${source.slice(9) || '未标语言'}）`;
+  if (source.startsWith('file:')) return `导入的字幕（${source.slice(5)}）`;
   if (!source.startsWith('sidecar:')) return source;
   const language = /\.([A-Za-z-]+)\.(srt|vtt|ass)$/i.exec(source.slice(8))?.[1]?.toLowerCase();
   return language ? LANGUAGES[language] || `字幕文件（${language}）` : '同名字幕文件';
@@ -481,6 +498,16 @@ async function startProcess(extra = {}) {
     ...extra,
   });
 }
+// This program's downloads go to <workspace>\下载; any other video is the user's own file, which is replaced only with
+// their agreement: the setting, or a confirmation here.
+const downloaded = (video) => video.path.toLowerCase().startsWith(joinPath(state.settings.workspace, '下载').toLowerCase() + '\\');
+$('run-compress').onclick = async () => {
+  const video = current();
+  if (!video) return;
+  const asked = '压缩会用 AV1 重新编码这个视频，然后用压缩后的文件替换你电脑上的原视频（原文件不保留）。分辨率不变，替换前会核对时长。继续吗？';
+  if (!downloaded(video) && !state.settings.compressLocal && !confirm(asked)) return;
+  await addTask({ kind: 'compress', title: `压缩：${baseName(video.path)}`, video: video.path });
+};
 $('opt-bcut').onchange = async () => (state.settings = await window.va.saveSettings({ bcut: $('opt-bcut').checked }));
 
 // A subtitle file of any name, such as one the teacher shared, replaces the transcript; processing runs with it.
@@ -574,9 +601,11 @@ function frameCard(item) {
 function renderFrames(video) {
   const box = $('frames');
   const manifest = video.info?.manifest;
-  const pages = manifest?.screen_pages || [];
+  // Slides taken from a folder (AutoSlides' or one chosen) stand for the screen pages wherever they have times.
+  const slides = (manifest?.slide_extraction?.slides || []).filter((slide) => slide.time_s !== null);
+  const pages = slides.length ? slides : manifest?.screen_pages || [];
   $('pages-title').hidden = !pages.length;
-  $('pages-title').textContent = `屏幕页（${pages.length}）`;
+  $('pages-title').textContent = slides.length ? `课件（${pages.length}）` : `屏幕页（${pages.length}）`;
   $('pages').replaceChildren(
     ...pages.map((page) => frameCard({ time: page.time_s, file: joinPath(video.info.folder, page.path) })),
   );
@@ -598,6 +627,21 @@ function renderFrames(video) {
   $('frames-title').textContent = `整幅画面（${items.length}）`;
   box.replaceChildren(...items.map(frameCard));
 }
+
+// A folder of slide images, such as AutoSlides' or exported from the PPT; processing runs again with it.
+$('import-slides').onclick = async () => {
+  const video = current();
+  const folder = await window.va.pickFolder('选择课件图片所在的文件夹');
+  if (!video || !folder) return;
+  await addTask({
+    kind: 'process',
+    title: `导入课件：${baseName(video.path)}`,
+    video: video.path,
+    interval: state.settings.frameInterval,
+    maxFrames: state.settings.maxFrames,
+    slidesFolder: folder,
+  });
+};
 
 $('frame-form').onsubmit = (event) => {
   event.preventDefault();
@@ -1442,6 +1486,8 @@ $('open-settings').onclick = async () => {
   renderAgentRows();
   $('set-key').value = '';
   $('set-close-to-tray').checked = state.settings.closeToTray !== false;
+  $('set-compress-downloads').checked = state.settings.compressDownloads !== false;
+  $('set-compress-local').checked = state.settings.compressLocal === true;
   $('set-theme').value = state.settings.theme || 'system';
   $('set-check-updates').checked = state.settings.checkUpdates !== false;
   for (const kind of ['download', 'process', 'summary']) $(`set-limit-${kind}`).value = state.settings.limits[kind];
@@ -1473,7 +1519,7 @@ $('open-settings').onclick = async () => {
 // Closing by ×, Esc or a click outside keeps nothing; with changes it asks first, otherwise it just closes.
 let settingsShown = '';
 const SETTINGS_FIELDS = [
-  'set-theme', 'set-workspace', 'set-cli', 'set-close-to-tray', 'set-check-updates', 'set-update-mirror', 'set-limit-download',
+  'set-theme', 'set-workspace', 'set-cli', 'set-close-to-tray', 'set-compress-downloads', 'set-compress-local', 'set-check-updates', 'set-update-mirror', 'set-limit-download',
   'set-limit-process', 'set-limit-summary', 'set-provider', 'set-model', 'set-base-url', 'set-key',
 ];
 const settingsValues = () =>
@@ -1606,6 +1652,8 @@ $('settings').addEventListener('close', async () => {
     // Left as they were shown, the agents stay as saved, so presets installed later still show while none were chosen.
     agents: JSON.stringify(agentRowsValue()) === agentRowsShown ? state.settings.agents : agentRowsValue(),
     closeToTray: $('set-close-to-tray').checked,
+    compressDownloads: $('set-compress-downloads').checked,
+    compressLocal: $('set-compress-local').checked,
     theme: $('set-theme').value,
     checkUpdates: $('set-check-updates').checked,
     updateMirror: $('set-update-mirror').value.trim(),

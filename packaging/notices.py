@@ -61,13 +61,14 @@ def write(target, ffmpeg_dir):
   build = (ffmpeg_dir / 'BUILD.txt').read_text(encoding='utf-8').strip()
   sections.append(
     _section(
-      'FFmpeg with dav1d and zlib: resources\\cli\\_internal\\ffmpeg\\ffmpeg.exe and ffprobe.exe',
+      'FFmpeg with dav1d, SVT-AV1 and zlib: resources\\cli\\_internal\\ffmpeg\\ffmpeg.exe and ffprobe.exe',
       [
         build,
         '',
         'FFmpeg is licensed under the GNU Lesser General Public License 2.1 or later; this build has no GPL parts.',
-        'dav1d is under the BSD 2-Clause licence, zlib under the zlib licence.',
-        f'Complete corresponding source: each release at {RELEASES} carries the exact FFmpeg and dav1d source',
+        'dav1d is under the BSD 2-Clause licence, SVT-AV1 under the BSD 3-Clause Clear licence with the Alliance for',
+        'Open Media patent licence 1.0, zlib under the zlib licence.',
+        f'Complete corresponding source: each release at {RELEASES} carries the exact FFmpeg, dav1d and SVT-AV1 source',
         'tarballs and FFmpeg-BUILD.txt; the build script is packaging/ffmpeg/build.sh in the source repository.',
       ],
       [

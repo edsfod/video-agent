@@ -63,6 +63,10 @@ function defaults() {
     updateMirror: '',
     limits: DEFAULT_LIMITS, // tasks of each kind that may run at once (see tasks.js)
     processAfterDownload: true, // downloaded files are processed, so their subtitles are imported at once
+    // Compressing replaces the file (user decision, 2026-10-28): on for this program's downloads, off for videos added
+    // from disk until the user agrees to have them replaced.
+    compressDownloads: true,
+    compressLocal: false,
     // A video without subtitles is transcribed with BCut, which uploads its audio to Bilibili: on unless the user turns
     // it off, also for videos processed after a download (user decision, 2026-10-28). The CLI still needs the flag.
     bcut: true,
@@ -271,10 +275,13 @@ function cliArgs(task) {
       if (task.slides) args.push('--extract-slides');
       if (task.screenRegion) args.push('--screen-region', task.screenRegion);
       if (task.subtitles) args.push('--subtitles', task.subtitles);
+      if (task.slidesFolder) args.push('--slides', task.slidesFolder);
       return args;
     }
     case 'frame':
       return ['frame', task.video, ...task.times, ...out];
+    case 'compress':
+      return ['compress', task.video, '--json'];
     case 'collection': {
       const args = ['summarize', '--collection', task.collection, ...out];
       if (task.guide) args.push('--guide');
@@ -376,20 +383,27 @@ function startAgent(task) {
   }
 }
 
-// "Process after download": the saved files are processed with the window's frame settings and BCut setting, without
-// slides. Files the download found already saved, as when a collection of downloaded videos starts following its list,
-// are left alone.
+// After a download: its new files are compressed when 压缩下载的视频 is on, then processed ("process after download")
+// with the window's frame settings and BCut setting, without slides. Files the download found already saved, as when
+// a collection of downloaded videos starts following its list, are left alone.
 function followUp(task) {
-  if (task.kind !== 'download' || task.then !== 'process') return [];
-  const { frameInterval, maxFrames, bcut } = loadSettings();
-  return (task.fresh || task.paths).map((video) => ({
+  const { frameInterval, maxFrames, bcut, compressDownloads } = loadSettings();
+  // Downloads are compressed first when the setting is on; processing follows the compression.
+  if (task.kind === 'download' && compressDownloads !== false) {
+    return (task.fresh || task.paths).map((video) => ({
+      kind: 'compress', title: `压缩：${path.basename(video)}`, video, workspace: task.workspace, then: task.then,
+    }));
+  }
+  const videos = task.kind === 'compress' ? [task.video] : task.kind === 'download' ? task.fresh || task.paths : [];
+  if (task.then !== 'process') return [];
+  return videos.map((video) => ({
     kind: 'process',
     title: `处理：${path.basename(video)}`,
     video,
     workspace: task.workspace,
-    interval: frameInterval,
-    maxFrames,
-    bcut,
+    interval: task.interval ?? frameInterval,
+    maxFrames: task.maxFrames ?? maxFrames,
+    bcut: task.bcut ?? bcut, // a local video's answer in the window, else the BCut setting
   }));
 }
 

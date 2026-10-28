@@ -86,6 +86,13 @@ test('retry queues the same settings as a new task; clearing keeps active tasks'
   assert.deepEqual(tasks.list().map((item) => item.id), [task.id]);
 });
 
+test('a video is processed after compressing it, even when compressing failed', () => {
+  const { tasks, add } = queue({ followUp: (task) => (task.then ? [{ kind: 'process', title: 'p', video: task.video }] : []) });
+  const compress = add({ kind: 'compress', video: 'C:\\d\\a.mp4', then: 'process' });
+  tasks.exited(compress.id, 1);
+  assert.deepEqual(tasks.list().filter((task) => task.kind === 'process').map((task) => task.video), ['C:\\d\\a.mp4']);
+});
+
 test('a download follows up only the videos it saved, not those it found saved already', () => {
   const { tasks, add } = queue({ followUp: (task) => task.fresh.map((video) => ({ kind: 'process', title: 'p', video })) });
   const download = add({ kind: 'download', url: 'https://list' });

@@ -140,8 +140,7 @@ def _context(manifest, rows):
   # Each run of lines starts with the screen page then on screen (or, without pages, the frame), so whoever writes the
   # summary links the picture of the point it describes without matching times itself (user, 2026-10-28; yanhe-agent's
   # `query` did the same).
-  pictures = manifest.get('screen_pages') or manifest.get('representative_frames') or []
-  kind = 'screen page' if manifest.get('screen_pages') else 'frame'
+  kind, pictures = shown_pictures(manifest)
   if pictures:
     lines.append(f'{GROUPED} {kind} on screen while they were said; link that picture for their points.')
     lines.append('')
@@ -191,6 +190,37 @@ def _context(manifest, rows):
       lines.append(f'- {time_text}: ![slide]({link(item["path"])})')
   lines.append('')
   return '\n'.join(lines)
+
+
+SLIDE_MATCH = 0.3  # a slide without a time takes the time of the screen page it differs from in less than this share
+
+
+def _place_slides(slides, pages, work_dir):
+  """Gives slides without a time (a folder without AutoSlides' timeline) the time of the screen page they look like."""
+  untimed = [slide for slide in slides if slide['time_s'] is None]
+  if not untimed or not pages:
+    return slides
+  page_thumbs = media._thumbnails(pages, Path(work_dir))
+  slide_thumbs = media._thumbnails(untimed, Path(work_dir))
+  if page_thumbs is None or slide_thumbs is None:
+    return slides
+  width, height = media.THUMB
+  for slide, thumb in zip(untimed, slide_thumbs):
+    share, page = min((media._differ(thumb, other, width, height), page) for other, page in zip(page_thumbs, pages))
+    if share < SLIDE_MATCH:
+      slide['time_s'] = page['time_s']
+  return slides
+
+
+def shown_pictures(manifest):
+  """What was on screen, by time: slides with a time when there are any (AutoSlides' are filtered and cropped), else
+  the screen pages, else the representative frames. Returns their kind and [{time_s, path}]."""
+  slides = [item for item in (manifest.get('slide_extraction') or {}).get('slides') or [] if item['time_s'] is not None]
+  if slides:
+    return 'slide', sorted(slides, key=lambda item: item['time_s'])
+  if manifest.get('screen_pages'):
+    return 'screen page', manifest['screen_pages']
+  return 'frame', manifest.get('representative_frames') or []
 
 
 def refresh_transcript(asset):
@@ -267,6 +297,7 @@ def process_video(
   allow_remote_asr=False,
   overwrite=False,
   subtitles=None,
+  slides_folder=None,
   status=print,
 ):
   video, info = media.probe(video)
@@ -286,6 +317,7 @@ def process_video(
       allow_remote_asr=allow_remote_asr,
       overwrite=overwrite or bool(subtitles),
       subtitles=subtitles,
+      slides_folder=slides_folder,
       status=status,
     )
 
@@ -305,6 +337,7 @@ def _process_locked(
   allow_remote_asr,
   overwrite,
   subtitles,
+  slides_folder,
   status,
 ):
   status(f'{video.name}: {media.duration(info):.1f}s, {len(info.get("streams") or [])} streams')
@@ -374,6 +407,17 @@ def _process_locked(
         slide_error = str(error)
         status(f'{video.name}: slide extraction failed: {slide_error}')
 
+    # Slides made already: a folder the user chose, or the one AutoSlides keeps beside a screen recording it downloaded.
+    imported = None if slide_result else slides_folder or slide_extractor.autoslides_folder(video)
+    if imported:
+      try:
+        slide_result = slide_extractor.import_folder(imported, asset / 'slides')
+        status(f'{video.name}: {len(slide_result["slides"])} slides from {Path(imported).name}')
+        slide_result['slides'] = _place_slides(slide_result['slides'], pages, temporary)
+      except slide_extractor.SlideExtractorError as error:
+        slide_error = str(error)
+        status(f'{video.name}: slides not taken: {slide_error}')
+
   status(f'{video.name}: obtaining timed subtitles')
   transcript_path = asset / 'transcript.srt'
   transcript_error = ''
@@ -441,6 +485,7 @@ def _process_locked(
     ],
     'slide_extraction': {
       'enabled': bool(extract_slides),
+      'imported': str(imported) if imported else None,
       'output': str(slide_result['output_root'].relative_to(asset)) if slide_result else None,
       'timeline': str(slide_result['timeline'].relative_to(asset)) if slide_result else None,
       'error': slide_error or None,

@@ -451,8 +451,45 @@ test('a subtitle file of another name replaces the transcript', async () => {
   assert.equal(JSON.parse(cli(['show', VIDEO, '-o', WORKSPACE])).manifest.transcript.source, 'file:teacher.vtt');
 });
 
+test('a folder of slide images is taken and placed by the screen pages', async () => {
+  const folder = path.join(ROOT, '课件');
+  fs.mkdirSync(folder);
+  execFileSync('ffmpeg', ['-v', 'error', '-y', '-ss', '6', '-i', VIDEO, '-frames:v', '1', path.join(folder, 'page.png')]);
+  await app.evaluate(({ dialog }, chosen) => {
+    const open = dialog.showOpenDialog;
+    globalThis.vaRestoreDialogs = () => Object.assign(dialog, { showOpenDialog: open });
+    dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [chosen] });
+  }, folder);
+  await page.click('.tabs button[data-tab=frames]');
+  await page.click('#import-slides');
+  await page.waitForSelector('#pages-title:text("课件（1）")', { timeout: 60_000 });
+  await app.evaluate(() => globalThis.vaRestoreDialogs());
+});
+
 test('remove the video from the list', async () => {
   await page.click('#remove-video');
   await page.waitForSelector('#empty:not([hidden])');
   assert.equal(await page.locator('#video-list .video-item').count(), 0);
+});
+
+test('added local videos are processed at once, and those without subtitles are asked about first', async () => {
+  const folder = path.join(ROOT, 'local');
+  fs.mkdirSync(folder);
+  const withSubs = path.join(folder, 'with subs.mp4');
+  const bare = path.join(folder, 'bare.mp4');
+  fs.copyFileSync(VIDEO, withSubs);
+  fs.copyFileSync(VIDEO.replace(/\.mp4$/, '.srt'), withSubs.replace(/\.mp4$/, '.srt'));
+  fs.copyFileSync(VIDEO, bare);
+  await app.evaluate(({ dialog }, chosen) => {
+    const open = dialog.showOpenDialog;
+    globalThis.vaRestoreDialogs = () => Object.assign(dialog, { showOpenDialog: open });
+    dialog.showOpenDialog = async () => ({ canceled: false, filePaths: chosen });
+  }, [withSubs, bare]);
+  await page.click('#add-videos');
+  await page.waitForSelector('#nosubs-dialog[open]');
+  await app.evaluate(() => globalThis.vaRestoreDialogs());
+  assert.equal(await page.textContent('#nosubs-list'), 'bare.mp4');
+  await page.click('#nosubs-dialog button[value=later]');
+  await page.waitForSelector('#video-list .video-item:has-text("with subs") .badge:text("已处理")', { timeout: 60_000 });
+  assert.match(await page.textContent('#video-list .video-item:has-text("bare")'), /未处理/);
 });

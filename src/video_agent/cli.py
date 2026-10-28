@@ -6,7 +6,8 @@ import json
 import sys
 from pathlib import Path
 
-from . import collection, corrections, files, processor, settings, versions
+from . import collection, corrections, files, processor, settings, transcript, versions
+from . import compress as compression
 from . import summarize as summaries
 from .download import DownloadError, download_urls
 from .media import MediaError, duration, parse_clock, probe, save_frame
@@ -145,11 +146,25 @@ def build_parser():
     '--overwrite-transcript', action='store_true', help='replace an existing transcript with newly selected source data'
   )
   process.add_argument(
+    '--slides',
+    type=Path,
+    metavar='FOLDER',
+    help="take the slide images in FOLDER (with AutoSlides' timeline.json, or placed by matching the screen pages); "
+    'a screen_<name> video takes the slides_<name> folder AutoSlides keeps beside it without this',
+  )
+  process.add_argument(
     '--subtitles',
     type=Path,
     metavar='FILE',
     help='use this SRT or WebVTT file as the transcript, whatever its name; replaces an existing transcript',
   )
+  shrink = commands.add_parser(
+    'compress',
+    help='re-encode videos in place with AV1 at the source resolution to save space; replaces each file only after '
+    'checking the new one (a mostly still picture goes to 10 frames a second; AV1, HEVC and VP9 are left alone)',
+  )
+  shrink.add_argument('videos', nargs='+', type=Path)
+  shrink.add_argument('--json', action='store_true', help='print one JSON object per video; progress to stderr')
   frame = commands.add_parser('frame', help="save frames at chosen times into the video's processing workspace")
   frame.add_argument('video', type=Path)
   frame.add_argument('times', nargs='+', type=clock_value, help='seconds, MM:SS or HH:MM:SS')
@@ -450,9 +465,20 @@ def _show(args):
       'transcript_original': existing('transcript.txt'),
       'corrections': [list(pair) for pair in corrections.load(asset)],
       'extra_frames': sorted(str(path) for path in (asset / 'frames' / 'extra').glob('frame-*.jpg')),
+      # Where processing would take subtitles from without asking, so the window can ask about BCut first.
+      'subtitles': _subtitles_here(video, info),
     }
   )
   return 0
+
+
+def _subtitles_here(video, info):
+  found = transcript.sidecar(video)
+  if found:
+    return found[1]
+  if any(stream.get('codec_type') == 'subtitle' for stream in info.get('streams') or []):
+    return 'embedded'
+  return None
 
 
 def _collection(args):
@@ -708,6 +734,19 @@ def run(args):
   if args.command == 'fix':
     return _fix(args)
 
+  if args.command == 'compress':
+    failures = 0
+    for video in args.videos:
+      try:
+        result = compression.compress(video, status=_progress(args))
+      except (OSError, MediaError, compression.CompressError) as error:
+        result, failures = {'video': str(video), 'error': str(error)}, failures + 1
+        if not args.json:
+          print(f'{video}: ERROR: {error}')
+      if args.json:
+        _emit(result)
+    return 1 if failures else 0
+
   if args.command == 'show':
     return _show(args)
 
@@ -821,8 +860,8 @@ def run(args):
 
   if args.allow_remote_asr and args.asr != 'bcut':
     raise ValueError('--allow-remote-asr requires --asr bcut')
-  if args.subtitles and len(args.videos) != 1:
-    raise ValueError('--subtitles belongs to one video; give one video with it')
+  if (args.subtitles or args.slides) and len(args.videos) != 1:
+    raise ValueError('--subtitles and --slides belong to one video; give one video with them')
   failures = 0
   say = _progress(args)
   for video in args.videos:
@@ -840,6 +879,7 @@ def run(args):
         allow_remote_asr=args.allow_remote_asr,
         overwrite=args.overwrite_transcript,
         subtitles=args.subtitles,
+        slides_folder=args.slides,
         status=say,
       )
     except (OSError, MediaError, RuntimeError, ValueError) as error:

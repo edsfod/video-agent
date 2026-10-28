@@ -47,6 +47,6 @@ jobs:
           --title "Video Agent ${GITHUB_REF_NAME#v}" --notes-file "docs/releases/$GITHUB_REF_NAME.md"
           gui/dist/Video-Agent-Setup-*.exe gui/dist/Video-Agent-Setup-*.exe.blockmap
           gui/dist/latest.yml gui/dist/latest.yml.sig dist/*.whl
-          build/ffmpeg/source/*.tar.xz build/ffmpeg/FFmpeg-BUILD.txt
+          build/ffmpeg/source/*.tar.* build/ffmpeg/FFmpeg-BUILD.txt
         env:
           GH_TOKEN: ${{ github.token }}

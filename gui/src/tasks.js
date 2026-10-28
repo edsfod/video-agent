@@ -11,9 +11,11 @@
 // - The same work queued twice (same kind and target, still queued or running) is not added again.
 // - Tasks start in the order they were added; one that has to wait does not hold back later ones that may run.
 
-const DEFAULT_LIMITS = { download: 3, process: 1, summary: 2 };
+// Compressing takes the whole CPU for minutes, as processing does; one at a time, not set in the window.
+const DEFAULT_LIMITS = { download: 3, process: 1, summary: 2, compress: 1 };
 // Collection tasks write the collection's own files; their `video` is "合集:<name>", so one runs per collection.
-const EXCLUSIVE = new Set(['process', 'summary', 'collection']);
+// Compressing replaces the video file, so it does not run beside processing or a summary of the same video.
+const EXCLUSIVE = new Set(['process', 'summary', 'collection', 'compress']);
 const ACTIVE = new Set(['queued', 'running']);
 const OUTPUT_LIMIT = 512 * 1024; // characters of output kept per task for the window; the log file has all of it
 
@@ -54,7 +56,7 @@ const newId = () => `task-${Date.now().toString(36)}-${(++counter).toString(36)}
 
 // start(task): starts the job; it reports back through output() and exited().
 // stop(task): stops a running job. changed(): the list or a status changed.
-// followUp(task): tasks to add after a task succeeds (a download's "then process").
+// followUp(task): tasks to add after a task succeeds (a download's compression and "then process").
 class TaskQueue {
   constructor({ start, stop, changed = () => {}, limits = () => DEFAULT_LIMITS, followUp = () => [] }) {
     Object.assign(this, { start, stop, changed, limits, followUp });
@@ -124,8 +126,10 @@ class TaskQueue {
     // A download that only found a list did what it could: the window asks whether to fetch the whole list.
     const asked = task.kind === 'download' && !task.paths.length && task.lists?.length;
     task.status = task.stopping ? 'stopped' : code === 0 || asked ? 'done' : 'failed';
-    // A download that saved files is followed up even if another URL in it failed.
-    const follow = task.status !== 'stopped' && (code === 0 || task.paths.length) ? this.followUp(task) : [];
+    // A download that saved files is followed up even if another URL in it failed, and a video is processed even
+    // when compressing it failed (the original is then kept).
+    const goOn = code === 0 || task.paths.length || task.kind === 'compress';
+    const follow = task.status !== 'stopped' && goOn ? this.followUp(task) : [];
     for (const spec of follow) this.add(spec);
     this.pump();
   }

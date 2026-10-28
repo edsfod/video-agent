@@ -1,4 +1,5 @@
-"""Invoke the installed AutoSlides Extractor CLI for optional slide output."""
+"""AutoSlides: invoke the installed AutoSlides Extractor CLI for optional slide output, and take the slides the
+AutoSlides app or Extractor already made, or any folder of slide images the user chooses."""
 
 import json
 import os
@@ -34,6 +35,43 @@ def find_extractor(explicit=None):
   raise SlideExtractorError(
     'AutoSlides Extractor was not found. Install it or pass --slide-extractor PATH; the slide option is off by default.'
   )
+
+
+IMAGES = ('*.png', '*.jpg', '*.jpeg')
+
+
+def autoslides_folder(video):
+  """The slides AutoSlides made for a video it downloaded, by AutoSlides' own naming: `screen_<name>.mp4` beside
+  `slides_<name>/` (user decision, 2026-10-28: a named convention of that tool, beside a manual import for any
+  folder). None when there is no such folder with images."""
+  video = Path(video)
+  if not video.stem.startswith('screen_'):
+    return None
+  folder = video.with_name('slides_' + video.stem.removeprefix('screen_'))
+  return folder if folder.is_dir() and any(any(folder.glob(pattern)) for pattern in IMAGES) else None
+
+
+def import_folder(folder, target):
+  """Copies a folder of slide images into `target` as slide-001.png and so on (AutoSlides' names, with the course
+  and lecture in each, would pass Windows' path limit inside a video's folder), keeping AutoSlides' timeline.json
+  times when there is one, and returns the result as extract() does. Slides without a timeline have no time."""
+  folder = Path(folder).expanduser().resolve()
+  images = sorted(path for pattern in IMAGES for path in folder.glob(pattern))
+  if not images:
+    raise SlideExtractorError(f'{folder} holds no slide images (PNG or JPEG)')
+  found = _timeline(folder) or [{'time_s': None, 'path': path} for path in images]
+  target = Path(target)
+  shutil.rmtree(target, ignore_errors=True)
+  target.mkdir(parents=True)
+  slides = []
+  for number, slide in enumerate(found, 1):
+    copy = target / f'slide-{number:03d}{slide["path"].suffix.lower()}'
+    shutil.copy2(slide['path'], copy)
+    slides.append({'time_s': slide['time_s'], 'path': copy})
+  timeline = folder / 'timeline.json'
+  if timeline.is_file():
+    shutil.copy2(timeline, target / 'timeline.json')
+  return {'output_root': target, 'folder': target, 'timeline': target / 'timeline.json', 'slides': slides}
 
 
 def _timeline(slide_folder):

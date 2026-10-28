@@ -14,7 +14,7 @@ This project grew out of [edsfod/yanhe-agent](https://github.com/edsfod/yanhe-ag
 - Keep slide extraction optional and disabled by default. Run AutoSlides Extractor only when the user passes `--extract-slides`.
 - Pass explicit AutoSlides Extractor settings rather than inheriting saved GUI preferences; keep the external executable behind a replaceable adapter.
 - Do not treat codec keyframes or scene-change candidates as guaranteed semantically important frames.
-- Do not modify or move source videos. Write artifacts into a separate workspace.
+- Do not modify or move source videos, except that `compress` replaces a video with its smaller copy after checking it: this program's downloads by default, videos added from disk only when the user agreed (user decision, 2026-10-28; ARCHITECTURE.md, "Compression"). Write artifacts into a separate workspace.
 - The GUI (Electron, per ARCHITECTURE.md) and any other front end call the CLI and must not duplicate media or summary logic.
 - Do not tag, publish or create a release until the user says all planned work is finished.
 - Change the version with `uv run scripts/bump_version.py <version>`, which writes every file that carries it or none (user request, 2026-10-28); write `docs/releases/v<version>.md` by hand.

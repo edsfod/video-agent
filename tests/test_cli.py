@@ -67,6 +67,50 @@ def test_a_chosen_subtitle_file_becomes_the_transcript_whatever_its_name(sample_
     cli.main(['process', str(bare), str(sample_video), '-o', str(workspace), '--subtitles', str(chosen)])
 
 
+def _slide_image(video, second, path):
+  path.parent.mkdir(parents=True, exist_ok=True)
+  subprocess.run(
+    [media.tool('ffmpeg'), '-v', 'error', '-y', '-ss', str(second), '-i', str(video), '-frames:v', '1', str(path)],
+    check=True,
+  )
+
+
+def test_slides_autoslides_keeps_beside_a_screen_recording_are_taken_with_their_times(sample_video, tmp_path):
+  video = tmp_path / 'screen_第1周.mp4'
+  video.write_bytes(sample_video.read_bytes())
+  folder = tmp_path / 'slides_第1周'
+  _slide_image(sample_video, 1, folder / 'Slide_001.png')
+  _slide_image(sample_video, 6, folder / 'Slide_002.png')
+  events = [{'id': 'a', 'changeAt': 0.0, 'initialFile': 'Slide_001.png'}, {'id': 'b', 'changeAt': 4.5}]
+  resolutions = {
+    'a': {'file': 'Slide_001.png', 'state': 'canonical'},
+    'b': {'file': 'Slide_002.png', 'state': 'canonical'},
+  }
+  (folder / 'timeline.json').write_text(json.dumps({'events': events, 'resolutions': resolutions}), encoding='utf-8')
+  workspace = tmp_path / 'work'
+  assert cli.main(['process', str(video), '-o', str(workspace)]) == 1  # no subtitles: the slides are still taken
+  asset = asset_folder(workspace, video.resolve())
+  taken = json.loads((asset / 'manifest.json').read_text(encoding='utf-8'))['slide_extraction']
+  assert taken['imported'] == str(folder.resolve())
+  assert [(item['time_s'], Path(item['path']).name) for item in taken['slides']] == [
+    (0.0, 'slide-001.png'),
+    (4.5, 'slide-002.png'),
+  ]
+  assert all((asset / item['path']).is_file() for item in taken['slides'])
+
+
+def test_a_chosen_slide_folder_without_times_is_placed_by_the_screen_pages(sample_video, tmp_path):
+  folder = tmp_path / '课件'
+  _slide_image(sample_video, 6, folder / 'page.jpg')
+  workspace = tmp_path / 'work'
+  assert cli.main(['process', str(sample_video), '-o', str(workspace), '--slides', str(folder)]) == 0
+  asset = asset_folder(workspace, sample_video.resolve())
+  manifest = json.loads((asset / 'manifest.json').read_text(encoding='utf-8'))
+  [slide] = manifest['slide_extraction']['slides']
+  assert slide['time_s'] is not None and slide['time_s'] >= 3  # the second half of the sample, where it was taken
+  assert '▶ slide from' in (asset / 'summary-context.md').read_text(encoding='utf-8')
+
+
 def test_process_without_subtitles_asks_for_consent(sample_video, tmp_path, capsys):
   bare = tmp_path / 'bare.mp4'
   bare.write_bytes(sample_video.read_bytes())
@@ -566,3 +610,22 @@ def test_a_folder_keeps_the_chinese_name_and_an_old_one_is_renamed_with_its_link
   assert folder.name == f'软件仓库管理-BV1-{identity}' and (folder / '总结.md').is_file() and not old.exists()
   assert overview.read_text(encoding='utf-8') == f'[总结](../../{folder.name}/总结.md)\n'
   assert processor.asset_folder(workspace, video) == folder
+
+
+def test_compress_replaces_the_video_once_and_leaves_efficient_ones(sample_video, tmp_path, capsys):
+  from video_agent import compress
+
+  video = tmp_path / 'lecture.mp4'
+  video.write_bytes(sample_video.read_bytes())
+  before = video.stat().st_size
+  capsys.readouterr()
+  assert cli.main(['compress', str(video), '--json']) == 0
+  result = json.loads(capsys.readouterr().out)
+  assert result['skipped'] is None and result['after'] == video.stat().st_size < before
+  _, info = media.probe(video)
+  assert next(s for s in info['streams'] if s['codec_type'] == 'video')['codec_name'] == 'av1'
+  assert abs(media.duration(info) - 8) < 1
+  assert compress.skip_reason(info) == 'already compressed by Video Agent'
+  assert cli.main(['compress', str(video), '--json']) == 0
+  assert json.loads(capsys.readouterr().out)['skipped'] == 'already compressed by Video Agent'
+  assert not [path for path in tmp_path.iterdir() if '.part' in path.name]
