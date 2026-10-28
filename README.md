@@ -27,10 +27,10 @@ Video Agent 由三部分组成，按需取用：
 
 ## 能做什么
 
-- **任何来源的视频**：直接选本地文件；也可以粘贴链接，用 [yt-dlp](https://github.com/yt-dlp/yt-dlp) 下载。下载和处理是两步，下载完不会自动开始处理。
+- **任何来源的视频**：直接选本地文件；也可以粘贴链接，用 [yt-dlp](https://github.com/yt-dlp/yt-dlp) 下载。桌面程序默认下载完自动处理（左上角可以关掉）；命令行里下载和处理是两步。
 - **字幕优先**：先用视频自带的字幕或同名的 `.srt`、`.vtt` 文件（包括下载时一起存下的 `视频名.zh-CN.srt` 这类字幕）；都没有时，可以用必剪（B 站的语音识别）转录，但每次都要你明确同意上传音频。
 - **屏幕页和代表画面**：自动识别画面布局，摄像头和屏幕拼在一起时只看屏幕那块，用原始分辨率截下每一页幻灯片、代码和文档（多少页就留多少页）；另外按时间间隔和场景变化抽取整幅画面。写总结时还可以按时间补截。
-- **PPT 提取（可选，默认关闭）**：需要时调用 [AutoSlides Extractor](https://github.com/bit-admin/AutoSlides-Extractor) 提取幻灯片。
+- **另外用 AutoSlides Extractor 提取幻灯片（可选，默认关闭，需自己安装）**：写总结用上面的屏幕页就够了；要更细的去重、导出课件时，可以再调用 [AutoSlides Extractor](https://github.com/bit-admin/AutoSlides-Extractor)。
 - **四种总结方式**，写出的总结用同一套规则和模板：
   - Claude Code 或 Codex 按插件里的 skill 写，会自己补截画面；
   - 模型 API（Anthropic，或 OpenAI 兼容接口，例如 ModelScope、本地 Ollama），支持工具调用的模型同样会补截画面；
@@ -69,18 +69,18 @@ FFmpeg 和 yt-dlp 会作为依赖一起装上，不需要 git。电脑上已经�
 
 - 其他 Agent：把 `skills/video-agent/` 复制到它的技能目录。
 
-插件找不到 `video-agent` 命令时，会用 uv 临时拉取同一版本。提取 PPT 要另装 AutoSlides Extractor。
+插件找不到 `video-agent` 命令时，会用 uv 临时拉取同一版本。用 AutoSlides Extractor 提取幻灯片要另外安装它。
 
 ## 桌面程序
 
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/images/process-dark.webp" />
-    <img src="docs/images/process-light.webp" width="90%" alt="处理页：抽帧间隔、是否用必剪转录、是否提取 PPT" />
+    <img src="docs/images/process-light.webp" width="90%" alt="处理页：抽帧间隔、是否用必剪转录、是否另外用 AutoSlides Extractor 提取幻灯片" />
   </picture>
 </p>
 
-添加本地视频（也可以拖进窗口），或在左上角粘贴链接下载。下载 B 站视频前，先在「设置」里登录一次哔哩哔哩，字幕（包括 AI 字幕）会一起下载，处理时直接用，不必转录。在「处理」页开始处理：必剪转录和 PPT 提取都是默认关闭的选项，勾选必剪只对这一次处理生效。
+添加本地视频（也可以拖进窗口），或在左上角粘贴链接下载。下载 B 站视频前，先在「设置」里登录一次哔哩哔哩，字幕（包括 AI 字幕）会一起下载，处理时直接用，不必转录。在「处理」页开始处理：屏幕页每次都会截取，不需要另装软件；必剪转录和 AutoSlides Extractor 都是默认关闭的选项（没装 AutoSlides Extractor 时这一项是灰的），勾选必剪只对这一次处理生效。
 
 <p align="center">
   <picture>
@@ -108,7 +108,7 @@ FFmpeg 和 yt-dlp 会作为依赖一起装上，不需要 git。电脑上已经�
 
 **总结规则**：几种总结方式都按同一份规则和模板写。在「设置 → 总结规则和模板」里点「编辑」，就会生成你自己的版本并用编辑器打开，可以改成更长、更短或固定要哪几节；更新程序不会覆盖它，默认规则有改动时会提示你对比。Agent 的 skill 流程只能查看，不能改。
 
-**更新**：启动时会查一次有没有新版本，只提示，不会自己下载（可在设置里关掉）。在设置里点「下载并更新」，只下载和当前版本不同的部分；再点「重启并安装」，装完自动重新打开。依次尝试 github.com、GitHub API 和下载镜像；更新文件带签名，镜像给出的文件对不上签名就不会安装。
+**更新**：启动时会查一次有没有新版本，只提示，不会自己下载（可在设置里关掉）。设置里写着上次检查更新的时间和结果。点「下载并更新」，只下载和当前版本不同的部分，相近的部分合并成一次请求；再点「重启并安装」，装完自动重新打开。依次尝试 github.com、GitHub API 和下载镜像；更新文件带签名，镜像给出的文件对不上签名就不会安装。
 
 ## 命令行
 
@@ -121,7 +121,7 @@ video-agent summarize "D:\Videos\lecture.mp4" -o D:\Video-Work
 
 `download` 会把网站提供的字幕存在视频旁边（不要字幕加 `--no-subs`），`process` 会自动用上；有多份时先用人工字幕、中文优先，最后才是 AI 字幕。B 站只给登录的账号看字幕：命令行用 `--cookies cookies.txt` 传入登录状态（Netscape 格式）。浏览器正开着时 yt-dlp 读不到它的 cookie，而且新版 Edge、Chrome 加密的 cookie yt-dlp 也解不开，所以桌面程序里改用自带的 B 站登录窗口。
 
-`process` 在工作区里为每个视频建一个文件夹，放字幕（`transcript.srt`、`transcript.txt`）、代表画面（`frames/`）、总结材料（`summary-context.md`）和 `manifest.json`，原视频不会被修改或移动。没有字幕时加 `--asr bcut --allow-remote-asr` 用必剪转录；加 `--extract-slides` 另外用 AutoSlides Extractor 提取 PPT（会先裁出屏幕区域）。识别出的布局画在 `frames/<本次运行>/layout.jpg` 上（绿框是屏幕区域），认错了可以用 `--screen-region X,Y,宽,高` 手动指定。
+`process` 在工作区里为每个视频建一个文件夹，放字幕（`transcript.srt`、`transcript.txt`）、代表画面（`frames/`）、总结材料（`summary-context.md`）和 `manifest.json`，原视频不会被修改或移动。没有字幕时加 `--asr bcut --allow-remote-asr` 用必剪转录；加 `--extract-slides` 另外用 AutoSlides Extractor 提取幻灯片（会先裁出屏幕区域）。`video-agent tools` 列出会用到的 FFmpeg、ffprobe、yt-dlp 和 AutoSlides Extractor 各在哪里，没找到的写明。识别出的布局画在 `frames/<本次运行>/layout.jpg` 上（绿框是屏幕区域），认错了可以用 `--screen-region X,Y,宽,高` 手动指定。
 
 用网页上的聊天 AI 写总结时，`pack` 打出提示词（加 `--zip 文件.zip` 连画面一起打包，画面保留原来的相对路径），写好后用 `summarize --import 文件.md` 存成 `总结.md`，画面链接照样有效：
 
