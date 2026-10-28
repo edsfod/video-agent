@@ -293,4 +293,6 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.35); }
 #open-settings.has-update::after { content: ''; display: inline-block; width: 7px; height: 7px; margin-left: 5px; border-radius: 50%; background: var(--danger); vertical-align: middle; }
 #update-status { white-space: pre-line; }
 #update-progress { width: 100%; }
-.update-notes { max-height: 180px; overflow: auto; font-size: 13px; background: var(--bg-sidebar); border-radius: 8px; padding: 4px 12px; }
+.update-notes { max-height: 180px; overflow: hidden auto; font-size: 13px; background: var(--bg-sidebar); border-radius: 8px; padding: 4px 12px; }
+/* The notes' long install command wraps instead of widening the box, which only scrolls up and down. */
+.update-notes pre, .update-notes code { white-space: pre-wrap; overflow-wrap: anywhere; }
