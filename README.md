@@ -168,6 +168,14 @@ video-agent config --provider openai --model Qwen/Qwen3.5-397B-A17B --base-url h
 - 必剪转录用的是哔哩哔哩的非官方接口，不在它的公开服务条款保障之内，随时可能失效或受限制。
 - 总结由 AI 生成，可能有错，重要内容请对照原视频核实。
 
+## 交流群
+
+QQ 群：1132547729，用 QQ 扫码也可以加入。问题和建议也可以提 [issue](https://github.com/edsfod/video-agent/issues)。
+
+<p align="center">
+  <img src="docs/images/qq-group.webp" width="240" alt="VideoAgent QQ 群二维码，群号 1132547729" />
+</p>
+
 ## 开发
 
 ```powershell
