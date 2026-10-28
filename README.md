@@ -71,28 +71,19 @@ FFmpeg 和 yt-dlp 会作为依赖一起装上，不需要 git。电脑上已经�
 ## 桌面程序
 
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/images/process-dark.webp" />
-    <img src="docs/images/process-light.webp" width="90%" alt="处理页：抽帧间隔、是否用必剪转录、是否另外用 AutoSlides Extractor 提取幻灯片" />
-  </picture>
+  <img src="docs/images/process-split.webp" width="90%" alt="处理页：抽帧间隔、是否用必剪转录、是否另外用 AutoSlides Extractor 提取幻灯片；左边浅色，右边深色" />
 </p>
 
 添加本地视频（也可以拖进窗口），或在左上角粘贴链接下载。下载 B 站视频前，先在「设置」里登录一次哔哩哔哩，字幕（包括 AI 字幕）会一起下载，处理时直接用，不必转录。在「处理」页开始处理：屏幕页每次都会截取，不需要另装软件；必剪转录和 AutoSlides Extractor 都是默认关闭的选项（没装 AutoSlides Extractor 时这一项是灰的），勾选必剪只对这一次处理生效。
 
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/images/frames-dark.webp" />
-    <img src="docs/images/frames-light.webp" width="90%" alt="画面页：代表画面和补截的画面" />
-  </picture>
+  <img src="docs/images/frames-split.webp" width="90%" alt="画面页：代表画面和补截的画面；左边浅色，右边深色" />
 </p>
 
 「画面」页列出代表画面，可以按时间补截；「字幕」页可以筛选字幕，也可以改正识别错的名字和术语（原始字幕保留，另存整理版，之后的总结都用整理版）；「总结」页选择总结方式并显示结果，点画面链接直接看图。重新总结不会覆盖原来的：已经有总结时，新写的另存为一个版本，在「版本」里查看、对比，自己决定设不设为当前，也可以给每个版本写备注。用网页 AI 写的总结点「导入总结」存回来，被网页 AI 改坏的画面链接会自动修好；网页 AI 发现的错字写在总结最后的「字幕改正」一节，导入时会用来整理字幕。
 
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/images/terminal-dark.webp" />
-    <img src="docs/images/terminal-light.webp" width="90%" alt="终端页：在视频的处理结果文件夹里打开的命令提示符" />
-  </picture>
+  <img src="docs/images/terminal-split.webp" width="90%" alt="终端页：在视频的处理结果文件夹里打开的命令提示符；左边浅色，右边深色" />
 </p>
 
 几个相关的视频可以放进一个「合集」（侧栏「合集」→「新建」，或在视频页点「加入合集」）。合集里的视频列在侧栏合集名下（点 ▸ 展开），不再出现在「视频」列表里，移出合集后回到列表。合集页面列出各集的状态，可以一次处理、总结没做完的几集，跳过没有内容的一集并写明原因，再生成合集总结和学习提纲，也能设置各集共用的术语改正。下载时粘贴的是 B 站合集、播放列表这类链接，会先问你要不要全部下载，默认放进一个以列表命名的合集并跟踪这个列表：以后在合集页点「检查新视频」只下载新出的，也可以让程序开着时每 6 小时自动检查。
