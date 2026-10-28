@@ -105,6 +105,8 @@ test('an update installs silently and the app starts again', { skip: !INSTALLED 
       NO_PROXY: '127.0.0.1,localhost',
     },
   });
+  // Nor may the app: a failure before "重启并安装" leaves it running, and its connection keeps Node alive too.
+  t.after(() => app.close().catch(() => {}));
   const oldPid = app.process().pid;
   const page = await app.firstWindow();
   await page.click('#open-settings');
@@ -115,7 +117,8 @@ test('an update installs silently and the app starts again', { skip: !INSTALLED 
   await page.waitForFunction(() => /已下载并通过校验/.test(document.querySelector('#update-status').textContent), null, { timeout: 300_000 });
   const fetched = bytes();
   step(`downloaded and verified, ${fetched} of ${installer.length} bytes fetched for ${changed} changed`);
-  assert.ok(fetched >= changed && fetched < installer.length / 10,
+  // Somewhat less than the changed blocks may come over the network: a block found elsewhere in the old file is copied.
+  assert.ok(fetched > changed / 2 && fetched < installer.length / 10,
     `differential download fetched ${fetched} of ${installer.length} bytes for ${changed} changed`);
 
   const closed = new Promise((resolve) => app.process().once('exit', resolve));
