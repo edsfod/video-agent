@@ -386,9 +386,39 @@ def test_versions_match():
   root = Path(__file__).resolve().parents[1]
   for name in ('plugin.json', '.claude-plugin/plugin.json', 'gui/package.json'):
     assert json.loads((root / name).read_text(encoding='utf-8'))['version'] == __version__, name
+  lock = json.loads((root / 'gui/package-lock.json').read_text(encoding='utf-8'))
+  assert lock['version'] == lock['packages']['']['version'] == __version__
+  assert f'name = "video-agent"\nversion = "{__version__}"\n' in (root / 'uv.lock').read_text(encoding='utf-8')
+  assert f'\nversion = "{__version__}"\n' in (root / 'pyproject.toml').read_text(encoding='utf-8')
   wheel = f'releases/download/v{__version__}/video_agent-{__version__}-py3-none-any.whl'
   assert (root / 'skills/video-agent/SKILL.md').read_text(encoding='utf-8').count(wheel) == 2
   assert wheel in (root / 'README.md').read_text(encoding='utf-8')
+
+
+def test_bump_version_changes_every_file_or_none(tmp_path):
+  import importlib.util
+  import shutil
+
+  root = Path(__file__).resolve().parents[1]
+  spec = importlib.util.spec_from_file_location('bump_version', root / 'scripts' / 'bump_version.py')
+  script = importlib.util.module_from_spec(spec)
+  spec.loader.exec_module(script)
+  for name in script.CHANGES:
+    (tmp_path / name).parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(root / name, tmp_path / name)
+  old = script.current(tmp_path)
+  readme = (tmp_path / 'README.md').read_text(encoding='utf-8')
+  (tmp_path / 'README.md').write_text(readme.replace(f'v{old}/', 'v0.0.1/'), encoding='utf-8', newline='\n')
+  with pytest.raises(ValueError, match='README.md'):
+    script.bump('9.9.9', tmp_path)
+  assert script.current(tmp_path) == old, 'nothing is written when one file does not match'
+  (tmp_path / 'README.md').write_text(readme, encoding='utf-8', newline='\n')
+  assert script.bump('9.9.9', tmp_path) == (old, list(script.CHANGES))
+  for name in script.CHANGES:
+    before, after = (root / name).read_text(encoding='utf-8'), (tmp_path / name).read_text(encoding='utf-8')
+    assert after.replace('9.9.9', old) == before, name
+  with pytest.raises(ValueError, match='not a version'):
+    script.bump('1.0', tmp_path)
 
 
 def test_video_lock_is_released_when_its_process_is_killed(tmp_path):

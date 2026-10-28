@@ -42,7 +42,7 @@ else
     case "$file" in
       src/* | pyproject.toml | uv.lock | skills/* | .claude-plugin/* | .agents/* | plugin.json)
         why='CLI or skill: all'; cli=true gui=true installer=true ;;
-      tests/*) why='CLI tests: cli'; cli=true ;;
+      tests/* | scripts/*) why='CLI tests or maintenance scripts: cli'; cli=true ;;
       gui/test/installer-path.test.js | gui/test/update-install.test.js)
         why='installer: installer'; installer=true ;;
       gui/*) why='window: gui, installer'; gui=true installer=true ;;
