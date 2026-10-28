@@ -235,12 +235,15 @@ function badge(video) {
   return element('span', { className: 'badge', textContent: '未处理' });
 }
 
+// The window keeps a path as it was added; the CLI, and so a collection, holds it resolved (a short 8.3 name such as
+// RUNNER~1 in %TEMP% comes back long). A video matches a path by either.
+const isVideo = (path, video) => [video?.path, video?.info?.video].some((own) => sameVideo(own, path));
 // A video in a collection is listed under the collection in the sidebar, not here (user decision, 2026-10-28).
-const inCollection = (path) => state.collections.some((item) => item.videos.some((member) => sameVideo(member.video, path)));
+const inCollection = (video) => state.collections.some((item) => item.videos.some((member) => isVideo(member.video, video)));
 
 function renderList() {
   const list = $('video-list');
-  const shown = state.videos.filter((video) => !inCollection(video.path));
+  const shown = state.videos.filter((video) => !inCollection(video));
   list.replaceChildren(
     ...shown.map((video) => {
       const active = state.view === 'video' && video.path === state.current;
@@ -295,7 +298,7 @@ function renderVideo() {
   $('video-path').textContent = video.path;
   $('reveal-folder').disabled = !video.info?.processed;
   // A collection's video is not in the 视频 list, so there is nothing to take it out of.
-  $('remove-video').hidden = inCollection(video.path);
+  $('remove-video').hidden = inCollection(video);
   renderTab();
 }
 
@@ -756,7 +759,6 @@ $('import-dialog').addEventListener('close', async () => {
 
 const collectionArgs = (...args) => ['collection', ...args, '-o', state.settings.workspace];
 const currentCollection = () => state.collections.find((item) => item.name === state.collection) || null;
-const memberOf = (item, path) => item.videos.find((member) => sameVideo(member.video, path));
 
 async function loadCollections() {
   const result = await window.va.cliJson(collectionArgs('list'));
@@ -770,7 +772,7 @@ function renderCollectionList() {
   $('collection-list').replaceChildren(
     ...state.collections.flatMap((item) => {
       const active = state.view === 'collection' && item.name === state.collection;
-      const holdsCurrent = state.view === 'video' && item.videos.some((member) => sameVideo(member.video, state.current));
+      const holdsCurrent = state.view === 'video' && item.videos.some((member) => isVideo(member.video, current()));
       const open = !state.collapsed.has(item.name) && (active || holdsCurrent || state.expanded.has(item.name));
       const caret = element('button', {
         className: 'ghost caret', type: 'button', textContent: open ? '▾' : '▸', title: open ? '收起各集' : '展开各集',
@@ -801,7 +803,7 @@ function renderCollectionList() {
 }
 
 function memberItem(member) {
-  const active = state.view === 'video' && sameVideo(member.video, state.current);
+  const active = state.view === 'video' && isVideo(member.video, current());
   const task = videoTask({ path: member.video });
   const label = task ? null : member.skipped ? '已跳过' : member.summary ? '已总结' : member.processed ? '已处理' : '未处理';
   const item = element('div', { className: 'video-item member-item' + (active ? ' active' : '') }, [
@@ -814,7 +816,7 @@ function memberItem(member) {
 
 // A collection's video opens on its own page; it is kept in the window's list of known videos, hidden from 视频.
 function openMember(path) {
-  const known = state.videos.find((video) => sameVideo(video.path, path));
+  const known = state.videos.find((video) => isVideo(path, video));
   return known ? select(known.path) : addVideos([path]);
 }
 
@@ -872,7 +874,7 @@ async function renderCollection() {
   if (!item.videos.length) {
     $('collection-members').replaceChildren(element('p', { className: 'muted', textContent: '还没有视频。在下面选一个加进来，或在视频页点「加入合集」。' }));
   }
-  const others = state.videos.filter((video) => !memberOf(item, video.path));
+  const others = state.videos.filter((video) => !item.videos.some((member) => isVideo(member.video, video)));
   $('collection-add-choice').replaceChildren(
     element('option', { value: '', textContent: others.length ? '从视频列表选一个…' : '视频列表里没有可加的视频' }),
     ...others.map((video) => element('option', { value: video.path, textContent: baseName(video.path) })),
