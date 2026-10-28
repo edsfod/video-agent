@@ -1,6 +1,6 @@
 {
   "name": "video-agent",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "description": "Summarize any video, local or from a link: prepare its transcript and representative frames with the Video Agent CLI, look at the frames, and write a timestamped summary. Windows only.",
   "author": {
     "name": "edsfod"
