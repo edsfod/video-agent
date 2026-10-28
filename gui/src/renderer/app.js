@@ -1450,12 +1450,32 @@ $('settings').addEventListener('close', async () => {
 const RELEASES_PAGE = 'https://github.com/edsfod/video-agent/releases';
 const megabytes = (bytes) => (bytes / 1048576).toFixed(1);
 
+// 1, 0 or -1 as version a is newer than, the same as or older than b (plain x.y.z numbers).
+function newer(a, b) {
+  const [x, y] = [a, b].map((version) => version.split('.').map(Number));
+  for (let i = 0; i < 3; i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0) ? 1 : -1;
+  return 0;
+}
+
+// 今天 14:33, 昨天 09:05, or 10月27日 14:33.
+function when(iso) {
+  const date = new Date(iso);
+  const time = date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+  const days = Math.round((new Date().setHours(0, 0, 0, 0) - new Date(iso).setHours(0, 0, 0, 0)) / 86400000);
+  return days === 0 ? `今天 ${time}` : days === 1 ? `昨天 ${time}` : `${date.getMonth() + 1}月${date.getDate()}日 ${time}`;
+}
+
 function renderUpdate(update) {
   const current = update.current;
+  const last = update.lastCheck;
+  // What that check found, against the version running now (it may have been installed since).
+  const order = last ? newer(last.version, current) : 0;
+  const found = order > 0 ? `，当时发现新版本 ${last.version}` : order === 0 ? '，没有更新的版本' : '';
+  const lastText = last ? `上次检查更新：${when(last.at)}（经 ${last.source}）${found}。` : '还没有检查过更新。';
   const text = {
-    idle: `当前版本 ${current}。${update.message || ''}`,
+    idle: update.message ? `当前版本 ${current}。${update.message}` : `当前版本 ${current}。${lastText}`,
     checking: '正在检查更新…',
-    latest: `当前版本 ${current}，已经是最新（经 ${update.source} 检查）。`,
+    latest: `当前版本 ${current}。${lastText}`,
     available: `有新版本 ${update.version}，当前是 ${current}。`,
     downloading: `正在经 ${update.source} 下载 ${update.version}：${Math.floor(update.percent || 0)}%` +
       (update.total ? `（${megabytes(update.transferred)} / ${megabytes(update.total)} MB）` : ''),

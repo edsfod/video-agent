@@ -1,8 +1,8 @@
 // End-to-end test of installing an update on an installed build (CI only: set VA_E2E_INSTALLED to its
-// "Video Agent.exe"). The fake feed offers this same installer as 9.9.9, with an old blockmap in which every 40th
-// block differs, so the differential download must fetch those blocks one range at a time (as github.com allows)
-// against the copy the installer left in the cache, and little else; then "重启并安装" must quit the app, run the
-// installer silently and start the app again.
+// "Video Agent.exe"). The fake feed offers this same installer as 9.9.9, with an old blockmap in which two blocks a
+// block apart differ in every 400, so the differential download must fetch them one range per request (as github.com
+// allows), each pair as one range (update-plan.js), against the copy the installer left in the cache, and little else;
+// then "重启并安装" must quit the app, run the installer silently and start the app again.
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -35,6 +35,7 @@ function mainProcesses() {
 // get 501, as github.com and ghfast.top answer, so a client that asks for them falls back to the full download here too.
 function serve(files, counted) {
   let bytes = 0;
+  let requests = 0;
   const server = http.createServer((request, response) => {
     const body = files[request.url.split('?')[0]];
     if (body === undefined) return (response.statusCode = 404), response.end();
@@ -42,6 +43,7 @@ function serve(files, counted) {
       const [start, end] = part.trim().split('-').map(Number);
       return [start, Number.isNaN(end) ? body.length - 1 : end];
     });
+    if (request.url.endsWith(counted) && request.headers.range) requests += 1;
     const send = (chunk) => {
       if (request.url.endsWith(counted)) bytes += chunk.length;
       return chunk;
@@ -56,7 +58,7 @@ function serve(files, counted) {
     response.statusCode = 501;
     return response.end('multiple ranges are not supported');
   });
-  return { server, bytes: () => bytes };
+  return { server, bytes: () => bytes, requests: () => requests };
 }
 
 test('an update installs silently and the app starts again', { skip: !INSTALLED && 'set VA_E2E_INSTALLED', timeout: 600_000 }, async (t) => {
@@ -66,11 +68,15 @@ test('an update installs silently and the app starts again', { skip: !INSTALLED 
   const name = info.path;
   const installer = fs.readFileSync(path.join(DIST, name));
   const blockmap = fs.readFileSync(path.join(DIST, `${name}.blockmap`));
-  // The "old" version: every 40th block changed, scattered as a real update's are.
+  // The "old" version: blocks 7 and 9 of every 400 changed, scattered in pairs as a real update's are.
   const map = JSON.parse(zlib.gunzipSync(blockmap));
   let changed = 0;
+  let pairs = 0;
   for (const file of map.files) {
-    file.checksums = file.checksums.map((sum, i) => (i % 40 === 7 ? (changed += file.sizes[i], `changed${i}`) : sum));
+    file.checksums = file.checksums.map((sum, i) => {
+      if (i % 400 === 7) pairs += 1;
+      return [7, 9].includes(i % 400) ? ((changed += file.sizes[i]), `changed${i}`) : sum;
+    });
   }
   const oldBlockmap = zlib.gzipSync(JSON.stringify(map));
   const text = yaml.dump({ ...info, version: NEW, releaseNotes: '安装测试' }, { lineWidth: -1 });
@@ -84,7 +90,7 @@ test('an update installs silently and the app starts again', { skip: !INSTALLED 
     [`/releases/download/v${NEW}/${name}.blockmap`]: blockmap,
     [`/releases/download/v${current}/${name}.blockmap`]: oldBlockmap,
   };
-  const { server, bytes } = serve(files, name);
+  const { server, bytes, requests } = serve(files, name);
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   // A failure must not leave the server listening, which keeps Node and the CI step running until GitHub's limit.
   t.after(() => (server.closeAllConnections(), server.close()));
@@ -116,7 +122,8 @@ test('an update installs silently and the app starts again', { skip: !INSTALLED 
   step('downloading the update');
   await page.waitForFunction(() => /已下载并通过校验/.test(document.querySelector('#update-status').textContent), null, { timeout: 300_000 });
   const fetched = bytes();
-  step(`downloaded and verified, ${fetched} of ${installer.length} bytes fetched for ${changed} changed`);
+  step(`downloaded and verified, ${fetched} of ${installer.length} bytes for ${changed} changed, ${requests()} requests`);
+  assert.ok(requests() <= pairs, `${requests()} requests for ${pairs} pairs of changed blocks: near blocks share one`);
   // Somewhat less than the changed blocks may come over the network: a block found elsewhere in the old file is copied.
   assert.ok(fetched > changed / 2 && fetched < installer.length / 10,
     `differential download fetched ${fetched} of ${installer.length} bytes for ${changed} changed`);

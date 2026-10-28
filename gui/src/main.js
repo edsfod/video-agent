@@ -635,7 +635,7 @@ if (!app.requestSingleInstanceLock()) {
     fs.mkdirSync(loadSettings().workspace, { recursive: true });
     fs.rmSync(cookiesDir(), { recursive: true, force: true });
     createQueue();
-    updater = createUpdater({ logs, send, settings: loadSettings, running: () => queue.active().length });
+    updater = createUpdater({ logs, send, settings: loadSettings, remember: saveSettings, running: () => queue.active().length });
     registerIpc();
     createTray();
     createWindow();

@@ -10,6 +10,7 @@ const { GenericProvider } = require('electron-updater/out/providers/GenericProvi
 const { Provider, parseUpdateInfo, resolveFiles } = require('electron-updater/out/providers/Provider');
 const { CancellationToken } = require('builder-util-runtime');
 const signature = require('./update-signature');
+const updatePlan = require('./update-plan');
 
 const REPO = 'edsfod/video-agent';
 const RELEASES = `https://github.com/${REPO}/releases`;
@@ -120,8 +121,10 @@ function reason(error) {
   return String(error?.message || error).split('\n')[0].slice(0, 200);
 }
 
-// settings(): the current settings; send(channel, value): to the window; running(): number of running jobs.
-function createUpdater({ logs, send, settings, running }) {
+// settings(): the current settings; remember(changes): saves them; send(channel, value): to the window; running():
+// number of running jobs.
+function createUpdater({ logs, send, settings, remember, running }) {
+  updatePlan.install();
   autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = false;
   autoUpdater.forceDevUpdateConfig = !!process.env.VA_UPDATE_ROOT; // the e2e tests also run the unpackaged app
@@ -135,7 +138,9 @@ function createUpdater({ logs, send, settings, running }) {
   const proxy = process.env.HTTPS_PROXY || process.env.https_proxy || process.env.HTTP_PROXY || process.env.http_proxy;
   if (proxy) autoUpdater.netSession.setProxy({ proxyRules: proxy }).catch(() => {});
 
-  let state = { status: 'idle', current: app.getVersion() };
+  // The last check that got an answer, kept across restarts so the window can say when it was rather than only
+  // "up to date" (user request, 2026-10-28).
+  let state = { status: 'idle', current: app.getVersion(), lastCheck: settings().lastUpdateCheck || null };
   let index = 0; // the source that answered the last check
   let token = null;
   let stall = null;
@@ -175,12 +180,14 @@ function createUpdater({ logs, send, settings, running }) {
         index = i;
         const info = result.updateInfo;
         logs.line('info', `update check via ${source.name}: latest ${info.version}, running ${app.getVersion()}`);
+        const lastCheck = { at: new Date().toISOString(), version: info.version, source: source.name };
+        remember({ lastUpdateCheck: lastCheck });
         return set({
           status: result.isUpdateAvailable ? 'available' : 'latest',
           version: info.version,
           notes: notesText(info.releaseNotes),
           source: source.name,
-          checkedAt: Date.now(),
+          lastCheck,
         });
       } catch (error) {
         failures.push(`${source.name}：${reason(error)}`);
