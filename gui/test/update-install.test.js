@@ -18,6 +18,9 @@ const signature = require('../src/update-signature');
 const INSTALLED = process.env.VA_E2E_INSTALLED;
 const DIST = path.resolve(__dirname, '..', 'dist');
 const NEW = '9.9.9';
+// Progress on stdout, which the CI log shows as it comes, so a step that hangs is seen while it hangs.
+const START = Date.now();
+const step = (text) => console.log(`[update-install ${((Date.now() - START) / 1000).toFixed(1)}s] ${text}`);
 
 function mainProcesses() {
   const script = "Get-CimInstance Win32_Process -Filter \"Name='Video Agent.exe'\" | " +
@@ -86,6 +89,7 @@ test('an update installs silently and the app starts again', { skip: !INSTALLED 
   const cacheCopy = path.join(process.env.LOCALAPPDATA, 'video-agent-gui-updater', 'installer.exe');
   assert.ok(fs.existsSync(cacheCopy), 'the installer keeps a copy of itself for differential downloads');
 
+  step('starting the installed app');
   const app = await electron.launch({
     executablePath: INSTALLED,
     args: [`--user-data=${userData}`],
@@ -100,15 +104,20 @@ test('an update installs silently and the app starts again', { skip: !INSTALLED 
   const oldPid = app.process().pid;
   const page = await app.firstWindow();
   await page.click('#open-settings');
+  step('waiting for the offer of 9.9.9');
   await page.waitForFunction(() => /有新版本 9\.9\.9/.test(document.querySelector('#update-status').textContent), null, { timeout: 60_000 });
   await page.click('#update-download');
+  step('downloading the update');
   await page.waitForFunction(() => /已下载并通过校验/.test(document.querySelector('#update-status').textContent), null, { timeout: 300_000 });
   const fetched = bytes();
+  step(`downloaded and verified, ${fetched} of ${installer.length} bytes fetched`);
   assert.ok(fetched < installer.length / 10, `differential download fetched ${fetched} of ${installer.length} bytes`);
 
   const closed = new Promise((resolve) => app.process().once('exit', resolve));
   await page.click('#update-install');
+  step('installing: waiting for the app to quit');
   await closed;
+  step('waiting for the installer to start the app again');
 
   let started = [];
   for (let i = 0; i < 180 && !started.length; i++) {
@@ -116,6 +125,7 @@ test('an update installs silently and the app starts again', { skip: !INSTALLED 
     started = mainProcesses().filter((item) => item.ProcessId !== oldPid &&
       path.resolve(item.ExecutablePath || '').toLowerCase() === path.resolve(INSTALLED).toLowerCase());
   }
+  step(started.length ? `started again (pid ${started.map((item) => item.ProcessId).join(', ')}); stopping it` : 'not started again');
   // taskkill fails on children that are already exiting ("operation not supported"); only the main process matters.
   for (const item of started) spawnSync('taskkill.exe', ['/PID', String(item.ProcessId), '/T', '/F'], { windowsHide: true });
   assert.ok(started.length, 'the installer started the app again');

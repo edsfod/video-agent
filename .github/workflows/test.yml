@@ -2,6 +2,7 @@ name: test
 
 on:
   push:
+    branches: ['**'] # not tags: a release tag points at a commit that passed CI on its branch
   pull_request:
 
 # A newer push to the same branch replaces a run still going, so a fixed intermediate commit does not report a
@@ -12,12 +13,38 @@ on:
 # Electron and electron-builder downloads, are cached on gui/package-lock.json; the installer job takes FFmpeg from the
 # cache itself and makes its test video with that LGPL build instead of installing another FFmpeg (Claude judgment,
 # 2026-10-28, after the user asked for faster runs).
+#
+# Each job runs only when the push changed something it tests (.github/scripts/changed-jobs.sh): a change to the
+# documentation runs none, the window's code runs gui and installer, the CLI's code runs all three. A skipped job counts
+# as passed, so fast-forwarding main after a passed run still means every needed job passed (Claude judgment,
+# 2026-10-28, after the user asked why every push ran everything).
 concurrency:
   group: test-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest # only reads git history; starts faster than Windows
+    timeout-minutes: 5
+    outputs:
+      cli: ${{ steps.pick.outputs.cli }}
+      gui: ${{ steps.pick.outputs.gui }}
+      installer: ${{ steps.pick.outputs.installer }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - id: pick
+        run: bash .github/scripts/changed-jobs.sh
+        env:
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref_name }}
+          BEFORE: ${{ github.event.before }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+
   cli:
+    needs: changes
+    if: needs.changes.outputs.cli == 'true'
     runs-on: windows-latest # Windows only (ARCHITECTURE.md)
     timeout-minutes: 20
     steps:
@@ -30,6 +57,8 @@ jobs:
       - run: uvx --from . video-agent --help
 
   gui:
+    needs: changes
+    if: needs.changes.outputs.gui == 'true'
     runs-on: windows-latest
     timeout-minutes: 20
     steps:
@@ -53,6 +82,8 @@ jobs:
         working-directory: gui
 
   installer:
+    needs: changes
+    if: needs.changes.outputs.installer == 'true'
     runs-on: windows-latest
     timeout-minutes: 30 # about 5 minutes when FFmpeg comes from the cache; a cold FFmpeg build adds about 15
     steps:

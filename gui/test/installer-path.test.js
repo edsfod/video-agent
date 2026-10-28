@@ -10,6 +10,9 @@ const { execFileSync, spawnSync } = require('node:child_process');
 
 const SETUP = process.env.VA_E2E_SETUP;
 const KEY = 'HKCU\\Software\\Video Agent';
+// Progress on stdout, which the CI log shows as it comes, so a step that hangs is seen while it hangs.
+const START = Date.now();
+const step = (text) => console.log(`[installer-path ${((Date.now() - START) / 1000).toFixed(1)}s] ${text}`);
 
 function run(file, args) {
   const result = spawnSync(file, args, { timeout: 300_000, windowsHide: true });
@@ -27,9 +30,11 @@ const choice = () => spawnSync('reg.exe', ['query', KEY, '/v', 'AddToPath'], { e
 function installAndRemove(expectOnPath) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'va-path-'));
   const before = userPath();
+  step(`installing silently, PATH ${expectOnPath ? 'expected' : 'not expected'}`);
   run(SETUP, ['/S', `/D=${dir}`]);
   assert.equal(onPath(dir), expectOnPath);
   assert.equal(choice(), expectOnPath ? '1' : '0');
+  step('uninstalling');
   run(path.join(dir, 'Uninstall Video Agent.exe'), ['/S', `_?=${dir}`]);
   assert.equal(onPath(dir), false);
   assert.equal(choice(), undefined, 'the uninstaller forgets the choice');
