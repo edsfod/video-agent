@@ -41,7 +41,7 @@ Video Agent 由三部分组成，按需取用：
 **只装命令行工具**：先装 [uv](https://docs.astral.sh/uv/)（`winget install astral-sh.uv`），再运行
 
 ```powershell
-uv tool install https://github.com/edsfod/video-agent/releases/download/v0.8.1/video_agent-0.8.1-py3-none-any.whl
+uv tool install https://github.com/edsfod/video-agent/releases/download/v0.8.2/video_agent-0.8.2-py3-none-any.whl
 ```
 
 FFmpeg 和 yt-dlp 会作为依赖一起装上，不需要 git。电脑上已经有的 ffmpeg、ffprobe、yt-dlp（包括 [Media Downloader](https://github.com/mhogomchungu/media-downloader) 自带的 yt-dlp）会优先使用。
