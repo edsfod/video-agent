@@ -209,6 +209,29 @@ test('another agent writes a summary from standard input or from a task file', a
   await page.waitForSelector('#route-other[hidden]', { state: 'attached' });
 });
 
+test('a version note is edited in a dialog that starts from the note it has', async () => {
+  const listed = () => JSON.parse(cli(['versions', VIDEO, '-o', WORKSPACE, '--json']));
+  const [version] = listed().versions;
+  await page.selectOption('#summary-version-pick', version.file);
+  await page.click('#summary-version-note');
+  await page.waitForSelector('#note-dialog[open]');
+  await page.fill('#note-text', '第一次的备注');
+  await page.press('#note-text', 'Enter');
+  await page.waitForFunction((file) => document.querySelector(`#summary-version-pick option[value="${file}"]`)?.textContent.includes('第一次的备注'), version.file);
+  await page.click('#summary-version-note');
+  assert.equal(await page.inputValue('#note-text'), '第一次的备注');
+  await page.fill('#note-text', '改过的备注');
+  await page.click('#note-dialog button[value=save]');
+  await page.waitForFunction((file) => document.querySelector(`#summary-version-pick option[value="${file}"]`)?.textContent.includes('改过的备注'), version.file);
+  assert.equal(listed().versions.find((entry) => entry.file === version.file).note, '改过的备注');
+  const before = listed().current.note;
+  await page.selectOption('#summary-version-pick', '');
+  await page.click('#summary-version-note');
+  await page.fill('#note-text', '当前这份');
+  await page.click('#note-dialog button[value=cancel]');
+  assert.equal(listed().current.note, before);
+});
+
 test('a folder for a chat AI holds the prompt and pictures within the file limit', async () => {
   await page.check('input[name=route][value=copy]');
   await page.fill('#export-limit', '3');

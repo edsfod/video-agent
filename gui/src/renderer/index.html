@@ -378,6 +378,18 @@
       </form>
     </dialog>
 
+    <dialog id="note-dialog">
+      <form method="dialog" class="settings">
+        <h2>版本备注</h2>
+        <p class="muted small-text">备注跟在版本列表里的时间和来源后面，用来分清各个版本，例如用的模型、要求。留空就去掉备注。</p>
+        <input id="note-text" type="text" spellcheck="false" placeholder="例如：Gemini 2.5 Pro，要求写详细一点" />
+        <div class="row end">
+          <button value="cancel" class="ghost">取消</button>
+          <button value="save" class="primary">保存</button>
+        </div>
+      </form>
+    </dialog>
+
     <dialog id="skill-dialog">
       <div class="logs">
         <header class="row">

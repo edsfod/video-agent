@@ -653,6 +653,7 @@ async function renderSummary(video) {
 const versionLabel = (entry) => [when(entry.created), entry.source, entry.note].filter(Boolean).join(' · ');
 
 function renderVersions(list) {
+  state.versionList = list;
   const others = list.versions;
   $('summary-versions').hidden = !others.length && !list.current?.note;
   $('summary-version-pick').replaceChildren(
@@ -683,14 +684,26 @@ $('summary-version-delete').onclick = async () => {
   state.version = null;
   await refresh(current());
 };
-$('summary-version-note').onclick = async () => {
+// Electron has no window.prompt(), so the note is edited in a dialog of its own, starting from the note it has.
+$('summary-version-note').onclick = () => {
+  const list = state.versionList;
+  const shown = state.version ? list?.versions.find((entry) => entry.file === state.version.file) : list?.current;
+  $('note-text').value = shown?.note || '';
+  $('note-dialog').showModal();
+  $('note-text').select();
+};
+$('note-text').onkeydown = (event) => {
+  if (event.key !== 'Enter' || event.isComposing) return;
+  event.preventDefault();
+  $('note-dialog').close('save');
+};
+$('note-dialog').addEventListener('close', async () => {
+  if ($('note-dialog').returnValue !== 'save') return;
   const file = state.version?.file || '总结.md';
-  const note = prompt('这个版本的备注（例如用的模型、要求）：', '');
-  if (note === null) return;
-  const result = await window.va.cliText(versionArgs('--note', file, note.trim()));
+  const result = await window.va.cliText(versionArgs('--note', file, $('note-text').value.trim()));
   if (result.code !== 0) return alert(`没有保存备注：${(result.err || result.out).trim()}`);
   renderSummary(current());
-};
+});
 
 $('open-summary').onclick = () => current()?.info?.summary && window.va.open(current().info.summary);
 
