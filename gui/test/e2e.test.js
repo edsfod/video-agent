@@ -89,7 +89,8 @@ test('process the video from the window', async () => {
   await page.click('#run-process');
   await page.waitForSelector('#video-list .video-item .badge:text("已处理")', { timeout: 60_000 });
   const facts = await page.textContent('#facts');
-  assert.match(facts, /2 段 · 字幕文件：sample clip \[e2e\]\.srt/);
+  assert.match(facts, /2 段 · 同名字幕文件/); // the file name, long for downloads, only as the card's tooltip
+  assert.equal(await page.getAttribute('#facts .fact:nth-child(2)', 'title'), 'sample clip [e2e].srt');
   assert.match(facts, /布局整个画面是屏幕/);
   await page.waitForSelector('#layout-card:not([hidden]) #layout-image');
   assert.match(await page.textContent('#log-text'), /完成/);
@@ -187,6 +188,14 @@ test('a collection lists its videos and copies the material for its overview', a
   assert.equal(JSON.parse(cli(['collection', 'show', '测试合集', '-o', WORKSPACE])).source.auto, true);
   await page.click('#collection-unfollow');
   await page.waitForSelector('#collection-follow-form:not([hidden])');
+  // A video in a collection is listed under it in the sidebar, not under 视频; taking it out brings it back.
+  assert.equal(await page.$$eval('#video-list .video-item', (all) => all.length), 0);
+  await page.click('#collection-list .member-item');
+  await page.waitForSelector('#video:not([hidden])');
+  assert.equal(await page.isVisible('#collection-list .member-item.active'), true, 'the open video is marked');
+  await page.click('#collection-list .collection-item');
+  await page.click('#collection-members .member button:text("移出")');
+  await page.waitForSelector('#video-list .video-item');
   await page.click('#video-list .video-item');
   await page.waitForSelector('#video:not([hidden])');
 });

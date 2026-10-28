@@ -64,7 +64,7 @@
           <div class="panel" data-panel="process">
             <div class="card">
               <h2>准备材料</h2>
-              <p class="muted">提取字幕、抽取代表画面，自动找出屏幕区域（摄像头和屏幕拼在一起时只看屏幕那块）并截下每一页，写出供总结用的材料。画面上限留空即不限，视频有多少就留多少。原视频不会被修改或移动。</p>
+              <p class="muted">提取字幕、抽取代表画面，自动找出屏幕区域（摄像头和屏幕拼在一起时只看屏幕那块）并截下每一页（屏幕页，每次都做，不需要另装软件），写出供总结用的材料。画面上限留空即不限，视频有多少就留多少。原视频不会被修改或移动。</p>
               <div class="options">
                 <label>抽帧间隔（秒）<input id="opt-interval" type="number" min="1" step="1" /></label>
                 <label>画面上限<input id="opt-max-frames" type="number" min="1" step="1" placeholder="不限" /></label>
@@ -75,7 +75,7 @@
               </label>
               <label class="check">
                 <input id="opt-slides" type="checkbox" />
-                <span>提取 PPT 幻灯片<br /><small class="muted">调用 AutoSlides Extractor，耗时较长；默认关闭。</small></span>
+                <span>另外用 AutoSlides Extractor 提取幻灯片（需自己安装）<br /><small id="opt-slides-note" class="muted">屏幕页总会截取，写总结不需要它；要去重更细、导出课件时再勾。耗时较长。</small></span>
               </label>
               <div class="row">
                 <button id="run-process" class="primary">开始处理</button>

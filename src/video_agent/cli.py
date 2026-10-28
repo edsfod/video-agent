@@ -94,6 +94,11 @@ def build_parser():
   )
   download.add_argument('--auto', action='store_true', help='with --follow: let the window check the list on its own')
 
+  tools = commands.add_parser(
+    'tools', help='the external programs this would use: FFmpeg, ffprobe, yt-dlp and AutoSlides Extractor (null: none)'
+  )
+  tools.add_argument('--json', action='store_true', help='print them as one JSON object')
+
   inspect = commands.add_parser('inspect', help='inspect streams and duration without changing the video')
   inspect.add_argument('video', type=Path)
 
@@ -435,6 +440,26 @@ def _collection(args):
   return 0
 
 
+def _tools():
+  """Where each external program would come from; the window shows which optional ones are missing."""
+  from . import download, media, slide_extractor
+
+  def first(find):
+    try:
+      return find()
+    except (download.DownloadError, slide_extractor.SlideExtractorError, media.MediaError):
+      return None
+
+  yt_dlp = first(download.executable)
+  extractor = first(slide_extractor.find_extractor)
+  return {
+    'ffmpeg': first(lambda: media.tool('ffmpeg')),
+    'ffprobe': first(lambda: media.tool('ffprobe')),
+    'yt_dlp': ' '.join(yt_dlp) if yt_dlp else None,
+    'slide_extractor': str(extractor) if extractor else None,
+  }
+
+
 def _update(args):
   workspace, name = args.output, args.name
   source = collection.load(workspace, name).get('source')
@@ -554,6 +579,15 @@ def run(args):
       collection.add(args.workspace, args.collection, paths)
       print(f'added {len(paths)} videos to collection {args.collection}', file=sys.stderr)
     return 1 if failures else 0
+
+  if args.command == 'tools':
+    found = _tools()
+    if args.json:
+      _emit(found)
+    else:
+      for name, where in found.items():
+        print(f'{name}: {where or "not found"}')
+    return 0
 
   if args.command == 'inspect':
     video, info = probe(args.video)

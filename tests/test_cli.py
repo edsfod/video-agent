@@ -482,3 +482,16 @@ def test_an_existing_collection_can_follow_its_list_later(fake_yt_dlp, tmp_path,
   # The first update has no archive yet, so yt-dlp meets abc again; it stays where it was, xyz comes after it.
   names = [Path(video).name for video in collection.load(workspace, '旧')['videos']]
   assert names == ['Clip [abc].mp4', 'Clip xyz [xyz].mp4']
+
+
+def test_tools_reports_each_program_or_null(monkeypatch, capsys):
+  from video_agent import slide_extractor
+
+  def missing(explicit=None):
+    raise slide_extractor.SlideExtractorError('not found')
+
+  monkeypatch.setattr(slide_extractor, 'find_extractor', missing)
+  assert cli.main(['tools', '--json']) == 0
+  found = json.loads(capsys.readouterr().out)
+  assert set(found) == {'ffmpeg', 'ffprobe', 'yt_dlp', 'slide_extractor'}
+  assert found['ffmpeg'] and found['slide_extractor'] is None

@@ -14,6 +14,9 @@ const state = {
   view: 'video', // or 'collection', with state.collection its name
   collection: null,
   doc: 'overview', // the collection file shown: overview (合集总结) or guide (学习提纲)
+  expanded: new Set(), // collections the user opened with ▸ in the sidebar
+  collapsed: new Set(), // and those closed with ▾ although they hold the page shown
+  tools: null, // `video-agent tools`: where FFmpeg, yt-dlp and AutoSlides Extractor were found (null: not found)
   term: null,
   bilibili: { loggedIn: false }, // { loggedIn, name? }
 };
@@ -232,10 +235,14 @@ function badge(video) {
   return element('span', { className: 'badge', textContent: '未处理' });
 }
 
+// A video in a collection is listed under the collection in the sidebar, not here (user decision, 2026-10-28).
+const inCollection = (path) => state.collections.some((item) => item.videos.some((member) => sameVideo(member.video, path)));
+
 function renderList() {
   const list = $('video-list');
+  const shown = state.videos.filter((video) => !inCollection(video.path));
   list.replaceChildren(
-    ...state.videos.map((video) => {
+    ...shown.map((video) => {
       const active = state.view === 'video' && video.path === state.current;
       const item = element('div', { className: 'video-item' + (active ? ' active' : '') }, [
         element('span', { className: 'name', textContent: baseName(video.path), title: video.path }),
@@ -245,6 +252,10 @@ function renderList() {
       return item;
     }),
   );
+  if (!shown.length && state.videos.length) {
+    list.append(element('p', { className: 'muted small-text list-note', textContent: '视频都在上面的合集里。' }));
+  }
+  renderCollectionList();
 }
 
 async function refresh(video) {
@@ -283,6 +294,8 @@ function renderVideo() {
   $('video-name').textContent = baseName(video.path);
   $('video-path').textContent = video.path;
   $('reveal-folder').disabled = !video.info?.processed;
+  // A collection's video is not in the 视频 list, so there is nothing to take it out of.
+  $('remove-video').hidden = inCollection(video.path);
   renderTab();
 }
 
@@ -310,6 +323,13 @@ for (const button of document.querySelectorAll('#video .tabs button')) {
 
 function renderProcess(video) {
   $('opt-interval').value = state.settings.frameInterval;
+  // The external extractor is offered only where the CLI finds it (state.tools is null until `tools` answered).
+  const extractor = !state.tools || state.tools.slide_extractor;
+  $('opt-slides').disabled = !extractor;
+  if (!extractor) $('opt-slides').checked = false;
+  $('opt-slides-note').textContent = extractor
+    ? '屏幕页总会截取，写总结不需要它；要去重更细、导出课件时再勾。耗时较长。'
+    : '没有找到 AutoSlides Extractor。屏幕页照样会截取；需要它时安装后重新打开本程序。';
   $('opt-max-frames').value = state.settings.maxFrames || '';
   const info = video.info;
   const facts = [];
@@ -326,8 +346,8 @@ function renderProcess(video) {
         'existing-output': '沿用上次的字幕',
         'existing-output-preserved': '沿用上次的字幕',
       };
-      const source = sources[transcript.source] || transcript.source.replace(/^sidecar:/, '字幕文件：').replace(/^embedded:/, '内嵌字幕：');
-      facts.push(['字幕', `${transcript.segments} 段 · ${source}`]);
+      const source = sources[transcript.source] || subtitleSource(transcript.source);
+      facts.push(['字幕', `${transcript.segments} 段 · ${source}`, '', transcript.source.replace(/^sidecar:/, '')]);
       if (transcript.error) facts.push(['字幕问题', transcript.error]);
       if (manifest.layout) facts.push(['布局', LAYOUT_TEXT[manifest.layout.kind] + (manifest.layout.given ? '（手动指定）' : '')]);
       if (manifest.screen_pages) facts.push(['屏幕页', `${manifest.screen_pages.length} 页`]);
@@ -341,13 +361,22 @@ function renderProcess(video) {
   }
   renderLayout(video);
   $('facts').replaceChildren(
-    ...facts.map(([label, value, size]) =>
-      element('div', { className: 'fact' + (size ? ' ' + size : '') }, [
+    ...facts.map(([label, value, size, hint]) =>
+      element('div', { className: 'fact' + (size ? ' ' + size : ''), title: hint || '' }, [
         element('div', { className: 'label', textContent: label }),
         element('div', { className: 'value', textContent: value }),
       ]),
     ),
   );
+}
+
+// A subtitle file beside the video is named <video>.<language>.srt by yt-dlp, or <video>.srt when the user put it there.
+const LANGUAGES = { 'ai-zh': 'B 站 AI 字幕', zh: '中文字幕', 'zh-hans': '中文字幕', 'zh-cn': '中文字幕', 'zh-hant': '繁体中文字幕', en: '英文字幕' };
+function subtitleSource(source) {
+  if (source.startsWith('embedded:')) return `内嵌字幕（${source.slice(9) || '未标语言'}）`;
+  if (!source.startsWith('sidecar:')) return source;
+  const language = /\.([A-Za-z-]+)\.(srt|vtt|ass)$/i.exec(source.slice(8))?.[1]?.toLowerCase();
+  return language ? LANGUAGES[language] || `字幕文件（${language}）` : '同名字幕文件';
 }
 
 // ---------- layout ----------
@@ -732,22 +761,61 @@ const memberOf = (item, path) => item.videos.find((member) => sameVideo(member.v
 async function loadCollections() {
   const result = await window.va.cliJson(collectionArgs('list'));
   state.collections = Array.isArray(result) ? result : [];
-  renderCollectionList();
+  renderList(); // also the collections, with their videos where expanded
   if (state.view === 'collection') renderVideo();
 }
 
+// Each collection, and under it its videos when it is open: on its page, playing one of its videos, or opened with ▸.
 function renderCollectionList() {
   $('collection-list').replaceChildren(
-    ...state.collections.map((item) => {
+    ...state.collections.flatMap((item) => {
       const active = state.view === 'collection' && item.name === state.collection;
-      const row = element('div', { className: 'video-item' + (active ? ' active' : '') }, [
-        element('span', { className: 'name', textContent: item.name, title: item.folder }),
+      const holdsCurrent = state.view === 'video' && item.videos.some((member) => sameVideo(member.video, state.current));
+      const open = !state.collapsed.has(item.name) && (active || holdsCurrent || state.expanded.has(item.name));
+      const caret = element('button', {
+        className: 'ghost caret', type: 'button', textContent: open ? '▾' : '▸', title: open ? '收起各集' : '展开各集',
+      });
+      caret.onclick = (event) => {
+        event.stopPropagation();
+        if (open) {
+          state.expanded.delete(item.name);
+          state.collapsed.add(item.name);
+        } else {
+          state.collapsed.delete(item.name);
+          state.expanded.add(item.name);
+        }
+        renderCollectionList();
+      };
+      const row = element('div', { className: 'video-item collection-item' + (active ? ' active' : '') }, [
+        element('span', { className: 'collection-head' }, [
+          caret,
+          element('span', { className: 'name', textContent: item.name, title: item.folder }),
+        ]),
         element('span', { className: 'badge', textContent: `${item.videos.length} 集` }),
       ]);
-      row.onclick = () => openCollection(item.name);
-      return row;
+      row.onclick = () => (state.collapsed.delete(item.name), openCollection(item.name));
+      if (!open) return [row];
+      return [row, ...item.videos.map((member) => memberItem(member))];
     }),
   );
+}
+
+function memberItem(member) {
+  const active = state.view === 'video' && sameVideo(member.video, state.current);
+  const task = videoTask({ path: member.video });
+  const label = task ? null : member.skipped ? '已跳过' : member.summary ? '已总结' : member.processed ? '已处理' : '未处理';
+  const item = element('div', { className: 'video-item member-item' + (active ? ' active' : '') }, [
+    element('span', { className: 'name', textContent: `${member.index}. ${member.name}`, title: member.video }),
+    task ? badge({ path: member.video }) : element('span', { className: 'badge' + (member.summary ? ' done' : ''), textContent: label }),
+  ]);
+  item.onclick = () => openMember(member.video);
+  return item;
+}
+
+// A collection's video opens on its own page; it is kept in the window's list of known videos, hidden from 视频.
+function openMember(path) {
+  const known = state.videos.find((video) => sameVideo(video.path, path));
+  return known ? select(known.path) : addVideos([path]);
 }
 
 function openCollection(name) {
@@ -787,10 +855,7 @@ async function renderCollection() {
   $('collection-members').replaceChildren(
     ...item.videos.map((member) => {
       const name = element('span', { className: 'name', textContent: member.name, title: member.video });
-      name.onclick = () => {
-        if (!state.videos.some((video) => sameVideo(video.path, member.video))) addVideos([member.video]);
-        else select(state.videos.find((video) => sameVideo(video.path, member.video)).path);
-      };
+      name.onclick = () => openMember(member.video);
       const skip = element('button', { className: 'ghost small', textContent: member.skipped ? '不跳过' : '跳过' });
       skip.onclick = () => (member.skipped ? collectionCommand(['skip', item.name, member.video, '--reason', '']) : askSkip(member));
       const out = element('button', { className: 'ghost small', textContent: '移出', title: '只是移出合集，视频和它的总结都还在' });
@@ -1476,6 +1541,10 @@ async function init() {
   if (state.videos.length) select(state.videos[0].path);
   else renderVideo();
   loadCollections();
+  window.va.cliJson(['tools', '--json']).then((found) => {
+    state.tools = found.error ? null : found;
+    if (state.view === 'video') renderVideo();
+  });
   await Promise.all(state.videos.map(refresh));
 }
 

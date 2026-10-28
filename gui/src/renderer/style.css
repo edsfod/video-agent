@@ -121,6 +121,12 @@ textarea { width: 100%; resize: vertical; }
 .video-item:hover { background: var(--bg-hover); }
 .video-item.active { background: var(--bg-selected); }
 .video-item .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* A collection's videos sit under it, indented; ▸/▾ opens and closes them without leaving the page shown. */
+.collection-head { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.caret { width: 22px; min-width: 22px; height: 22px; padding: 0; font-size: 16px; line-height: 1; flex: none; color: var(--text-muted); border: 0; }
+.member-item { margin-left: 18px; padding: 6px 10px; }
+.member-item .name { font-size: 13px; }
+.list-note { padding: 4px 10px; margin: 0; }
 .badge { font-size: 11px; color: var(--text-muted); }
 .badge.done { color: var(--ok); }
 .badge.busy { color: var(--warn); }
