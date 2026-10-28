@@ -612,6 +612,15 @@ def test_a_folder_keeps_the_chinese_name_and_an_old_one_is_renamed_with_its_link
   assert processor.asset_folder(workspace, video) == folder
 
 
+def _has_svtav1():
+  command = [media.tool('ffmpeg'), '-hide_banner', '-encoders']
+  encoders = subprocess.run(command, capture_output=True, text=True, check=False).stdout
+  return 'libsvtav1' in encoders
+
+
+# CI's cli job runs on the FFmpeg the installer ships, which has SVT-AV1; on a cold cache it falls back to choco's,
+# which has not.
+@pytest.mark.skipif(not _has_svtav1(), reason='this FFmpeg has no SVT-AV1 encoder')
 def test_compress_replaces_the_video_once_and_leaves_efficient_ones(sample_video, tmp_path, capsys):
   from video_agent import compress
 
@@ -629,3 +638,4 @@ def test_compress_replaces_the_video_once_and_leaves_efficient_ones(sample_video
   assert cli.main(['compress', str(video), '--json']) == 0
   assert json.loads(capsys.readouterr().out)['skipped'] == 'already compressed by Video Agent'
   assert not [path for path in tmp_path.iterdir() if '.part' in path.name]
+  assert compress.skip_reason({'streams': [{'codec_type': 'video', 'codec_name': 'hevc'}]}).startswith('already HEVC')
