@@ -45,6 +45,13 @@ async function signedInfo(provider, ymlUrl, sigUrl, headers) {
 
 // github.com or a mirror in front of it: `url` is a releases root, such as https://github.com/<repo>/releases.
 class ReleaseProvider extends GenericProvider {
+  // One byte range per request. github.com and ghfast.top answer a request for several ranges with 501, and
+  // electron-updater then downloads the whole installer instead of the changed blocks (0.4.0 and 0.5.0 fetched about
+  // 157 MB where 9 MB had changed); its own GitHub provider turns this off for the same reason.
+  constructor(configuration, updater, runtimeOptions) {
+    super(configuration, updater, { ...runtimeOptions, isUseMultipleRangeRequest: false });
+  }
+
   async getLatestVersion() {
     const root = this.configuration.url.replace(/\/+$/, '');
     const latest = `${root}/latest/download/`;
