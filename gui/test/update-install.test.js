@@ -10,7 +10,7 @@ const fs = require('node:fs');
 const http = require('node:http');
 const os = require('node:os');
 const path = require('node:path');
-const { execFileSync } = require('node:child_process');
+const { execFileSync, spawnSync } = require('node:child_process');
 const yaml = require('js-yaml');
 const { _electron: electron } = require('playwright-core');
 const signature = require('../src/update-signature');
@@ -59,7 +59,7 @@ function serve(files, counted) {
   return { server, bytes: () => bytes };
 }
 
-test('an update installs silently and the app starts again', { skip: !INSTALLED && 'set VA_E2E_INSTALLED', timeout: 600_000 }, async () => {
+test('an update installs silently and the app starts again', { skip: !INSTALLED && 'set VA_E2E_INSTALLED', timeout: 600_000 }, async (t) => {
   const { privateKey, publicKey } = crypto.generateKeyPairSync('ed25519');
   const info = yaml.load(fs.readFileSync(path.join(DIST, 'latest.yml'), 'utf8'));
   const current = info.version;
@@ -79,6 +79,8 @@ test('an update installs silently and the app starts again', { skip: !INSTALLED 
   };
   const { server, bytes } = serve(files, name);
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  // A failure must not leave the server listening, which keeps Node and the CI step running until GitHub's limit.
+  t.after(() => (server.closeAllConnections(), server.close()));
   const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'va-update-install-'));
   fs.writeFileSync(path.join(userData, 'settings.json'), JSON.stringify({ workspace: path.join(userData, 'workspace'), videos: [] }));
   const cacheCopy = path.join(process.env.LOCALAPPDATA, 'video-agent-gui-updater', 'installer.exe');
@@ -114,8 +116,8 @@ test('an update installs silently and the app starts again', { skip: !INSTALLED 
     started = mainProcesses().filter((item) => item.ProcessId !== oldPid &&
       path.resolve(item.ExecutablePath || '').toLowerCase() === path.resolve(INSTALLED).toLowerCase());
   }
-  for (const item of started) execFileSync('taskkill.exe', ['/PID', String(item.ProcessId), '/T', '/F']);
-  server.close();
+  // taskkill fails on children that are already exiting ("operation not supported"); only the main process matters.
+  for (const item of started) spawnSync('taskkill.exe', ['/PID', String(item.ProcessId), '/T', '/F'], { windowsHide: true });
   assert.ok(started.length, 'the installer started the app again');
 
   const log = fs.readFileSync(path.join(userData, 'logs', 'main.log'), 'utf8');

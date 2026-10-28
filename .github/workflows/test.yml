@@ -19,6 +19,7 @@ concurrency:
 jobs:
   cli:
     runs-on: windows-latest # Windows only (ARCHITECTURE.md)
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v10.3.0 # publishes no major-version tag
@@ -30,6 +31,7 @@ jobs:
 
   gui:
     runs-on: windows-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v10.3.0
@@ -52,6 +54,7 @@ jobs:
 
   installer:
     runs-on: windows-latest
+    timeout-minutes: 30 # about 5 minutes when FFmpeg comes from the cache; a cold FFmpeg build adds about 15
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/ffmpeg
@@ -91,6 +94,7 @@ jobs:
           if ($process.ExitCode) { exit $process.ExitCode }
       - run: node --test test/update-install.test.js
         working-directory: gui
+        timeout-minutes: 8 # normally under a minute; a hang fails here instead of at GitHub's 6-hour limit
         env:
           VA_E2E_INSTALLED: ${{ runner.temp }}\va-inst\Video Agent.exe
       - uses: actions/upload-artifact@v7

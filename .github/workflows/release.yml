@@ -19,6 +19,7 @@ jobs:
   release:
     needs: ffmpeg
     runs-on: windows-latest
+    timeout-minutes: 30
     defaults:
       run:
         shell: bash
