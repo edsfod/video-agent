@@ -19,6 +19,8 @@ QQ 群：1132547729，用 QQ 扫码也可以加入。问题和建议也可以提
   <img src="docs/images/qq-group.webp" width="240" alt="VideoAgent QQ 群二维码，群号 1132547729" />
 </p>
 
+## 简介
+
 <p align="center">
   <img src="docs/images/summary-split.webp" width="90%" alt="总结页：选择总结方式，下方是生成的总结；左边浅色，右边深色" />
 </p>
