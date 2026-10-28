@@ -24,10 +24,11 @@ Video Agent 由三部分组成，按需取用：
 
 ## 能做什么
 
-- **任何来源的视频**：直接选本地文件；也可以粘贴链接，用 [yt-dlp](https://github.com/yt-dlp/yt-dlp) 下载。桌面程序默认下载完自动处理（左上角可以关掉）；命令行里下载和处理是两步。
-- **字幕优先**：先用视频自带的字幕或同名的 `.srt`、`.vtt` 文件（包括下载时一起存下的 `视频名.zh-CN.srt` 这类字幕）；都没有时，可以用必剪（B 站的语音识别）转录，但每次都要你明确同意上传音频。
-- **屏幕页和代表画面**：自动识别画面布局，摄像头和屏幕拼在一起时只看屏幕那块，用原始分辨率截下每一页幻灯片、代码和文档（多少页就留多少页）；另外按时间间隔和场景变化抽取整幅画面。写总结时还可以按时间补截。
-- **另外用 AutoSlides Extractor 提取幻灯片（可选，默认关闭，需自己安装）**：写总结用上面的屏幕页就够了；要更细的去重、导出课件时，可以再调用 [AutoSlides Extractor](https://github.com/bit-admin/AutoSlides-Extractor)。
+- **任何来源的视频**：直接选本地文件；也可以粘贴链接，用 [yt-dlp](https://github.com/yt-dlp/yt-dlp) 下载。桌面程序默认下载或添加后自动处理（左上角可以关掉）；命令行里下载和处理是两步。
+- **字幕优先**：先用视频自带的字幕或同名的 `.srt`、`.vtt` 文件（包括下载时一起存下的 `视频名.zh-CN.srt` 这类字幕），名字不同的字幕文件可以手动导入；都没有时，可以用必剪（B 站的语音识别）转录。桌面程序对下载的视频默认用必剪（可以关），本地添加的视频会先问你。
+- **屏幕页和代表画面**：自动识别画面布局，摄像头和屏幕拼在一起时只看屏幕那块，用原始分辨率截下每一页幻灯片、代码和文档（多少页就留多少页）；同一页逐行出现的几步合成一页，留最完整的那张；另外按时间间隔和场景变化抽取整幅画面。写总结时还可以按时间补截，网页 AI 写的「补截」链接在导入时自动截图。
+- **课件**：可以导入一个放着课件图片的文件夹，有时间表的按时间表、没有的按画面对上时间，之后用它代替截下的屏幕页；[AutoSlides](https://github.com/bit-admin/Yanhekt-AutoSlides) 下载的屏幕录像（`screen_….mp4`）会自动用上它旁边的 `slides_…` 文件夹。也可以另外调用 [AutoSlides Extractor](https://github.com/bit-admin/AutoSlides-Extractor) 提取（可选，默认关闭，需自己安装）。
+- **压缩**：用 AV1 重新编码，分辨率不变、看不出画质差别，屏幕录像大约剩五分之一。默认只压缩本程序下载的视频；本地添加的视频要你在设置里同意后才压缩，因为会替换原文件。
 - **四种总结方式**，写出的总结用同一套规则和模板：
   - Claude Code 或 Codex 按插件里的 skill 写，会自己补截画面；也可以在设置里换成 pi、Hermes Agent、DeepSeek Harness 或你自己填的命令行 Agent；
   - 模型 API（Anthropic，或 OpenAI 兼容接口，例如 ModelScope、本地 Ollama），支持工具调用的模型同样会补截画面；
@@ -41,7 +42,7 @@ Video Agent 由三部分组成，按需取用：
 **只装命令行工具**：先装 [uv](https://docs.astral.sh/uv/)（`winget install astral-sh.uv`），再运行
 
 ```powershell
-uv tool install https://github.com/edsfod/video-agent/releases/download/v0.8.3/video_agent-0.8.3-py3-none-any.whl
+uv tool install https://github.com/edsfod/video-agent/releases/download/v0.9.0/video_agent-0.9.0-py3-none-any.whl
 ```
 
 FFmpeg 和 yt-dlp 会作为依赖一起装上，不需要 git。电脑上已经有的 ffmpeg、ffprobe、yt-dlp（包括 [Media Downloader](https://github.com/mhogomchungu/media-downloader) 自带的 yt-dlp）会优先使用。
@@ -109,7 +110,7 @@ video-agent summarize "D:\Videos\lecture.mp4" -o D:\Video-Work
 
 `download` 会把网站提供的字幕存在视频旁边（不要字幕加 `--no-subs`），`process` 会自动用上；有多份时先用人工字幕、中文优先，最后才是 AI 字幕。B 站只给登录的账号看字幕：命令行用 `--cookies cookies.txt` 传入登录状态（Netscape 格式）。浏览器正开着时 yt-dlp 读不到它的 cookie，而且新版 Edge、Chrome 加密的 cookie yt-dlp 也解不开，所以桌面程序里改用自带的 B 站登录窗口。
 
-`process` 在工作区里为每个视频建一个文件夹，放字幕（`transcript.srt`、`transcript.txt`）、代表画面（`frames/`）、总结材料（`summary-context.md`）和 `manifest.json`，原视频不会被修改或移动。没有字幕时加 `--asr bcut --allow-remote-asr` 用必剪转录；加 `--extract-slides` 另外用 AutoSlides Extractor 提取幻灯片（会先裁出屏幕区域）。`video-agent tools` 列出会用到的 FFmpeg、ffprobe、yt-dlp 和 AutoSlides Extractor 各在哪里，没找到的写明。识别出的布局画在 `frames/<本次运行>/layout.jpg` 上（绿框是屏幕区域），认错了可以用 `--screen-region X,Y,宽,高` 手动指定。
+`process` 在工作区里为每个视频建一个文件夹，放字幕（`transcript.srt`、`transcript.txt`）、代表画面（`frames/`）、总结材料（`summary-context.md`）和 `manifest.json`，原视频不会被修改或移动。没有字幕时加 `--asr bcut --allow-remote-asr` 用必剪转录；`--subtitles 文件` 用指定的字幕文件；`--slides 文件夹` 导入课件图片；加 `--extract-slides` 另外用 AutoSlides Extractor 提取幻灯片（会先裁出屏幕区域）。`video-agent compress 视频` 用 AV1 原地压缩视频（会替换原文件，替换前核对时长；已经是 AV1、HEVC 的跳过）。`video-agent tools` 列出会用到的 FFmpeg、ffprobe、yt-dlp 和 AutoSlides Extractor 各在哪里，没找到的写明。识别出的布局画在 `frames/<本次运行>/layout.jpg` 上（绿框是屏幕区域），认错了可以用 `--screen-region X,Y,宽,高` 手动指定。
 
 用网页上的聊天 AI 写总结时，`pack` 打出提示词（加 `--zip 文件.zip` 连画面一起打包，画面保留原来的相对路径），写好后用 `summarize --import 文件.md` 存成 `总结.md`，画面链接照样有效：
 
@@ -154,7 +155,7 @@ video-agent config --provider openai --model Qwen/Qwen3.5-397B-A17B --base-url h
 
 ## 隐私
 
-- 必剪转录会把视频的音轨上传到哔哩哔哩，用的是必剪的非官方接口，随时可能失效。只有你明确同意时才会上传：命令行要同时加 `--asr bcut --allow-remote-asr`，桌面程序要勾选，Agent 要先问过你。
+- 必剪转录会把视频的音轨上传到哔哩哔哩，用的是必剪的非官方接口，随时可能失效。命令行要同时加 `--asr bcut --allow-remote-asr` 才会上传；桌面程序里「没有字幕时用必剪转录」默认勾选，对下载的视频生效，本地添加的视频没有字幕时会先问你；Agent 要先问过你。
 - 用模型 API 总结时，字幕和画面会发给你设置的服务商；用 Claude Code、Codex 时，由它们按各自的规则处理。设置里选的其他 Agent 以你的身份运行命令，不像 Codex 那样限制在工作区里。
 - 日志不记录 API key。
 - 哔哩哔哩登录：在桌面程序里登录后，登录状态（cookie）只存在本机，安装版用 Windows 的 DPAPI 加密保存。只在下载 B 站视频时临时导出给 yt-dlp、发给 B 站，下载结束就删掉导出的文件；在设置里可以退出登录。

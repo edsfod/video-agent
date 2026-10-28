@@ -84,6 +84,8 @@ video-agent process VIDEO... [OPTIONS]
 | `--asr {none,bcut}` | `none` | Speech-recognition provider used only when no sidecar or embedded subtitles are available. |
 | `--allow-remote-asr` | Off | Explicitly permits sending extracted audio to Bilibili BCut. Valid only with `--asr bcut`. |
 | `--overwrite-transcript` | Off | Re-acquire transcript data even when `transcript.srt` already exists. If refresh fails, the prior transcript is kept and the run is marked incomplete. |
+| `--subtitles FILE` | None | Use this SRT or WebVTT file as the transcript, whatever its name; replaces an existing transcript. One video only. |
+| `--slides FOLDER` | None | Take the slide images (PNG, JPEG) in this folder: AutoSlides' `timeline.json` gives their times, otherwise each takes the time of the screen page it looks like. A `screen_<name>` video takes the `slides_<name>` folder AutoSlides keeps beside it without this option. One video only. |
 
 #### Subtitle and upload behavior
 
@@ -111,6 +113,14 @@ The CLI searches `PATH`, `AUTOSLIDES_EXTRACTOR`, and standard Windows install lo
 video-agent process "D:\Videos\lecture.mp4" `
   --extract-slides --slide-extractor "C:\Program Files (x86)\AutoSlides Extractor\AutoSlidesExtractor.exe"
 ```
+
+### `compress`
+
+```powershell
+video-agent compress VIDEO... [--json]
+```
+
+Re-encodes each video in place with SVT-AV1 (CRF 40) at its source resolution; a picture that hardly moves (a screen recording) goes to 10 frames a second. Audio that is AAC at 96 kbps or less is copied, other audio becomes AAC at 64 kbps; subtitles and metadata are kept. The new file replaces the old one only when its duration matches within a second and it is smaller. Videos already in AV1, HEVC or VP9, and videos this command compressed before (a tag in the file), are left alone. Needs an FFmpeg with `libsvtav1`, as the desktop installer's has.
 
 ### `frame`
 
