@@ -273,6 +273,8 @@ async function refresh(video) {
   }
   renderList();
   if (video.path === state.current) renderVideo();
+  // Its line under the collection comes from `collection list`: an import or a version change shows there too.
+  if (inCollection(video)) await loadCollections();
 }
 
 async function select(path) {
