@@ -10,6 +10,7 @@ import hashlib
 import json
 import math
 import re
+import shutil
 import tempfile
 import zipfile
 from importlib import resources
@@ -156,10 +157,11 @@ SHEET_SIDES = (1, 2, 3)  # pages per row on a contact sheet; 1 sends each page a
 MIN_FRAMES = 8  # representative frames kept beside the pages, for the speaker and the room
 
 
-def evidence_images(asset, manifest, budget, work_dir):
-  """(label, file) pairs within `budget` images: every screen page, alone or on 2x2 or 3x3 contact sheets when
-  there are too many, then representative and extra frames in the room left (at least MIN_FRAMES where there are).
-  Pages are dropped, evenly, only when even 3x3 sheets do not fit. Returns the pairs and the number of pages left out."""
+def _evidence_plan(asset, manifest, budget, work_dir):
+  """What goes into `budget` images: every screen page, alone or on 2x2 or 3x3 contact sheets when there are too
+  many, then representative and extra frames in the room left (at least MIN_FRAMES where there are). Pages are
+  dropped, evenly, only when even 3x3 sheets do not fit. Returns ('page' | 'sheet' | 'frame', file, [(second,
+  relative)]) per image, pages per row, and the number of pages left out."""
   pages = [(item['time_s'], item['path']) for item in manifest.get('screen_pages') or []]
   frames = _evidence_frames(asset, manifest, 10**6)
   room = max(1, budget - min(len(frames), MIN_FRAMES))
@@ -170,20 +172,34 @@ def evidence_images(asset, manifest, budget, work_dir):
     dropped = len(pages) - room * per
     step = len(pages) / (room * per)
     pages = [pages[int(index * step)] for index in range(room * per)]
-  images = []
+  plan = []
   if side == 1:
-    images = [(f'Screen page at {_clock(second)}, file {relative}:', asset / relative) for second, relative in pages]
+    plan = [('page', asset / relative, [(second, relative)]) for second, relative in pages]
   elif pages:
     for index, sheet in enumerate(media.sheets([asset / relative for _, relative in pages], side, work_dir)):
-      group = pages[index * per : (index + 1) * per]
-      listing = '; '.join(f'{_clock(second)} {relative}' for second, relative in group)
-      first, last = index * per + 1, index * per + len(group)
-      label = f'Screen pages {first}-{last} on one sheet, {side} per row, left to right then top to bottom: {listing}'
-      images.append((label, sheet))
-  left = max(0, budget - len(images))
+      plan.append(('sheet', sheet, pages[index * per : (index + 1) * per]))
+  left = max(0, budget - len(plan))
   if len(frames) > left:
     frames = [frames[int(index * len(frames) / left)] for index in range(left)] if left else []
-  images += [(f'Frame at {_clock(second)}, file {relative}:', asset / relative) for second, relative in frames]
+  plan += [('frame', asset / relative, [(second, relative)]) for second, relative in frames]
+  return plan, side, dropped
+
+
+def evidence_images(asset, manifest, budget, work_dir):
+  """(label, file) pairs within `budget` images, as `_evidence_plan` chooses them, and the number of pages left out."""
+  plan, side, dropped = _evidence_plan(asset, manifest, budget, work_dir)
+  images = []
+  first = 1
+  for kind, path, shown in plan:
+    if kind == 'sheet':
+      listing = '; '.join(f'{_clock(second)} {relative}' for second, relative in shown)
+      last = first + len(shown) - 1
+      label = f'Screen pages {first}-{last} on one sheet, {side} per row, left to right then top to bottom: {listing}'
+      first = last + 1
+    else:
+      ((second, relative),) = shown
+      label = f'{"Screen page" if kind == "page" else "Frame"} at {_clock(second)}, file {relative}:'
+    images.append((label, path))
   return images, dropped
 
 
@@ -483,11 +499,40 @@ PROMPT_NAME = '提示词.md'
 SHEET_FOLDER = '总图'
 
 
-def material(video, workspace, *, request='', max_images=40, work_dir=None):
+PICTURE_KINDS = {'page': '屏幕页', 'sheet': '屏幕页总图', 'frame': '画面'}
+
+
+def _numbered_pictures(asset, manifest, budget, work_dir):
+  """At most `budget` pictures with numbered names, for a chat AI that takes a limited number of files, and the note
+  that says which frames each one shows and which paths to link."""
+  plan, side, dropped = _evidence_plan(asset, manifest, budget, work_dir)
+  entries, lines = [], []
+  for number, (kind, path, shown) in enumerate(plan, 1):
+    name = f'{number:03d}-{PICTURE_KINDS[kind]}-{_clock(shown[0][0]).replace(":", "-")}.jpg'
+    entries.append((name, path))
+    lines.append(f'- {name}：' + '、'.join(f'{_clock(second)} {relative}' for second, relative in shown))
+  pages = sum(len(shown) for kind, _, shown in plan if kind != 'frame')
+  frames = sum(kind == 'frame' for kind, _, _ in plan)
+  sheets = ''
+  if side > 1:
+    count = sum(kind == 'sheet' for kind, _, _ in plan)
+    sheets = f'，拼在 {count} 张总图里（每张 {side}×{side} 页，从左到右、从上到下）'
+  note = (
+    f'我附上了 {len(entries)} 张图片：这个视频的 {pages} 张屏幕页（幻灯片、代码、文档）{sheets}，和 {frames} 张整幅画面。'
+    '上传后的文件名不是总结里要用的路径：下表左边是图片的文件名，右边是它显示的画面的时间和路径（总图按顺序列出'
+    '每一页）。写总结时链接右边的路径，链接到画面所在的那一页；没有出现在表里的画面不要链接。'
+  )
+  if dropped:
+    note += f'屏幕页太多，有 {dropped} 页没有附上，材料里提到它们时你看不到。'
+  return entries, note + '\n\n' + '\n'.join(lines)
+
+
+def material(video, workspace, *, request='', max_images=40, work_dir=None, max_files=None):
   """The prompt for a chat AI: rules, template and the evidence. With `work_dir`, also the files that go along as
   (path in the zip, file): every screen page and up to `max_images` other frames, at their paths in the video's folder
   (so links written from the evidence still work once the summary is imported there), and 2x2 contact sheets of the
-  pages in SHEET_FOLDER for chat AIs that take few images."""
+  pages in SHEET_FOLDER for chat AIs that take few images. With `max_files` as well, at most that many files with the
+  prompt: numbered pictures in one folder, as `_numbered_pictures` chooses them."""
   video, info, asset, manifest = _processed(video, workspace)
   pages = [(item['time_s'], item['path']) for item in manifest.get('screen_pages') or []]
   frames = _evidence_frames(asset, manifest, max_images)
@@ -500,6 +545,9 @@ def material(video, workspace, *, request='', max_images=40, work_dir=None):
   )
   if work_dir is None:
     notes.append('这次没有附上画面，材料里列出的屏幕页和画面你看不到：不要描述画面内容，也不要链接画面。')
+  elif max_files:
+    entries, note = _numbered_pictures(asset, manifest, max_files - 1, Path(work_dir))
+    notes.append(note)
   else:
     entries = [(relative, asset / relative) for _, relative in pages + frames]
     notes.append(
@@ -551,6 +599,32 @@ def pack(video, workspace, target, *, request='', max_images=40):
     files.replace(temporary, target)
   finally:
     temporary.unlink(missing_ok=True)
+  return target, len(entries)
+
+
+def pack_folder(video, workspace, parent, *, request='', max_files=50):
+  """Writes a new folder in `parent` with 提示词.md and numbered pictures, `max_files` files in all, for chat AIs that
+  take files one by one up to a limit and no zip. Returns the folder and the number of pictures in it."""
+  if max_files < 2:
+    raise SummaryError('a folder for a chat AI needs room for the prompt and at least one picture')
+  parent = Path(parent)
+  name = f'{video_name(Path(video))}-材料'
+  target = parent / name
+  number = 2
+  while target.exists():
+    target = parent / f'{name} ({number})'
+    number += 1
+  with tempfile.TemporaryDirectory(prefix='video-agent-') as work_dir:
+    text, entries = material(video, workspace, request=request, work_dir=work_dir, max_files=max_files)
+    temporary = files.temporary_beside(target)
+    try:
+      temporary.mkdir(parents=True)
+      files.write_text(temporary / PROMPT_NAME, text)
+      for picture, path in entries:
+        shutil.copyfile(path, temporary / picture)
+      temporary.rename(target)
+    finally:
+      shutil.rmtree(temporary, ignore_errors=True)
   return target, len(entries)
 
 

@@ -161,6 +161,73 @@ test('copy material puts the rules and transcript on the clipboard', async () =>
   assert.match(copied, /我们看看这张图表/);
 });
 
+// Stands in for pi, Hermes Agent and the like: the task comes on standard input, or in the file its command line
+// names where the command has {prompt}; it saves a summary the way the task says.
+const FAKE_AGENT = `
+const fs = require('node:fs');
+const path = require('node:path');
+const { execFileSync } = require('node:child_process');
+const file = /读 (.+) 并完成里面的任务/.exec(process.argv.slice(2).join(' '))?.[1];
+const task = file ? fs.readFileSync(file, 'utf8') : fs.readFileSync(0, 'utf8');
+const video = /总结这个视频：(.+)/.exec(task)[1].trim();
+const workspace = /工作区是 (.+?)，/.exec(task)[1];
+const draft = path.join(workspace, 'draft.md');
+fs.writeFileSync(draft, '# 别的 Agent 写的\\n\\n## 概要\\n\\n这是另一个 Agent 按 skill 写的测试总结，任务来自' + (file ? '文件' : '标准输入') + '。\\n');
+execFileSync('video-agent', ['summarize', video, '-o', workspace, '--import', draft, '--source', /--source "([^"]+)"/.exec(task)[1]]);
+fs.rmSync(draft);
+`;
+
+test('another agent writes a summary from standard input or from a task file', async () => {
+  const script = path.join(ROOT, 'fake-agent.js');
+  fs.writeFileSync(script, FAKE_AGENT);
+  const versions = () => JSON.parse(cli(['versions', VIDEO, '-o', WORKSPACE, '--json'])).versions;
+  for (const [command, from] of [[`"${process.execPath}" "${script}"`, '标准输入'], [`"${process.execPath}" "${script}" {prompt}`, '文件']]) {
+    await page.click('#open-settings');
+    await page.waitForSelector('#settings[open]');
+    await page.selectOption('#set-agent', 'custom');
+    await page.fill('#set-agent-command', command);
+    await page.click('#save-settings');
+    await page.click('.tabs button[data-tab=summary]');
+    await page.waitForSelector('#route-other:not([hidden]) #route-other-name:text("node")');
+    await page.check('input[name=route][value=other]');
+    await page.click('#run-summary');
+    let found;
+    for (let i = 0; i < 120 && !found; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      found = versions().find((version) => fs.readFileSync(version.path, 'utf8').includes(`任务来自${from}`));
+    }
+    if (!found) {
+      const logs = path.join(ROOT, 'gui-data', 'logs', 'jobs');
+      const [last] = fs.readdirSync(logs).map((name) => path.join(logs, name)).sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs);
+      assert.fail(`no version written from the task on ${from}; the job's log:\n${last && fs.readFileSync(last, 'utf8').slice(-1500)}`);
+    }
+    assert.equal(found.source, 'node');
+  }
+  await page.click('#open-settings');
+  await page.selectOption('#set-agent', '');
+  await page.click('#save-settings');
+  await page.waitForSelector('#route-other[hidden]', { state: 'attached' });
+});
+
+test('a folder for a chat AI holds the prompt and pictures within the file limit', async () => {
+  await page.check('input[name=route][value=copy]');
+  await page.fill('#export-limit', '3');
+  const parent = path.join(ROOT, 'exports');
+  fs.mkdirSync(parent);
+  await app.evaluate(({ dialog, shell }, folder) => {
+    const [open, reveal] = [dialog.showOpenDialog, shell.showItemInFolder];
+    globalThis.vaRestoreDialogs = () => Object.assign(dialog, { showOpenDialog: open }) && Object.assign(shell, { showItemInFolder: reveal });
+    dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [folder] });
+    shell.showItemInFolder = () => {}; // no Explorer window
+  }, parent);
+  await page.click('#export-folder');
+  await page.waitForFunction(() => document.querySelector('#summary-state').textContent.includes('已导出到'));
+  await app.evaluate(() => globalThis.vaRestoreDialogs());
+  const [folder] = fs.readdirSync(parent);
+  assert.equal(fs.readdirSync(path.join(parent, folder)).length, 3);
+  assert.ok(fs.existsSync(path.join(parent, folder, '提示词.md')));
+});
+
 test('a collection lists its videos and copies the material for its overview', async () => {
   await page.click('#new-collection');
   await page.fill('#collection-dialog-name', '测试合集');

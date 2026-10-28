@@ -577,15 +577,25 @@ const ROUTE_NOTES = {
   claude: '在后台运行 Claude Code，按 video-agent skill 写总结，会按需补截画面。使用你的 Claude 订阅。',
   codex: '在后台运行 Codex，按同一份 skill 写总结。使用你的 Codex 订阅。',
   api: '用设置里的模型 API 写总结（字幕和画面会发给该服务商）。支持工具调用的模型会按需补截画面。',
-  copy: '把规则、模板和字幕材料复制到剪贴板，贴进任何聊天 AI；要连画面一起给，用「导出 zip」，把里面的提示词和图片交给它。写好后用「导入总结」存回来，画面链接照样能点开。',
+  copy: '把规则、模板和字幕材料复制到剪贴板，贴进任何聊天 AI。要连画面一起给，用「导出 zip」；不收 zip、文件数有上限的（如 DeepSeek 网页版最多 50 个），用「导出文件夹」，屏幕页会拼成总图凑进上限。写好后用「导入总结」存回来，画面链接照样能点开。',
 };
 
+// The route's name in task titles; another agent goes by the name the settings give it.
+const routeName = (route) => ({ api: '模型 API', claude: 'Claude Code', codex: 'Codex', other: state.env.other?.name })[route];
+const routeMissing = (route) =>
+  (route === 'claude' && !state.env.claude) || (route === 'codex' && !state.env.codex) || (route === 'other' && !state.env.other?.found);
+
 function renderRoutes() {
+  const other = state.env.other;
+  $('route-other').hidden = !other;
+  $('route-other-name').textContent = other?.name || '';
+  ROUTE_NOTES.other = other ? `在后台运行 ${other.name}，按同一份 skill 写总结。它以你的身份运行命令，不限于工作区。` : '';
+  if (state.route === 'other' && !other) state.route = 'api';
   for (const input of document.querySelectorAll('input[name=route]')) {
-    const missing = (input.value === 'claude' && !state.env.claude) || (input.value === 'codex' && !state.env.codex);
+    const missing = routeMissing(input.value);
     input.disabled = missing;
     input.parentElement.classList.toggle('unavailable', missing);
-    input.parentElement.title = missing ? `没有找到 ${input.value} 命令` : '';
+    input.parentElement.title = missing ? `没有找到 ${input.value === 'other' ? other?.file : input.value} 命令` : '';
     input.checked = input.value === state.route;
     input.onchange = () => {
       state.route = input.value;
@@ -602,7 +612,9 @@ async function renderSummary(video) {
   $('run-summary').disabled = !info?.processed;
   $('run-summary').textContent = state.route === 'copy' ? '复制材料' : info?.summary ? '重新生成总结' : '生成总结';
   $('open-summary').hidden = !info?.summary;
-  $('export-zip').hidden = $('import-summary').hidden = state.route !== 'copy' || !info?.processed;
+  const copying = state.route === 'copy' && !!info?.processed;
+  for (const id of ['export-zip', 'export-folder', 'export-limit-label', 'import-summary']) $(id).hidden = !copying;
+  $('export-limit').value = state.settings.webFiles || 50;
   if (!info?.processed) {
     article.replaceChildren(element('p', { className: 'placeholder', textContent: '先在「处理」里处理这个视频，再生成总结。' }));
     return;
@@ -687,7 +699,7 @@ $('run-summary').onclick = async () => {
   const info = video.info;
   const request = $('summary-request').value.trim();
   if (state.route === 'copy') return copyMaterial();
-  const name = { api: '模型 API', claude: 'Claude Code', codex: 'Codex' }[state.route];
+  const name = routeName(state.route);
   // A summary there already stays current; the new one is kept as a version to compare and choose.
   if (info.summary) summaryState('已经有总结：新写的会另存为一个版本，原来的不动。');
   addTask({
@@ -768,6 +780,21 @@ $('export-zip').onclick = async () => {
   if (result.code !== 0) return summaryState(`没有导出：${(result.err || result.out).trim()}`);
   summaryState(`已导出：${result.out.trim()}。把 提示词.md 和图片交给网页 AI；不收 zip 的，就解压后上传。`);
   window.va.reveal(file);
+};
+
+// For chat AIs that take files one by one up to a limit (user request, 2026-10-28): the prompt and numbered pictures.
+$('export-folder').onclick = async () => {
+  const video = current();
+  const limit = Math.max(2, Number($('export-limit').value) || 50);
+  if (limit !== state.settings.webFiles) state.settings = await window.va.saveSettings({ webFiles: limit });
+  const parent = await window.va.pickFolder('导出到哪个文件夹（会在里面新建一个文件夹）');
+  if (!parent) return;
+  summaryState('正在导出…');
+  const result = await window.va.cliText([...packArgs(video), '--folder', parent, '--max-files', String(limit)]);
+  if (result.code !== 0) return summaryState(`没有导出：${(result.err || result.out).trim()}`);
+  const folder = result.out.trim().replace(/ \(\d+ pictures\)$/, '');
+  summaryState(`已导出到 ${baseName(folder)}：把里面的文件全部交给网页 AI，提示词.md 也是其中一个。`);
+  window.va.reveal(folder);
 };
 
 // A video with a running or queued processing or summary task would be written twice.
@@ -954,9 +981,11 @@ async function renderCollection() {
   const live = item.videos.filter((member) => !member.skipped);
   $('collection-process-all').disabled = !live.some((member) => !member.processed);
   $('collection-summarize-all').disabled = !live.some((member) => member.processed && !member.summary);
-  for (const option of $('collection-route').options) {
-    option.disabled = (option.value === 'claude' && !state.env.claude) || (option.value === 'codex' && !state.env.codex);
-  }
+  for (const option of $('collection-route').options) option.disabled = routeMissing(option.value);
+  const other = $('collection-route').querySelector('option[value=other]');
+  other.hidden = !state.env.other;
+  other.textContent = state.env.other?.name || '';
+  if (!state.env.other && $('collection-route').value === 'other') $('collection-route').value = 'api';
   if ($('collection-route').selectedOptions[0]?.disabled) $('collection-route').value = 'api';
   const copying = $('collection-route').value === 'copy';
   $('collection-overview').textContent = copying ? '复制合集总结的材料' : item.overview ? '重新生成合集总结' : '生成合集总结';
@@ -1090,7 +1119,7 @@ $('collection-process-all').onclick = async () => {
 $('collection-summarize-all').onclick = async () => {
   const route = $('collection-route').value;
   if (route === 'copy') return alert('复制材料这条路线要一集一集地在网页 AI 里写，不能批量。换成 Claude Code、Codex 或模型 API。');
-  const name = { api: '模型 API', claude: 'Claude Code', codex: 'Codex' }[route];
+  const name = routeName(route);
   for (const member of currentCollection().videos.filter((entry) => !entry.skipped && entry.processed && !entry.summary)) {
     await addTask({
       kind: 'summary',
@@ -1125,7 +1154,7 @@ async function writeCollectionFile(guide) {
   if (route === 'api' && missing.length) {
     return alert(`还有 ${missing.length} 集没有总结：${missing.map((member) => member.name).join('、')}。先点「总结没总结的」，或把没内容的跳过。`);
   }
-  const name = { api: '模型 API', claude: 'Claude Code', codex: 'Codex' }[route];
+  const name = routeName(route);
   await addTask({
     kind: 'collection',
     title: `${file}（${name}）：${item.name}`,
@@ -1364,6 +1393,9 @@ document.addEventListener('drop', (event) => {
 $('open-settings').onclick = async () => {
   $('set-workspace').value = state.settings.workspace;
   $('set-cli').value = state.settings.cli;
+  $('set-agent').value = state.settings.agent || '';
+  $('set-agent-command').value = state.settings.agentCommand || state.env.agents[state.settings.agent]?.command || '';
+  renderAgentCommand();
   $('set-key').value = '';
   $('set-close-to-tray').checked = state.settings.closeToTray !== false;
   $('set-theme').value = state.settings.theme || 'system';
@@ -1375,7 +1407,8 @@ $('open-settings').onclick = async () => {
   renderRules();
   const cli = state.env.bundled ? '安装程序自带的 video-agent' : state.env.cli.join(' ');
   $('env-info').textContent =
-    `正在用的命令：${cli} · Claude Code：${state.env.claude ? '已找到' : '没有找到'} · Codex：${state.env.codex ? '已找到' : '没有找到'}`;
+    `正在用的命令：${cli} · Claude Code：${state.env.claude ? '已找到' : '没有找到'} · Codex：${state.env.codex ? '已找到' : '没有找到'}` +
+    (state.env.other ? ` · ${state.env.other.name}：${state.env.other.found ? '已找到' : '没有找到'}` : '');
   $('install-claude').disabled = !state.env.claude;
   $('install-codex').disabled = !state.env.codex;
   $('plugin-output').hidden = true;
@@ -1396,7 +1429,7 @@ $('open-settings').onclick = async () => {
 // Closing by ×, Esc or a click outside keeps nothing; with changes it asks first, otherwise it just closes.
 let settingsShown = '';
 const SETTINGS_FIELDS = [
-  'set-theme', 'set-workspace', 'set-cli', 'set-close-to-tray', 'set-check-updates', 'set-update-mirror', 'set-limit-download',
+  'set-theme', 'set-workspace', 'set-cli', 'set-agent', 'set-agent-command', 'set-close-to-tray', 'set-check-updates', 'set-update-mirror', 'set-limit-download',
   'set-limit-process', 'set-limit-summary', 'set-provider', 'set-model', 'set-base-url', 'set-key',
 ];
 const settingsValues = () => JSON.stringify(SETTINGS_FIELDS.map((id) => ($(id).type === 'checkbox' ? $(id).checked : $(id).value)));
@@ -1410,6 +1443,14 @@ $('close-settings').onclick = closeSettings;
 $('settings').addEventListener('cancel', (event) => (event.preventDefault(), closeSettings()));
 $('settings').addEventListener('click', (event) => event.target === $('settings') && closeSettings());
 $('set-theme').onchange = () => window.va.previewTheme($('set-theme').value);
+// Choosing an agent puts its command in the box to edit; 自定义 starts empty.
+function renderAgentCommand() {
+  $('set-agent-command').disabled = !$('set-agent').value;
+}
+$('set-agent').onchange = () => {
+  $('set-agent-command').value = state.env.agents[$('set-agent').value]?.command || '';
+  renderAgentCommand();
+};
 $('settings').addEventListener('close', () => {
   if ($('settings').returnValue !== 'save') window.va.previewTheme(state.settings.theme || 'system');
   $('settings-unsaved').hidden = true;
@@ -1500,6 +1541,8 @@ $('settings').addEventListener('close', async () => {
   state.settings = await window.va.saveSettings({
     workspace: $('set-workspace').value,
     cli: $('set-cli').value.trim(),
+    agent: $('set-agent').value,
+    agentCommand: $('set-agent').value ? $('set-agent-command').value.trim() : '',
     closeToTray: $('set-close-to-tray').checked,
     theme: $('set-theme').value,
     checkUpdates: $('set-check-updates').checked,
@@ -1517,6 +1560,7 @@ $('settings').addEventListener('close', async () => {
   $('set-key').value = '';
   if (result.code !== 0) alert(`API 设置没有保存：${result.err || result.out}`);
   state.env = await window.va.env();
+  renderVideo(); // the routes follow the agent chosen here
   if (workspaceChanged) await Promise.all(state.videos.map(refresh));
 });
 

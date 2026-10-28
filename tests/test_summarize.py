@@ -8,7 +8,14 @@ from pathlib import Path
 import pytest
 
 from video_agent.processor import asset_folder, process_video
-from video_agent.summarize import SummaryError, evidence_images, summarize_video, template, video_line
+from video_agent.summarize import (
+  SummaryError,
+  _numbered_pictures,
+  evidence_images,
+  summarize_video,
+  template,
+  video_line,
+)
 
 SUMMARY = '# 测试视频\n\n## 概要\n\n一段测试视频，`00:00:03` 展示图表。[画面](frames/extra/frame-00-00-03.jpg)\n'
 
@@ -246,6 +253,29 @@ def test_pack_zips_the_prompt_with_frames_at_their_folder_paths(processed, capsy
   assert '这次没有附上画面' in capsys.readouterr().out
 
 
+def test_pack_folder_fits_the_prompt_and_numbered_pictures_in_a_file_limit(processed, capsys):
+  from video_agent import cli
+
+  video, workspace = processed
+  asset = asset_folder(workspace, video.resolve())
+  manifest = json.loads((asset / 'manifest.json').read_text(encoding='utf-8'))
+  page = manifest['screen_pages'][0]
+  out = workspace / 'out'
+  for _ in range(2):  # a second export goes into a new folder beside the first
+    assert cli.main(['pack', str(video), '-o', str(workspace), '--folder', str(out), '--max-files', '3']) == 0
+  first, second = sorted(out.iterdir())
+  assert first.name == 'sample clip [test]-材料' and second.name == 'sample clip [test]-材料 (2)'
+  names = sorted(path.name for path in first.iterdir())
+  assert len(names) == 3 and names[0].startswith('001-屏幕页-') and names[1].startswith('002-画面-')
+  assert names[2] == '提示词.md'
+  prompt = (first / '提示词.md').read_text(encoding='utf-8')
+  assert f'- {names[0]}：00:00:{round(page["time_s"]):02d} {page["path"]}' in prompt
+  assert '链接右边的路径' in prompt and '我们看看这张图表' in prompt
+  with pytest.raises(SystemExit):
+    cli.main(['pack', str(video), '-o', str(workspace), '--folder', str(out), '--max-files', '1'])
+  assert 'room for the prompt' in capsys.readouterr().err
+
+
 def test_screen_pages_go_on_contact_sheets_when_they_exceed_the_budget(tmp_path):
   import subprocess
 
@@ -279,6 +309,14 @@ def test_screen_pages_go_on_contact_sheets_when_they_exceed_the_budget(tmp_path)
 
   squeezed, dropped = evidence_images(tmp_path, manifest, 3, tmp_path / 'c')
   assert len(squeezed) == 3 and dropped == 3 and '3 per row' in squeezed[0][0]
+
+  # The same choice with numbered names, for a chat AI that takes few files
+  entries, note = _numbered_pictures(tmp_path, manifest, 12, tmp_path / 'd')
+  assert [name for name, _ in entries][:2] == ['001-屏幕页总图-00-00-00.jpg', '002-屏幕页总图-00-00-40.jpg']
+  assert len(entries) == 8 and '30 张屏幕页（幻灯片、代码、文档），拼在 8 张总图里（每张 2×2 页' in note
+  assert (
+    '- 008-屏幕页总图-00-04-40.jpg：00:04:40 frames/run/screen/p-029.jpg、00:04:50 frames/run/screen/p-030.jpg' in note
+  )
 
 
 def test_the_users_copy_of_the_rules_is_used_and_knows_when_the_default_changed(capsys):

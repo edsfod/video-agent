@@ -11,7 +11,7 @@ from . import summarize as summaries
 from .download import DownloadError, download_urls
 from .media import MediaError, duration, parse_clock, probe, save_frame
 from .processor import asset_folder, process_video
-from .summarize import import_summary, material, pack, summarize_video, template
+from .summarize import import_summary, material, pack, pack_folder, summarize_video, template
 from .transcript import format_clock as transcript_clock
 
 # Where the window saves downloads in a workspace, and so where a followed list's new videos go by default.
@@ -241,6 +241,18 @@ def build_parser():
   )
   packing.add_argument('--request', default='', help="the user's wishes for this summary")
   packing.add_argument('--zip', type=Path, help='write 提示词.md and the frames into this zip file')
+  packing.add_argument(
+    '--folder',
+    type=Path,
+    metavar='PARENT',
+    help='write 提示词.md and numbered pictures into a new folder in PARENT, for chat AIs that take no zip',
+  )
+  packing.add_argument(
+    '--max-files',
+    type=positive_int,
+    default=50,
+    help='with --folder: files in all, the prompt included; pages go on contact sheets to fit (default: 50)',
+  )
   packing.add_argument(
     '--max-images',
     type=positive_int,
@@ -751,7 +763,10 @@ def run(args):
     return 0
 
   if args.command == 'pack':
-    if args.zip:
+    if args.folder:
+      target, count = pack_folder(args.video, args.output, args.folder, request=args.request, max_files=args.max_files)
+      print(f'{target} ({count} pictures)')
+    elif args.zip:
       target, count = pack(args.video, args.output, args.zip, request=args.request, max_images=args.max_images)
       print(f'{target} ({count} pictures)')
     else:

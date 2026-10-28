@@ -63,6 +63,9 @@ function defaults() {
     updateMirror: '',
     limits: DEFAULT_LIMITS, // tasks of each kind that may run at once (see tasks.js)
     processAfterDownload: true, // downloaded files are processed, so their subtitles are imported at once
+    agent: '', // another agent for summaries: a key of AGENTS, 'custom' or none
+    agentCommand: '', // its command line; {prompt} stands for the task where it takes no standard input
+    webFiles: 50, // files a chat AI takes at once, for 导出文件夹 (DeepSeek's web chat: 50)
   };
 }
 
@@ -87,10 +90,12 @@ function saveSettings(changes) {
 
 // ---------- locating programs ----------
 
+// An .exe first (started without a shell), then a .cmd or .bat; where.exe may list first a file with no extension that
+// only Git Bash runs (pi's installer puts `pi` beside `pi.cmd`) or Hermes's `hermes.cmd` before its `hermes.exe`.
 function which(name) {
   try {
-    const found = execFileSync('where.exe', [name], { encoding: 'utf8', windowsHide: true });
-    return found.split(/\r?\n/).find(Boolean) || null;
+    const found = execFileSync('where.exe', [name], { encoding: 'utf8', windowsHide: true }).split(/\r?\n/).filter(Boolean);
+    return found.find((file) => /\.exe$/i.test(file)) || found.find((file) => /\.(cmd|bat|com)$/i.test(file)) || found[0] || null;
   } catch {
     return null;
   }
@@ -133,6 +138,25 @@ function childEnv(extra = {}) {
 
 function splitCommand(text) {
   return (text.match(/"[^"]*"|\S+/g) || []).map((part) => part.replace(/^"|"$/g, ''));
+}
+
+// Agents besides Claude Code and Codex that run one task and exit (user request, 2026-10-28), with the commands their
+// help gives for that (pi 0.99, Hermes Agent 0.21, DeepSeek Harness's README; dsh is in developer preview). Each reads
+// the skill file as Codex does. None is limited to the workspace the way Codex's sandbox and Claude Code's allowed
+// tools are: they run commands as the user. The user may edit the command in the settings.
+const AGENTS = {
+  pi: { name: 'pi', command: 'pi -p' },
+  hermes: { name: 'Hermes Agent', command: 'hermes chat --query-file - -Q' },
+  dsh: { name: 'DeepSeek Harness', command: 'dsh --profile headless {prompt}' },
+};
+
+function otherAgent() {
+  const { agent, agentCommand } = loadSettings();
+  const command = agentCommand.trim() || AGENTS[agent]?.command || '';
+  if (!agent || !command) return null;
+  const [file, ...args] = splitCommand(command);
+  const found = path.isAbsolute(file) ? fs.existsSync(file) : !!which(file);
+  return { name: AGENTS[agent]?.name || path.basename(file).replace(/\.(exe|cmd|bat)$/i, ''), file, args, found };
 }
 
 // The folder that holds .claude-plugin/ and skills/: the repository in development, resources/plugin when packaged.
@@ -276,12 +300,17 @@ function startTask(task) {
     });
 }
 
-// Agent route: Claude Code with the plugin, or Codex told to follow the skill file.
+// Agent route: Claude Code with the plugin, or Codex or another agent told to follow the skill file.
 function startAgent(task) {
   const { agent, video, folder, request, workspace, title } = task;
   const skill = path.join(pluginRoot(), 'skills', 'video-agent', 'SKILL.md');
   const file = task.guide ? '学习提纲.md' : '合集总结.md';
-  const name = agent === 'claude' ? 'Claude Code' : 'Codex';
+  const other = agent === 'other' ? otherAgent() : null;
+  if (agent === 'other' && !other) {
+    queue.output(task.id, 'stderr', '设置里没有选其他 Agent。\n');
+    return queue.exited(task.id, -1);
+  }
+  const name = agent === 'claude' ? 'Claude Code' : agent === 'codex' ? 'Codex' : other.name;
   // An Agent writes files itself; keep the current text as a version first, so nothing is lost even if it overwrites.
   const [command, ...prefix] = cliCommand();
   const target = task.kind === 'collection'
@@ -312,11 +341,23 @@ function startAgent(task) {
       '--allowedTools', 'Bash(video-agent *)', 'Read', 'Write', 'Edit', 'Skill',
       '--output-format', 'stream-json', '--verbose',
     ], { cwd: workspace, stdin: prompt, title, prompt });
-  } else {
+  } else if (agent === 'codex') {
     const prompt = `先读 ${skill} 并照它做，<video-agent> 用 video-agent 命令。\n${text}`;
     startJob(task.id, 'codex', [
       'exec', '--skip-git-repo-check', '--cd', workspace, '--sandbox', 'workspace-write', '--json', '-',
     ], { cwd: workspace, stdin: prompt, title, prompt });
+  } else {
+    const prompt = `先读 ${skill} 并照它做，<video-agent> 用 video-agent 命令。\n${text}`;
+    if (!other.args.includes('{prompt}')) {
+      return startJob(task.id, other.file, other.args, { cwd: workspace, stdin: prompt, title, prompt });
+    }
+    // A command line keeps one line through cmd.exe, so the task goes in a file and the line points to it.
+    const taskFile = path.join(app.getPath('temp'), `video-agent-task-${task.id}.md`);
+    fs.writeFileSync(taskFile, prompt);
+    const args = other.args.map((arg) => (arg === '{prompt}' ? `读 ${taskFile} 并完成里面的任务。` : arg));
+    startJob(task.id, other.file, args, {
+      cwd: workspace, title, prompt, onClose: () => fs.rmSync(taskFile, { force: true }),
+    });
   }
 }
 
@@ -435,6 +476,8 @@ function registerIpc() {
     cli: cliCommand(),
     claude: which('claude'),
     codex: which('codex'),
+    other: otherAgent(),
+    agents: Object.fromEntries(Object.entries(AGENTS).map(([key, { name, command }]) => [key, { name, command }])),
     shells: shells().map(({ id, label }) => ({ id, label })),
     pluginRoot: pluginRoot(),
     bundled: !!bundledCli(),

@@ -1,5 +1,5 @@
-// The Claude Code and Codex summary routes, run for real. They spend the user's subscription, so they run only with
-// VA_E2E_AGENTS=claude, codex or claude,codex.
+// The agent summary routes, run for real: Claude Code, Codex and the other agents' presets (pi, hermes, dsh). They
+// spend the user's subscription or API credit, so they run only when named, as in VA_E2E_AGENTS=claude,pi.
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -12,7 +12,9 @@ const { _electron: electron } = require('playwright-core');
 const wanted = (process.env.VA_E2E_AGENTS || '').split(',').filter(Boolean);
 const GUI = path.resolve(__dirname, '..');
 
-for (const agent of ['claude', 'codex']) {
+const OTHERS = ['pi', 'hermes', 'dsh']; // presets in main.js (AGENTS), run through the 其他 Agent route
+
+for (const agent of ['claude', 'codex', ...OTHERS]) {
   test(`summary through ${agent}`, { skip: !wanted.includes(agent) && `set VA_E2E_AGENTS=${agent}`, timeout: 600_000 }, async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), `va-agent-${agent}-`));
     const workspace = path.join(root, 'workspace');
@@ -27,14 +29,15 @@ for (const agent of ['claude', 'codex']) {
     execFileSync('video-agent', ['process', video, '-o', workspace]);
     const userData = path.join(root, 'gui-data');
     fs.mkdirSync(userData);
-    fs.writeFileSync(path.join(userData, 'settings.json'), JSON.stringify({ workspace, videos: [video] }));
+    const other = OTHERS.includes(agent) ? { agent } : {};
+    fs.writeFileSync(path.join(userData, 'settings.json'), JSON.stringify({ workspace, videos: [video], ...other }));
 
     const app = await electron.launch({ executablePath: require('electron'), args: ['.', `--user-data=${userData}`], cwd: GUI });
     try {
       const page = await app.firstWindow();
       await page.waitForSelector('#video-list .video-item .badge:text("已处理")');
       await page.click('.tabs button[data-tab=summary]');
-      await page.check(`input[name=route][value=${agent}]`);
+      await page.check(`input[name=route][value=${OTHERS.includes(agent) ? 'other' : agent}]`);
       await page.fill('#summary-request', '写得简短一些');
       await page.click('#run-summary');
       // Wait for the job to end either way, then judge it; a failed run says why in the log.
@@ -44,7 +47,7 @@ for (const agent of ['claude', 'codex']) {
       const log = await page.textContent('#log-text');
       assert.match(await page.textContent('#log-title'), /· 完成$/, log.slice(-600));
       await page.waitForSelector('#summary h1');
-      assert.match(log, /▸ /, 'the log shows the agent\'s commands');
+      if (!OTHERS.includes(agent)) assert.match(log, /▸ /, 'the log shows the agent\'s commands');
       assert.match(log, /完成/);
     } finally {
       await app.close();

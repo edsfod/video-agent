@@ -29,9 +29,9 @@ Video Agent 由三部分组成，按需取用：
 - **屏幕页和代表画面**：自动识别画面布局，摄像头和屏幕拼在一起时只看屏幕那块，用原始分辨率截下每一页幻灯片、代码和文档（多少页就留多少页）；另外按时间间隔和场景变化抽取整幅画面。写总结时还可以按时间补截。
 - **另外用 AutoSlides Extractor 提取幻灯片（可选，默认关闭，需自己安装）**：写总结用上面的屏幕页就够了；要更细的去重、导出课件时，可以再调用 [AutoSlides Extractor](https://github.com/bit-admin/AutoSlides-Extractor)。
 - **四种总结方式**，写出的总结用同一套规则和模板：
-  - Claude Code 或 Codex 按插件里的 skill 写，会自己补截画面；
+  - Claude Code 或 Codex 按插件里的 skill 写，会自己补截画面；也可以在设置里换成 pi、Hermes Agent、DeepSeek Harness 或你自己填的命令行 Agent；
   - 模型 API（Anthropic，或 OpenAI 兼容接口，例如 ModelScope、本地 Ollama），支持工具调用的模型同样会补截画面；
-  - 复制材料，贴进任何聊天 AI。
+  - 复制材料，贴进任何聊天 AI；要连画面一起给，导出 zip，或者导出成文件夹：不收 zip、文件数有上限的（如 DeepSeek 网页版最多 50 个），屏幕页会拼成总图，凑进上限。
 - **总结的写法**：每一点都附时间点和画面出处；视频里的说法按“视频称”转述，不当成事实；拿不准的标“需确认”。
 
 ## 安装
@@ -155,7 +155,7 @@ video-agent config --provider openai --model Qwen/Qwen3.5-397B-A17B --base-url h
 ## 隐私
 
 - 必剪转录会把视频的音轨上传到哔哩哔哩，用的是必剪的非官方接口，随时可能失效。只有你明确同意时才会上传：命令行要同时加 `--asr bcut --allow-remote-asr`，桌面程序要勾选，Agent 要先问过你。
-- 用模型 API 总结时，字幕和画面会发给你设置的服务商；用 Claude Code、Codex 时，由它们按各自的规则处理。
+- 用模型 API 总结时，字幕和画面会发给你设置的服务商；用 Claude Code、Codex 时，由它们按各自的规则处理。设置里选的其他 Agent 以你的身份运行命令，不像 Codex 那样限制在工作区里。
 - 日志不记录 API key。
 - 哔哩哔哩登录：在桌面程序里登录后，登录状态（cookie）只存在本机，安装版用 Windows 的 DPAPI 加密保存。只在下载 B 站视频时临时导出给 yt-dlp、发给 B 站，下载结束就删掉导出的文件；在设置里可以退出登录。
 - 检查更新：桌面程序启动时会向 GitHub 查一次最新版本，连不上时依次改用 GitHub API 和下载镜像（gh-proxy.com、ghfast.top，或你在设置里填的镜像）。这些请求只是普通的下载请求，不附带你的视频、字幕、设置或其他数据；对方能看到的是你的 IP 地址和请求的文件。可以在设置里关掉启动时的检查。

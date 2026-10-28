@@ -136,6 +136,7 @@
               <div class="routes" id="routes">
                 <label><input type="radio" name="route" value="claude" /> Claude Code</label>
                 <label><input type="radio" name="route" value="codex" /> Codex</label>
+                <label id="route-other" hidden><input type="radio" name="route" value="other" /> <span id="route-other-name"></span></label>
                 <label><input type="radio" name="route" value="api" /> 模型 API</label>
                 <label><input type="radio" name="route" value="copy" /> 复制材料</label>
               </div>
@@ -144,6 +145,8 @@
               <div class="row">
                 <button id="run-summary" class="primary">生成总结</button>
                 <button id="export-zip" hidden>导出 zip…</button>
+                <button id="export-folder" hidden title="提示词和图片放在一个文件夹里，图片按上限挑选，屏幕页太多时拼成总图">导出文件夹…</button>
+                <label id="export-limit-label" class="limit" hidden>最多<input id="export-limit" type="number" min="2" max="500" />个文件</label>
                 <button id="import-summary" hidden>导入总结…</button>
                 <button id="open-summary" class="ghost" hidden>用编辑器打开</button>
                 <span id="summary-state" class="muted"></span>
@@ -216,6 +219,7 @@
                 <select id="collection-route">
                   <option value="claude">Claude Code</option>
                   <option value="codex">Codex</option>
+                  <option value="other" hidden></option>
                   <option value="api">模型 API</option>
                   <option value="copy">复制材料（网页 AI）</option>
                 </select>
@@ -300,6 +304,20 @@
           <button id="install-codex" type="button">安装到 Codex</button>
         </span>
         <pre id="plugin-output" class="plugin-output" hidden></pre>
+        <h3>其他 Agent</h3>
+        <p class="muted small-text">除了 Claude Code 和 Codex，也可以让别的命令行 Agent 在后台写总结：选一个，或填你自己的命令。它会读同一份 skill 照着做。注意：这些 Agent 不像 Codex 那样只能动工作区，它们以你的身份运行命令。命令里写 <code>{prompt}</code> 的，任务放在这个位置；不写的，任务从标准输入传进去。</p>
+        <label>Agent
+          <select id="set-agent">
+            <option value="">不用</option>
+            <option value="pi">pi</option>
+            <option value="hermes">Hermes Agent</option>
+            <option value="dsh">DeepSeek Harness</option>
+            <option value="custom">自定义命令</option>
+          </select>
+        </label>
+        <label>命令
+          <input id="set-agent-command" type="text" spellcheck="false" placeholder="例如 my-agent run --print" />
+        </label>
         <h3>总结规则和模板</h3>
         <p class="muted small-text">几种总结方式和「复制材料」都按这份规则写。可以改成你自己的写法，比如更长、更短、固定要哪几节；更新程序不会覆盖你的版本。</p>
         <p id="rules-status" class="muted small-text"></p>
