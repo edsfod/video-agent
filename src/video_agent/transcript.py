@@ -125,7 +125,20 @@ def embedded(video, streams, output_dir):
   return None
 
 
-def acquire(video, streams, output_dir, *, asr='none', allow_remote_asr=False, status=print):
+def given(path):
+  """A subtitle file the user chose for the video, whatever its name (user request, 2026-10-28)."""
+  path = Path(path).expanduser()
+  if not path.is_file():
+    raise MediaError(f'subtitle file does not exist: {path}')
+  rows = parse(path.read_text(encoding='utf-8-sig', errors='replace'))
+  if not rows:
+    raise MediaError(f'{path.name} holds no timed subtitles (SRT or WebVTT)')
+  return rows, f'file:{path.name}'
+
+
+def acquire(video, streams, output_dir, *, asr='none', allow_remote_asr=False, subtitles=None, status=print):
+  if subtitles:
+    return given(subtitles)
   found = sidecar(video) or embedded(video, streams, output_dir)
   if found:
     return found

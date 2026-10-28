@@ -14,13 +14,40 @@ from . import corrections, files, layout, media, slide_extractor, transcript
 
 
 def slug(value):
+  """The video's name as a folder name: letters of any script, digits and `._-()` kept, the rest one `-`."""
+  cleaned = re.sub(r'[^\w.()-]+', '-', value).strip('-. ')
+  return cleaned[:64].rstrip('-. ') or 'video'
+
+
+def _ascii_slug(value):
+  """The name up to 0.8.3, which dropped every letter outside ASCII, so a Chinese title left little of itself."""
   cleaned = re.sub(r'[^A-Za-z0-9._-]+', '-', value).strip('-.')
   return cleaned[:64] or 'video'
 
 
 def asset_folder(workspace, video):
+  """The video's processing folder in the workspace. One made under the old name is renamed the first time it is
+  asked for (user request, 2026-10-28), and the collection files that link into it follow; if the rename fails, as
+  while another program has the folder open, the old name is used this time."""
   identity = hashlib.sha256(str(video).casefold().encode('utf-8')).hexdigest()[:10]
-  return Path(workspace) / f'{slug(video.stem)}-{identity}'
+  workspace = Path(workspace)
+  target = workspace / f'{slug(video.stem)}-{identity}'
+  old = workspace / f'{_ascii_slug(video.stem)}-{identity}'
+  if old != target and old.is_dir() and not target.exists():
+    try:
+      old.rename(target)
+    except OSError:
+      return old
+    _relink_collections(workspace, old.name, target.name)
+  return target
+
+
+def _relink_collections(workspace, old, new):
+  """Points the links of collection files (合集总结, 学习提纲 and their versions) at a renamed video folder."""
+  for path in (workspace / '合集').glob('*/*.md'):
+    text = path.read_text(encoding='utf-8')
+    if f'/{old}/' in text:
+      files.write_text(path, text.replace(f'/{old}/', f'/{new}/'))
 
 
 def _write_json(path, value):
@@ -110,8 +137,30 @@ def _context(manifest, rows):
   if told.get('error'):
     lines.extend(['', f'- Transcript status: {told["error"]}'])
   lines.extend(['', '## Transcript', ''])
+  # Each run of lines starts with the screen page then on screen (or, without pages, the frame), so whoever writes the
+  # summary links the picture of the point it describes without matching times itself (user, 2026-10-28; yanhe-agent's
+  # `query` did the same).
+  pictures = manifest.get('screen_pages') or manifest.get('representative_frames') or []
+  kind = 'screen page' if manifest.get('screen_pages') else 'frame'
+  if pictures:
+    lines.append(f'{GROUPED} {kind} on screen while they were said; link that picture for their points.')
+    lines.append('')
+  marks = sorted(pictures, key=lambda item: item['time_s'])
+
+  def mark(item):
+    lines.extend(
+      [''] * (lines[-1] != '') + [f'▶ {kind} from {transcript.format_clock(item["time_s"])}: {link(item["path"])}', '']
+    )
+
   if rows:
-    lines.extend(f'[{transcript.format_clock(start)}] {" ".join(text.split())}' for start, _, text in rows)
+    shown = 0
+    for start, _, text in rows:
+      while shown < len(marks) and marks[shown]['time_s'] <= start + 0.5:
+        mark(marks[shown])
+        shown += 1
+      lines.append(f'[{transcript.format_clock(start)}] {" ".join(text.split())}')
+    for item in marks[shown:]:  # shown after the last words
+      mark(item)
   else:
     lines.append('(No speech transcript was available.)')
   lines.extend(['', '## Representative frames', ''])
@@ -128,7 +177,7 @@ def _context(manifest, rows):
         '',
         (
           'Each distinct page shown in the screen region (slides, code, documents), at the source resolution, '
-          'with the time it first appeared.'
+          'with the time it first appeared; the transcript above marks where each comes on screen.'
         ),
         '',
       ]
@@ -158,6 +207,19 @@ def refresh_transcript(asset):
   _write_json(manifest_path, manifest)
   write_context(asset)
   return changes
+
+
+GROUPED = 'Lines are grouped by the'
+
+
+def update_context(asset):
+  """Rewrites a summary-context.md written before its transcript marked the picture on screen (0.8.3 and earlier),
+  so videos processed then get the new form without processing again. Takes the video's lock."""
+  asset = Path(asset)
+  context = asset / 'summary-context.md'
+  if (asset / 'manifest.json').is_file() and context.is_file() and GROUPED not in context.read_text(encoding='utf-8'):
+    with files.video_lock(asset, 'context'):
+      write_context(asset)
 
 
 def write_context(asset):
@@ -204,6 +266,7 @@ def process_video(
   asr='none',
   allow_remote_asr=False,
   overwrite=False,
+  subtitles=None,
   status=print,
 ):
   video, info = media.probe(video)
@@ -221,7 +284,8 @@ def process_video(
       slide_extractor_path=slide_extractor_path,
       asr=asr,
       allow_remote_asr=allow_remote_asr,
-      overwrite=overwrite,
+      overwrite=overwrite or bool(subtitles),
+      subtitles=subtitles,
       status=status,
     )
 
@@ -240,6 +304,7 @@ def _process_locked(
   asr,
   allow_remote_asr,
   overwrite,
+  subtitles,
   status,
 ):
   status(f'{video.name}: {media.duration(info):.1f}s, {len(info.get("streams") or [])} streams')
@@ -328,6 +393,7 @@ def _process_locked(
         asset,
         asr=asr,
         allow_remote_asr=allow_remote_asr,
+        subtitles=subtitles,
         status=lambda message: status(f'{video.name}: {message}'),
       )
       transcript.write(rows, asset)

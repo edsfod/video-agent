@@ -270,6 +270,7 @@ function cliArgs(task) {
       if (task.bcut) args.push('--asr', 'bcut', '--allow-remote-asr'); // the user's BCut setting, on by default
       if (task.slides) args.push('--extract-slides');
       if (task.screenRegion) args.push('--screen-region', task.screenRegion);
+      if (task.subtitles) args.push('--subtitles', task.subtitles);
       return args;
     }
     case 'frame':

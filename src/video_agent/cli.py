@@ -144,6 +144,12 @@ def build_parser():
   process.add_argument(
     '--overwrite-transcript', action='store_true', help='replace an existing transcript with newly selected source data'
   )
+  process.add_argument(
+    '--subtitles',
+    type=Path,
+    metavar='FILE',
+    help='use this SRT or WebVTT file as the transcript, whatever its name; replaces an existing transcript',
+  )
   frame = commands.add_parser('frame', help="save frames at chosen times into the video's processing workspace")
   frame.add_argument('video', type=Path)
   frame.add_argument('times', nargs='+', type=clock_value, help='seconds, MM:SS or HH:MM:SS')
@@ -744,7 +750,9 @@ def run(args):
     if args.collection:
       target = summaries.import_collection(args.output, args.collection, text, guide=args.guide, **written)
     else:
-      target, pairs = import_summary(args.video, args.output, text, **written)
+      target, pairs = import_summary(
+        args.video, args.output, text, **written, status=lambda message: print(message, file=sys.stderr)
+      )
       if pairs:
         listed = '、'.join(f'{wrong}→{right}' for wrong, right in pairs)
         print(f'applied {len(pairs)} transcript corrections from the summary: {listed}', file=sys.stderr)
@@ -813,6 +821,8 @@ def run(args):
 
   if args.allow_remote_asr and args.asr != 'bcut':
     raise ValueError('--allow-remote-asr requires --asr bcut')
+  if args.subtitles and len(args.videos) != 1:
+    raise ValueError('--subtitles belongs to one video; give one video with it')
   failures = 0
   say = _progress(args)
   for video in args.videos:
@@ -829,6 +839,7 @@ def run(args):
         asr=args.asr,
         allow_remote_asr=args.allow_remote_asr,
         overwrite=args.overwrite_transcript,
+        subtitles=args.subtitles,
         status=say,
       )
     except (OSError, MediaError, RuntimeError, ValueError) as error:

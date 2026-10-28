@@ -368,6 +368,7 @@ def summarize_video(
     raise SummaryError(f'{video.name} has not been processed in {workspace}; run process with the same --output first')
   if config['provider'] == 'anthropic' and not key:
     raise SummaryError('No API key for anthropic; run: video-agent config --provider anthropic --set-key')
+  processor.update_context(asset)
   with files.video_lock(asset, 'summarize'):
     return _summarize_locked(
       video, info, asset, config, key, request, max_images, max_extra_frames, use_tools, overwrite, status
@@ -430,6 +431,7 @@ def _processed(video, workspace):
   manifest_path, context_path = asset / 'manifest.json', asset / 'summary-context.md'
   if not manifest_path.is_file() or not context_path.is_file():
     raise SummaryError(f'{video.name} has not been processed in {workspace}; run process with the same --output first')
+  processor.update_context(asset)
   return video, info, asset, json.loads(manifest_path.read_text(encoding='utf-8'))
 
 
@@ -483,6 +485,18 @@ CORRECTIONS_SECTION = f"""## 字幕改正（网页 AI 写在总结最后）
 ```"""
 
 
+# After the long evidence, a chat AI has the rules far behind it; DeepSeek's web chat wrote a retelling with mixed-up
+# times and pictures from other points, though the rules said otherwise (user, 2026-10-28). The points it missed, once
+# more at the end; the rules themselves stay in the template.
+REMINDER = f"""写之前，再对一遍上面规则里的这几条：
+
+- 详细内容写成能快速扫读的笔记，不要按讲话顺序逐段复述（「作者说……他还说……」）；每一部分自己判断用几句话、列表、表格还是步骤。
+- 各节按视频的先后排，时间范围不交错；每个要点标的时间点就是视频讲到它的时候。
+- 画面链接用讲到这一点时屏幕上的那一张：字幕里每段开头的 ▶ 行写着当时的画面。
+- 视频以外你补充的内容，每条以「补充：」开头；讲者的说法保留原来的分寸，「不建议」不写成「禁止」。
+- 照模板的各节写，需要时最后加「{CORRECTIONS_HEADING}」一节；整篇放进一个 ````markdown 代码块。"""
+
+
 def take_corrections(text):
   """(summary without the 字幕改正 section, [(wrong, right)] it listed)."""
   found = CORRECTIONS.search(text)
@@ -492,11 +506,38 @@ def take_corrections(text):
   return (text[: found.start()] + text[found.end() :]).rstrip() + '\n', pairs
 
 
-def import_summary(video, workspace, text, *, overwrite=False, source='', note=''):
+# A chat AI cannot take a frame itself; it marks the time of a picture the material lacks, and the import takes it.
+CAPTURE = '补截'
+# Also inside a link a chat AI rewrote, such as Gemini's https://www.google.com/search?q=补截:00:12:34.
+CAPTURE_LINK = re.compile(rf'\]\(<?[^()<>\s]*?{CAPTURE}[:：]\s*((?:\d{{1,2}}:)?\d{{1,2}}:\d{{2}})\s*>?\)')
+CAPTURE_NOTE = (
+  f'材料里没有你要的画面时（比如讲者说「大家看这张图」，附上的屏幕页和画面里却没有），照常写画面链接，路径写成 '
+  f'`{CAPTURE}:时:分:秒`，例如 `[画面]({CAPTURE}:00:12:34)`：导入时程序会在那个时间截图，并把链接换成截下的图。'
+)
+
+
+def _capture_frames(text, video, asset, length, status):
+  """Takes the frames the summary asks for with CAPTURE links and points the links at them."""
+
+  def take(match):
+    second = sum(int(part) * 60**place for place, part in enumerate(reversed(match[1].split(':'))))
+    try:
+      path = media.save_frame(video, asset, second, length)
+    except media.MediaError as error:
+      status(f'{CAPTURE} {match[1]}: {error}')
+      return f']({CAPTURE}失败:{match[1]})'
+    status(f'{CAPTURE} {match[1]}: {path.name}')
+    return f']({path.relative_to(asset).as_posix()})'
+
+  return CAPTURE_LINK.sub(take, text)
+
+
+def import_summary(video, workspace, text, *, overwrite=False, source='', note='', status=lambda message: None):
   """Saves a summary written elsewhere, such as by a chat AI from `pack`, as 总结.md: a ```markdown fence is removed,
-  rewritten links point at the video's files again, the 视频 line is the one this program writes, and a 字幕改正
-  section goes into the cleaned transcript. With a summary there already, the new one is kept as a version unless
-  `overwrite` makes it current (versions.py). Returns (path written, corrections applied)."""
+  rewritten links point at the video's files again, frames asked for with CAPTURE links are taken, the 视频 line is the
+  one this program writes, and a 字幕改正 section goes into the cleaned transcript. With a summary there already, the
+  new one is kept as a version unless `overwrite` makes it current (versions.py). Returns (path written, corrections
+  applied)."""
   video, info, asset, manifest = _processed(video, workspace)
   text, pairs = take_corrections(_clean(text))
   if len(text.strip()) < 40:
@@ -505,6 +546,7 @@ def import_summary(video, workspace, text, *, overwrite=False, source='', note='
   line = video_line(video, manifest.get('duration_s') or media.duration(info))
   text = re.sub(r'^视频：.*?时长：[0-9:]+', lambda _: line, text, count=1, flags=re.MULTILINE)
   with files.video_lock(asset, 'import the summary'):
+    text = _capture_frames(text, video, asset, manifest.get('duration_s') or media.duration(info), status)
     target, _ = versions.save(asset / SUMMARY_NAME, text, source=source or '导入', note=note, make_current=overwrite)
     if pairs:
       from . import corrections
@@ -559,6 +601,8 @@ def material(video, workspace, *, request='', max_images=40, work_dir=None, max_
   pages = [(item['time_s'], item['path']) for item in manifest.get('screen_pages') or []]
   frames = _evidence_frames(asset, manifest, max_images)
   entries, notes = [], []
+  if work_dir is not None:
+    notes.append(CAPTURE_NOTE)
   if work_dir is None:
     notes.append('这次没有附上画面，材料里列出的屏幕页和画面你看不到：不要描述画面内容，也不要链接画面。')
   elif max_files:
@@ -594,6 +638,8 @@ def material(video, workspace, *, request='', max_images=40, work_dir=None, max_
       CORRECTIONS_SECTION,
       '---',
       (asset / 'summary-context.md').read_text(encoding='utf-8'),
+      '---',
+      REMINDER,
     )
     if part
   )

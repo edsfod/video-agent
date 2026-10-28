@@ -217,6 +217,26 @@ async function addVideos(paths, { show = true } = {}) {
   await Promise.all(state.videos.filter((video) => !video.info).map(refresh));
 }
 
+// Videos the user adds from disk are processed at once when 下载或添加后自动处理 is on, so a subtitle file beside one
+// (same name) is read in without a click (user request, 2026-10-28). BCut stays off for them: a local video's audio is
+// uploaded only when the user asks in 处理, where the box says so.
+async function addLocalVideos(paths) {
+  if (!paths?.length) return;
+  await addVideos(paths);
+  if (state.settings.processAfterDownload === false) return;
+  for (const video of state.videos.filter((entry) => paths.some((path) => sameVideo(entry.path, path)))) {
+    if (!video.info || video.info.processed) continue;
+    await addTask({
+      kind: 'process',
+      title: `处理：${baseName(video.path)}`,
+      video: video.path,
+      interval: state.settings.frameInterval,
+      maxFrames: state.settings.maxFrames,
+      bcut: false,
+    });
+  }
+}
+
 async function persistList() {
   state.settings = await window.va.saveSettings({ videos: state.videos.map((video) => video.path) });
 }
@@ -463,6 +483,21 @@ async function startProcess(extra = {}) {
 }
 $('opt-bcut').onchange = async () => (state.settings = await window.va.saveSettings({ bcut: $('opt-bcut').checked }));
 
+// A subtitle file of any name, such as one the teacher shared, replaces the transcript; processing runs with it.
+$('import-subtitles').onclick = async () => {
+  const video = current();
+  const file = await window.va.pickFile('选择字幕文件', [{ name: '字幕', extensions: ['srt', 'vtt'] }]);
+  if (!video || !file) return;
+  await addTask({
+    kind: 'process',
+    title: `导入字幕：${baseName(video.path)}`,
+    video: video.path,
+    interval: state.settings.frameInterval,
+    maxFrames: state.settings.maxFrames,
+    subtitles: file,
+  });
+};
+
 async function renderTranscript(video) {
   const box = $('transcript');
   const pairs = video.info?.corrections || [];
@@ -479,7 +514,10 @@ async function renderTranscript(video) {
   const cleaned = pairs.length > 0 && video.info.transcript !== video.info.transcript_original;
   $('transcript-original-label').hidden = !cleaned;
   if (!video.info?.transcript) {
-    box.replaceChildren(element('p', { className: 'muted', textContent: '还没有字幕。先在「处理」里处理这个视频。' }));
+    const why = video.info?.processed
+      ? '没有找到字幕：视频旁边没有同名字幕文件，视频里也没有字幕轨。可以点「导入字幕…」选一个字幕文件，或在「处理」里勾上必剪转录（会上传音轨）再处理一次。'
+      : '还没有字幕。处理这个视频时会读进同名的字幕文件；字幕文件名字不同时，点「导入字幕…」。';
+    box.replaceChildren(element('p', { className: 'muted', textContent: why }));
     $('transcript-count').textContent = '';
     return;
   }
@@ -1109,7 +1147,7 @@ $('collection-add').onclick = () => {
 $('collection-add-files').onclick = async () => {
   const paths = await window.va.pickVideos();
   if (!paths?.length) return;
-  await addVideos(paths);
+  await addLocalVideos(paths);
   await collectionCommand(['add', currentCollection().name, ...paths]);
 };
 $('collection-process-all').onclick = async () => {
@@ -1300,7 +1338,7 @@ new ResizeObserver(() => state.term && state.tab === 'terminal' && state.term.fi
 
 // ---------- sidebar actions ----------
 
-$('add-videos').onclick = async () => addVideos(await window.va.pickVideos());
+$('add-videos').onclick = async () => addLocalVideos(await window.va.pickVideos());
 
 // ---------- Bilibili login (subtitles are shown only to logged-in accounts) ----------
 
@@ -1393,7 +1431,7 @@ document.addEventListener('dragover', (event) => event.preventDefault());
 document.addEventListener('drop', (event) => {
   event.preventDefault();
   const paths = [...event.dataTransfer.files].map((file) => window.va.droppedPath(file)).filter(Boolean);
-  if (paths.length) addVideos(paths);
+  if (paths.length) addLocalVideos(paths);
 });
 
 // ---------- settings ----------
@@ -1688,7 +1726,7 @@ $('open-log-folder').onclick = () => window.va.openLogs();
 
 window.addEventListener('error', (event) => window.va.logError(event.error?.stack || event.message));
 window.addEventListener('unhandledrejection', (event) => window.va.logError(event.reason?.stack || event.reason));
-window.va.onTrayAddVideos(async () => addVideos(await window.va.pickVideos()));
+window.va.onTrayAddVideos(async () => addLocalVideos(await window.va.pickVideos()));
 
 // ---------- start ----------
 

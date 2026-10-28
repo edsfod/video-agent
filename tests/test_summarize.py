@@ -2,6 +2,7 @@
 
 import io
 import json
+import re
 import zipfile
 from pathlib import Path
 
@@ -249,6 +250,10 @@ def test_pack_zips_the_prompt_with_frames_at_their_folder_paths(processed, capsy
   assert '我们看看这张图表' in prompt and '# Writing a video summary' in prompt
   # The 字幕改正 section comes after the template with its form, like the template's own sections (user, 2026-10-28).
   assert prompt.index('# Writing a video summary') < prompt.index('## 字幕改正\n\n- 错的写法 → 正确写法')
+  # The points a chat AI missed come once more after the evidence, and the transcript marks the page on screen.
+  assert prompt.rstrip().endswith('整篇放进一个 ````markdown 代码块。') and re.search(
+    r'▶ (screen page|frame) from 00:00:0\d: frames/', prompt
+  )
 
   capsys.readouterr()
   assert cli.main(['pack', str(video), '-o', str(workspace)]) == 0
@@ -369,3 +374,33 @@ def test_the_code_block_a_chat_ai_puts_the_summary_in_is_taken_off():
   assert _clean(f'````markdown\n{inner}````') == inner  # four backticks, as the material asks (user, 2026-10-28)
   assert _clean('```md\n# 标题\n```') == '# 标题\n'
   assert _clean(inner) == inner  # a summary that starts and ends otherwise is left as it is
+
+
+def test_an_old_context_gets_the_picture_marks_without_processing_again(processed, capsys):
+  from video_agent import cli
+
+  video, workspace = processed
+  context = asset_folder(workspace, video.resolve()) / 'summary-context.md'
+  context.write_text(
+    '# Video summary context\n\n## Transcript\n\n[00:00:00] 旧的\n', encoding='utf-8'
+  )  # as 0.8.3 wrote
+  assert cli.main(['pack', str(video), '-o', str(workspace)]) == 0
+  assert 'Lines are grouped by the' in context.read_text(encoding='utf-8')
+  assert '▶ ' in capsys.readouterr().out
+
+
+def test_frames_a_chat_ai_asks_for_are_taken_on_import(processed):
+  from video_agent.summarize import import_summary
+
+  video, workspace = processed
+  asset = asset_folder(workspace, video.resolve())
+  text = (
+    '# 标题\n\n视频：x · 时长：0:08\n\n'
+    '- 图表 [画面](补截:00:00:05)，搜索包着的 [画面](https://www.google.com/search?q=补截:0:06)，超出的 [画面](补截:00:09:00)\n'
+  )
+  said = []
+  target, _ = import_summary(video, workspace, text, status=said.append)
+  saved = target.read_text(encoding='utf-8')
+  assert '[画面](frames/extra/frame-00-00-05.jpg)' in saved and '[画面](frames/extra/frame-00-00-06.jpg)' in saved
+  assert (asset / 'frames' / 'extra' / 'frame-00-00-05.jpg').is_file()
+  assert '[画面](补截失败:00:09:00)' in saved and any('outside the video' in line for line in said)

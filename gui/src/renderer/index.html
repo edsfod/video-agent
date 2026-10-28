@@ -19,7 +19,7 @@
           <input id="download-url" type="text" placeholder="或粘贴视频链接下载" spellcheck="false" />
           <button type="submit">下载</button>
         </form>
-        <label class="check download-then"><input id="download-then-process" type="checkbox" /><span>下载完自动处理</span></label>
+        <label class="check download-then"><input id="download-then-process" type="checkbox" /><span>下载或添加后自动处理</span></label>
         <div id="download-hint" class="download-hint" hidden>没有登录 B 站，只能下载视频，拿不到字幕。<a href="#" id="download-login">登录</a></div>
         <div class="list-title row-title"><span>合集</span><button id="new-collection" class="ghost small" type="button">新建</button></div>
         <div id="collection-list" class="video-list collection-list"></div>
@@ -104,6 +104,7 @@
               <span id="transcript-count" class="muted"></span>
               <span class="spacer"></span>
               <label id="transcript-original-label" class="check inline" hidden><input id="transcript-original" type="checkbox" /><span>看原始字幕</span></label>
+              <button id="import-subtitles" type="button" class="ghost" title="选一个 SRT 或 WebVTT 字幕文件代替现在的字幕，名字不用和视频相同">导入字幕…</button>
             </div>
             <details id="corrections" class="card corrections">
               <summary>改正错字 <span id="corrections-count" class="muted"></span></summary>

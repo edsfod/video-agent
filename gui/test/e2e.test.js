@@ -433,6 +433,24 @@ test('the Bilibili login is exported as a Netscape cookies file for yt-dlp', asy
   assert.ok(!lines.some((line) => line.includes('elsewhere')));
 });
 
+test('a subtitle file of another name replaces the transcript', async () => {
+  const file = path.join(ROOT, 'teacher.vtt');
+  fs.writeFileSync(file, 'WEBVTT\n\n00:00:01.000 --> 00:00:02.000\n老师给的字幕\n');
+  await app.evaluate(({ dialog }, chosen) => {
+    const open = dialog.showOpenDialog;
+    globalThis.vaRestoreDialogs = () => Object.assign(dialog, { showOpenDialog: open });
+    dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [chosen] });
+  }, file);
+  await page.click('.tabs button[data-tab=transcript]');
+  await page.fill('#transcript-filter', '');
+  await page.click('#import-subtitles');
+  await page.waitForFunction(() => document.querySelector('#transcript').textContent.includes('老师给的字幕'), null, {
+    timeout: 60_000,
+  });
+  await app.evaluate(() => globalThis.vaRestoreDialogs());
+  assert.equal(JSON.parse(cli(['show', VIDEO, '-o', WORKSPACE])).manifest.transcript.source, 'file:teacher.vtt');
+});
+
 test('remove the video from the list', async () => {
   await page.click('#remove-video');
   await page.waitForSelector('#empty:not([hidden])');

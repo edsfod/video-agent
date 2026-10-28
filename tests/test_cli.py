@@ -52,6 +52,21 @@ def test_process_uses_sidecar_and_frame_saves_extra(sample_video, tmp_path, caps
   assert '9s: ERROR' in out
 
 
+def test_a_chosen_subtitle_file_becomes_the_transcript_whatever_its_name(sample_video, tmp_path):
+  bare = tmp_path / 'bare.mp4'
+  bare.write_bytes(sample_video.read_bytes())
+  chosen = tmp_path / 'from the teacher.vtt'
+  chosen.write_text('WEBVTT\n\n00:00:01.000 --> 00:00:02.000\n老师给的字幕\n', encoding='utf-8')
+  workspace = tmp_path / 'work'
+  assert cli.main(['process', str(bare), '-o', str(workspace), '--subtitles', str(chosen)]) == 0
+  asset = asset_folder(workspace, bare.resolve())
+  manifest = json.loads((asset / 'manifest.json').read_text(encoding='utf-8'))
+  assert manifest['transcript']['source'] == 'file:from the teacher.vtt'
+  assert '老师给的字幕' in (asset / 'summary-context.md').read_text(encoding='utf-8')
+  with pytest.raises(SystemExit):  # the parser reports it: --subtitles belongs to one video
+    cli.main(['process', str(bare), str(sample_video), '-o', str(workspace), '--subtitles', str(chosen)])
+
+
 def test_process_without_subtitles_asks_for_consent(sample_video, tmp_path, capsys):
   bare = tmp_path / 'bare.mp4'
   bare.write_bytes(sample_video.read_bytes())
@@ -532,3 +547,22 @@ def test_tools_reports_each_program_or_null(monkeypatch, capsys):
   found = json.loads(capsys.readouterr().out)
   assert set(found) == {'ffmpeg', 'ffprobe', 'yt_dlp', 'slide_extractor'}
   assert found['ffmpeg'] and found['slide_extractor'] is None
+
+
+def test_a_folder_keeps_the_chinese_name_and_an_old_one_is_renamed_with_its_links(tmp_path):
+  from video_agent import processor
+
+  video = (tmp_path / '软件仓库管理 [BV1].mp4').resolve()
+  workspace = tmp_path / 'work'
+  identity = processor.asset_folder(tmp_path / 'empty', video).name.rsplit('-', 1)[1]
+  old = workspace / f'BV1-{identity}'  # what 0.8.3 named it: the Chinese dropped
+  old.mkdir(parents=True)
+  (old / '总结.md').write_text('# 总结\n', encoding='utf-8')
+  overview = workspace / '合集' / '课' / '合集总结.md'
+  overview.parent.mkdir(parents=True)
+  overview.write_text(f'[总结](../../{old.name}/总结.md)\n', encoding='utf-8')
+
+  folder = processor.asset_folder(workspace, video)
+  assert folder.name == f'软件仓库管理-BV1-{identity}' and (folder / '总结.md').is_file() and not old.exists()
+  assert overview.read_text(encoding='utf-8') == f'[总结](../../{folder.name}/总结.md)\n'
+  assert processor.asset_folder(workspace, video) == folder

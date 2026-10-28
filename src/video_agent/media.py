@@ -365,6 +365,27 @@ def _differ(a, b, width, height, shift=0, columns=None):
   return changed / max(1, len(rows) * (x1 - x0))
 
 
+# A page built up step by step (a list, a diagram, a chat that grows) keeps everything already shown: when `b` changed
+# fewer than this share of the pixels that carry content in `a`, `b` is `a` with more added. Background is the most
+# common grey level of `a`; a page with content in less than BLANK of its pixels (a title alone, an empty window) counts
+# as built up by whatever follows (user report, 2026-10-28: steps of one slide were kept as pages of their own).
+KEPT_INK = 0.03
+BLANK = 0.01
+
+
+def _added(a, b):
+  """Whether `b` shows everything `a` shows, with more added."""
+  counts = [0] * 256
+  for value in a:
+    counts[value] += 1
+  background = max(range(256), key=counts.__getitem__)
+  ink = [index for index, value in enumerate(a) if abs(value - background) > 20]
+  if len(ink) < BLANK * len(a):
+    return True
+  changed = sum(abs(a[index] - b[index]) > 20 for index in ink)
+  return changed < KEPT_INK * len(ink)
+
+
 def _scroll(a, b, width, height, columns):
   """How many rows `b` is scrolled against `a` within `columns`, matched on the rows' mean brightness."""
   limit = int(height * SCROLL_NEW)
@@ -433,7 +454,7 @@ def _merge(pages, thumbs, long_s):
   for page, thumb in zip(pages, thumbs):
     if firsts:
       first = firsts[-1]
-      if _differ(first, thumb, width, height) < SAME_PAGE:
+      if _differ(first, thumb, width, height) < SAME_PAGE or _added(first, thumb):
         merged[-1]['path'] = page['path']
         continue
       if _scrolled(first, thumb, width, height):
@@ -449,8 +470,9 @@ def _merge(pages, thumbs, long_s):
 
 def merge_similar(pages, work_dir, duration_s=None):
   """Drops pages that add little to the ones kept, comparing small grey copies:
-  - the same page with small changes (bullets that appear one by one, a finished line of typing, a pop-up): the group
-    keeps its first time and its last picture, which is the most complete;
+  - the same page with small changes (bullets that appear one by one, a finished line of typing, a pop-up), or with
+    anything added to what it showed (_added: a slide built up step by step): the group keeps its first time and its
+    last picture, which is the most complete;
   - the same text scrolled by less than SCROLL_NEW of the page, as a whole or in its left and right halves: the
     group keeps its picture;
   - a return to one of the last RECENT pages, as when switching between slides and a terminal: dropped;
