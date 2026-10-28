@@ -307,3 +307,16 @@ def test_the_users_copy_of_the_rules_is_used_and_knows_when_the_default_changed(
     summarize.default_template = original
   assert summarize.reset_template()['customized'] is False
   assert template() == summarize.default_template()
+
+
+def test_imported_windows_line_endings_stay_single(processed):
+  from video_agent.summarize import import_summary
+
+  video, workspace = processed
+  text = '# 标题\r\n\r\n## 概要\r\n\r\n```\r\n  [Intent]\r\n     |\r\n  [Spec]\r\n```\r\n' + '内容' * 30 + '\r\n'
+  target, _ = import_summary(video, workspace, text)
+  saved = target.read_bytes()
+  assert b'\r' not in saved
+  assert b'```\n  [Intent]\n     |\n  [Spec]\n```' in saved
+  again, _ = import_summary(video, workspace, saved.decode('utf-8'), overwrite=True)
+  assert again.read_bytes() == saved, 'importing a saved summary again changes nothing'

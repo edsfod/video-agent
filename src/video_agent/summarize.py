@@ -319,7 +319,7 @@ def video_line(video, seconds):
 
 
 def _clean(text):
-  text = text.strip()
+  text = text.replace('\r\n', '\n').replace('\r', '\n').strip()
   fenced = re.fullmatch(r'```(?:markdown|md)?\s*\n(.*)\n```', text, re.DOTALL)
   return (fenced.group(1) if fenced else text).strip() + '\n'
 

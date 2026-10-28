@@ -11,10 +11,7 @@
 </div>
 
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/images/summary-dark.webp" />
-    <img src="docs/images/summary-light.webp" width="90%" alt="总结页：选择总结方式，下方是生成的总结" />
-  </picture>
+  <img src="docs/images/summary-split.webp" width="90%" alt="总结页：选择总结方式，下方是生成的总结；左边浅色，右边深色" />
 </p>
 
 Video Agent 由三部分组成，按需取用：
@@ -44,7 +41,7 @@ Video Agent 由三部分组成，按需取用：
 **只装命令行工具**：先装 [uv](https://docs.astral.sh/uv/)（`winget install astral-sh.uv`），再运行
 
 ```powershell
-uv tool install https://github.com/edsfod/video-agent/releases/download/v0.8.0/video_agent-0.8.0-py3-none-any.whl
+uv tool install https://github.com/edsfod/video-agent/releases/download/v0.8.1/video_agent-0.8.1-py3-none-any.whl
 ```
 
 FFmpeg 和 yt-dlp 会作为依赖一起装上，不需要 git。电脑上已经有的 ffmpeg、ffprobe、yt-dlp（包括 [Media Downloader](https://github.com/mhogomchungu/media-downloader) 自带的 yt-dlp）会优先使用。
@@ -108,7 +105,7 @@ FFmpeg 和 yt-dlp 会作为依赖一起装上，不需要 git。电脑上已经�
 
 **总结规则**：几种总结方式都按同一份规则和模板写。在「设置 → 总结规则和模板」里点「编辑」，就会生成你自己的版本并用编辑器打开，可以改成更长、更短或固定要哪几节；更新程序不会覆盖它，默认规则有改动时会提示你对比。Agent 的 skill 流程只能查看，不能改。
 
-**更新**：启动时会查一次有没有新版本，只提示，不会自己下载（可在设置里关掉）。设置里写着上次检查更新的时间和结果。点「下载并更新」，只下载和当前版本不同的部分，相近的部分合并成一次请求；再点「重启并安装」，装完自动重新打开。依次尝试 github.com、GitHub API 和下载镜像；更新文件带签名，镜像给出的文件对不上签名就不会安装。
+**更新**：启动时会查一次有没有新版本，只提示，不会自己下载（可在设置里关掉）。设置里写着上次检查更新的时间和结果。点「下载并更新」，只下载和当前版本不同的部分，相近的部分合并成一次请求，几个请求同时下；再点「重启并安装」，装完自动重新打开。依次尝试 github.com、GitHub API 和下载镜像；更新文件带签名，镜像给出的文件对不上签名就不会安装。
 
 ## 命令行
 

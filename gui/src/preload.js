@@ -11,6 +11,7 @@ const listen = (channel) => (callback) => {
 contextBridge.exposeInMainWorld('va', {
   settings: () => ipcRenderer.invoke('settings:get'),
   saveSettings: (changes) => ipcRenderer.invoke('settings:set', changes),
+  previewTheme: (theme) => ipcRenderer.invoke('theme:preview', theme),
   env: () => ipcRenderer.invoke('env:info'),
   installPlugin: (agent) => ipcRenderer.invoke('plugin:install', agent),
   readSkill: () => ipcRenderer.invoke('skill:read'),

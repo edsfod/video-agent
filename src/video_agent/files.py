@@ -44,7 +44,9 @@ def write_text(path, text):
   path.parent.mkdir(parents=True, exist_ok=True)
   temporary = temporary_beside(path)
   try:
-    temporary.write_text(text, encoding='utf-8')
+    # newline='\n': Windows would write every \n as \r\n, and a text that already had \r\n came out as \r\r\n, which
+    # Markdown reads as two line breaks (a code block of an imported summary showed a blank line after every line).
+    temporary.write_text(text, encoding='utf-8', newline='\n')
     replace(temporary, path)
   finally:
     temporary.unlink(missing_ok=True)

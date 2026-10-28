@@ -225,6 +225,9 @@ main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 .markdown h2 { font-size: 17px; margin: 22px 0 8px; padding-bottom: 4px; border-bottom: 1px solid var(--border); }
 .markdown h3 { font-size: 15px; }
 .markdown code { font-family: var(--mono); font-size: 12px; background: var(--bg-hover); padding: 1px 5px; border-radius: 4px; }
+/* A code block is one box; inside it, code loses the inline style, or each line becomes a box of its own. */
+.markdown pre { background: var(--bg-hover); border-radius: 8px; padding: 10px 14px; overflow-x: auto; line-height: 1.5; margin: 10px 0; }
+.markdown pre code { background: none; padding: 0; border-radius: 0; display: block; white-space: pre; }
 .markdown table { border-collapse: collapse; width: 100%; margin: 8px 0; font-size: 13px; }
 .markdown th, .markdown td { border: 1px solid var(--border); padding: 6px 8px; text-align: left; vertical-align: top; }
 .markdown th { background: var(--bg-sidebar); }

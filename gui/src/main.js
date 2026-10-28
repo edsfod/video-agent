@@ -2,6 +2,9 @@
 // All media and summary work happens in the CLI; this file only starts processes and relays their output.
 
 const { app, BrowserWindow, ipcMain, dialog, shell, clipboard, nativeTheme, Tray, Menu, nativeImage } = require('electron');
+
+// 外观 in the settings (user request, 2026-10-28): follow Windows, or always light or dark.
+const THEMES = ['system', 'light', 'dark'];
 const { spawn, spawnSync, execFileSync } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -422,7 +425,12 @@ function insideWorkspace(target) {
 
 function registerIpc() {
   ipcMain.handle('settings:get', () => loadSettings());
-  ipcMain.handle('settings:set', (_, changes) => saveSettings(changes));
+  ipcMain.handle('settings:set', (_, changes) => {
+    if (changes.theme) nativeTheme.themeSource = changes.theme;
+    return saveSettings(changes);
+  });
+  // The settings preview a theme before it is saved; closing them without saving sets the saved one again.
+  ipcMain.handle('theme:preview', (_, theme) => (nativeTheme.themeSource = THEMES.includes(theme) ? theme : 'system'));
   ipcMain.handle('env:info', () => ({
     cli: cliCommand(),
     claude: which('claude'),
@@ -647,6 +655,7 @@ if (!app.requestSingleInstanceLock()) {
     updater = createUpdater({ logs, send, settings: loadSettings, remember: saveSettings, running: () => queue.active().length });
     registerIpc();
     createTray();
+    nativeTheme.themeSource = THEMES.includes(loadSettings().theme) ? loadSettings().theme : 'system';
     createWindow();
     if (app.isPackaged) refreshPluginsAfterUpdate().catch((error) => logs.line('warn', `plugin refresh: ${error.message}`));
     // One quiet check a little after start; it only tells the window, it downloads nothing.

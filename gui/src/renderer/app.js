@@ -1364,6 +1364,7 @@ $('open-settings').onclick = async () => {
   $('set-cli').value = state.settings.cli;
   $('set-key').value = '';
   $('set-close-to-tray').checked = state.settings.closeToTray !== false;
+  $('set-theme').value = state.settings.theme || 'system';
   $('set-check-updates').checked = state.settings.checkUpdates !== false;
   for (const kind of ['download', 'process', 'summary']) $(`set-limit-${kind}`).value = state.settings.limits[kind];
   renderWorkspaceLock();
@@ -1393,7 +1394,7 @@ $('open-settings').onclick = async () => {
 // Closing by ×, Esc or a click outside keeps nothing; with changes it asks first, otherwise it just closes.
 let settingsShown = '';
 const SETTINGS_FIELDS = [
-  'set-workspace', 'set-cli', 'set-close-to-tray', 'set-check-updates', 'set-update-mirror', 'set-limit-download',
+  'set-theme', 'set-workspace', 'set-cli', 'set-close-to-tray', 'set-check-updates', 'set-update-mirror', 'set-limit-download',
   'set-limit-process', 'set-limit-summary', 'set-provider', 'set-model', 'set-base-url', 'set-key',
 ];
 const settingsValues = () => JSON.stringify(SETTINGS_FIELDS.map((id) => ($(id).type === 'checkbox' ? $(id).checked : $(id).value)));
@@ -1406,7 +1407,9 @@ function closeSettings() {
 $('close-settings').onclick = closeSettings;
 $('settings').addEventListener('cancel', (event) => (event.preventDefault(), closeSettings()));
 $('settings').addEventListener('click', (event) => event.target === $('settings') && closeSettings());
+$('set-theme').onchange = () => window.va.previewTheme($('set-theme').value);
 $('settings').addEventListener('close', () => {
+  if ($('settings').returnValue !== 'save') window.va.previewTheme(state.settings.theme || 'system');
   $('settings-unsaved').hidden = true;
   $('discard-settings').textContent = '取消';
 });
@@ -1496,6 +1499,7 @@ $('settings').addEventListener('close', async () => {
     workspace: $('set-workspace').value,
     cli: $('set-cli').value.trim(),
     closeToTray: $('set-close-to-tray').checked,
+    theme: $('set-theme').value,
     checkUpdates: $('set-check-updates').checked,
     updateMirror: $('set-update-mirror').value.trim(),
     limits: Object.fromEntries(
