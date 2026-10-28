@@ -1,6 +1,6 @@
 # Architecture
 
-Status: 0.7.0 (BCut client written anew) released on 2026-10-28. CLI phase 1 implemented and verified end to end on one Bilibili video on 2026-10-26 (download, BCut transcription, representative frames, summary context). `summarize`, the Agent skill and the GUI are implemented and tested (2026-10-27); see "Status and open items". Nothing is released until the user says so (user decision, 2026-10-27).
+Status: 0.7.0 (BCut client written anew) released on 2026-10-28; 0.8.0 (summary versions, chat AI imports) prepared on 2026-10-28. CLI phase 1 implemented and verified end to end on one Bilibili video on 2026-10-26 (download, BCut transcription, representative frames, summary context). `summarize`, the Agent skill and the GUI are implemented and tested (2026-10-27); see "Status and open items". Nothing is released until the user says so (user decision, 2026-10-27).
 
 ## Platform — user decision
 
