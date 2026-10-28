@@ -7,6 +7,7 @@
     <img src="https://img.shields.io/badge/license-AGPL--3.0--or--later-blue" alt="许可证：AGPL-3.0-or-later" />
     <img src="https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white" alt="Python 3.11+" />
     <img src="https://img.shields.io/badge/Electron-45-47848F?logo=electron&logoColor=white" alt="Electron 45" />
+    <a href="#交流群"><img src="https://img.shields.io/badge/QQ%E7%BE%A4-1132547729-12B7F5?logo=qq&logoColor=white" alt="QQ 群：1132547729" /></a>
   </p>
 </div>
 
@@ -21,6 +22,14 @@ Video Agent 由三部分组成，按需取用：
 - **桌面程序**：在窗口里完成以上全部操作，内嵌终端，支持托盘和任务日志。
 
 只支持 Windows。
+
+## 交流群
+
+QQ 群：1132547729，用 QQ 扫码也可以加入。问题和建议也可以提 [issue](https://github.com/edsfod/video-agent/issues)。
+
+<p align="center">
+  <img src="docs/images/qq-group.webp" width="240" alt="VideoAgent QQ 群二维码，群号 1132547729" />
+</p>
 
 ## 能做什么
 
@@ -167,14 +176,6 @@ video-agent config --provider openai --model Qwen/Qwen3.5-397B-A17B --base-url h
 - 下载、转录和截取的视频内容，版权属于原作者。请只用于个人学习，遵守视频网站的用户协议和当地法律，不要传播下载的视频。
 - 必剪转录用的是哔哩哔哩的非官方接口，不在它的公开服务条款保障之内，随时可能失效或受限制。
 - 总结由 AI 生成，可能有错，重要内容请对照原视频核实。
-
-## 交流群
-
-QQ 群：1132547729，用 QQ 扫码也可以加入。问题和建议也可以提 [issue](https://github.com/edsfod/video-agent/issues)。
-
-<p align="center">
-  <img src="docs/images/qq-group.webp" width="240" alt="VideoAgent QQ 群二维码，群号 1132547729" />
-</p>
 
 ## 开发
 
