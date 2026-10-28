@@ -6,7 +6,7 @@ import json
 import sys
 from pathlib import Path
 
-from . import collection, corrections, files, processor, settings
+from . import collection, corrections, files, processor, settings, versions
 from . import summarize as summaries
 from .download import DownloadError, download_urls
 from .media import MediaError, duration, parse_clock, probe, save_frame
@@ -185,13 +185,46 @@ def build_parser():
     help='frames the model may ask for through tool calling (default: 8)',
   )
   summarize.add_argument('--no-tools', action='store_true', help='for models without tool calling')
-  summarize.add_argument('--overwrite', action='store_true', help='replace an existing 总结.md')
+  summarize.add_argument(
+    '--make-current',
+    '--overwrite',
+    dest='overwrite',
+    action='store_true',
+    help='make the new text the current one; the one it replaces is kept as a version (without this, a new text is '
+    'kept as a version beside an existing one; see the versions command)',
+  )
   summarize.add_argument(
     '--import',
     dest='import_from',
     metavar='FILE',
-    help='save a summary written elsewhere (a file, or - for stdin) as 总结.md instead of calling a model',
+    help='save a summary written elsewhere (a file, or - for stdin) instead of calling a model',
   )
+  summarize.add_argument('--note', default='', help='with --import: a note kept with this version, such as the model')
+  summarize.add_argument(
+    '--source', default='', help='with --import: what wrote it, such as 网页 AI or Claude Code (default: 导入)'
+  )
+
+  history = commands.add_parser(
+    'versions',
+    help='the versions of a summary (or of a collection overview or study guide): list, make current, note, delete',
+  )
+  history.add_argument('video', type=Path, nargs='?', help='the video; leave out with --collection')
+  history.add_argument('--collection', metavar='NAME', help="the collection's overview (合集总结.md)")
+  history.add_argument('--guide', action='store_true', help='with --collection: the study guide instead')
+  history.add_argument(
+    '-o',
+    '--output',
+    type=Path,
+    default=Path.cwd() / 'video-agent-output',
+    help='the workspace passed to process (default: video-agent-output)',
+  )
+  history.add_argument('--use', metavar='FILE', help='make this version current; the current text becomes a version')
+  history.add_argument('--delete', metavar='FILE', help='delete this version (never the current text)')
+  history.add_argument('--note', nargs=2, metavar=('FILE', 'TEXT'), help="set a version's note (FILE may be 总结.md)")
+  history.add_argument(
+    '--keep', metavar='SOURCE', help='keep a copy of the current text as a version before something rewrites the file'
+  )
+  history.add_argument('--json', action='store_true', help='print the versions as JSON')
 
   packing = commands.add_parser(
     'pack', help='the summary prompt for a chat AI: print it, or zip it with the frames (--zip)'
@@ -460,6 +493,56 @@ def _tools():
   }
 
 
+def _written(path, args):
+  """Prints where a new text went; one kept beside an existing text says how to make it current."""
+  print(path)
+  if Path(path).name not in (summaries.SUMMARY_NAME, collection.OVERVIEW, collection.GUIDE):
+    where = (
+      f'--collection "{args.collection}"' + (' --guide' if args.guide else '') if args.collection else f'"{args.video}"'
+    )
+    print(
+      f'kept as a version beside the current text; make it current with: '
+      f'video-agent versions {where} -o "{args.output}" --use "{Path(path).name}"',
+      file=sys.stderr,
+    )
+
+
+def _versions(args):
+  if bool(args.video) == bool(args.collection):
+    print('versions: give a video or --collection NAME')
+    return 2
+  if args.collection:
+    target = summaries._collection_target(args.output, args.collection, args.guide)
+    lock = collection.lock(args.output, args.collection, 'change versions')
+  else:
+    video, _ = probe(args.video)
+    target = asset_folder(args.output, video) / summaries.SUMMARY_NAME
+    lock = files.video_lock(target.parent, 'change versions')
+  with lock:
+    if args.keep:
+      kept = versions.keep(target, source=args.keep)
+      print(
+        f'kept {kept}' if kept else 'nothing to keep: no current text, or an identical version exists', file=sys.stderr
+      )
+    if args.note:
+      versions.set_note(target, *args.note)
+    if args.use:
+      versions.use(target, args.use)
+    if args.delete:
+      versions.delete(target, args.delete)
+  found = versions.listing(target)
+  if args.json:
+    _emit(found)
+    return 0
+  rows = ([found['current']] if found['current'] else []) + found['versions']
+  for row in rows:
+    mark = '*' if row is found['current'] else ' '
+    print(f'{mark} {row["created"]}  {row["file"]}  {row["source"]}  {row["note"]}'.rstrip())
+  if not rows:
+    print(f'{target.name} has no versions yet')
+  return 0
+
+
 def _update(args):
   workspace, name = args.output, args.name
   source = collection.load(workspace, name).get('source')
@@ -505,12 +588,7 @@ def _fix(args):
     for wrong, right in args.replace:
       pairs = [pair for pair in pairs if pair[0] != wrong] + [(wrong, right)]
     corrections.save(asset, pairs)
-    changes = corrections.rebuild(asset)
-    manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
-    told = manifest['transcript']
-    manifest['transcript'] = processor.transcript_entry(asset, told['source'], told['segments'], told.get('error'))
-    processor._write_json(manifest_path, manifest)
-    processor.write_context(asset)
+    changes = processor.refresh_transcript(asset)
   text = ' '.join(row[2] for row in corrections.original_rows(asset))
   unmatched = [wrong for wrong, _ in args.replace if not corrections._pattern(wrong).search(text)]
   if args.json:
@@ -626,6 +704,13 @@ def run(args):
   if args.command == 'collection':
     return _collection(args)
 
+  if args.command == 'versions':
+    try:
+      return _versions(args)
+    except versions.VersionError as error:
+      print(f'versions: {error}')
+      return 1
+
   if args.command in ('summarize', 'pack') and not args.video and not args.collection:
     print(f'{args.command}: give a video or --collection NAME')
     return 2
@@ -634,13 +719,15 @@ def run(args):
     # Bytes, not text: the GUI sends UTF-8, whatever code page a frozen build would decode stdin with.
     source = sys.stdin.buffer.read() if args.import_from == '-' else Path(args.import_from).read_bytes()
     text = source.decode('utf-8-sig')
+    written = {'overwrite': args.overwrite, 'source': args.source, 'note': args.note}
     if args.collection:
-      target = summaries.import_collection(
-        args.output, args.collection, text, guide=args.guide, overwrite=args.overwrite
-      )
+      target = summaries.import_collection(args.output, args.collection, text, guide=args.guide, **written)
     else:
-      target = import_summary(args.video, args.output, text, overwrite=args.overwrite)
-    print(target)
+      target, pairs = import_summary(args.video, args.output, text, **written)
+      if pairs:
+        listed = '、'.join(f'{wrong}→{right}' for wrong, right in pairs)
+        print(f'applied {len(pairs)} transcript corrections from the summary: {listed}', file=sys.stderr)
+    _written(target, args)
     return 0
 
   if args.command == 'pack' and args.collection:
@@ -651,17 +738,16 @@ def run(args):
 
   if args.command == 'summarize' and args.collection:
     chosen = settings.resolve(args.provider, args.model, args.base_url)
-    print(
-      summaries.summarize_collection(
-        args.output,
-        args.collection,
-        chosen,
-        settings.get_key(chosen['provider']),
-        guide=args.guide,
-        request=args.request,
-        overwrite=args.overwrite,
-      )
+    path = summaries.summarize_collection(
+      args.output,
+      args.collection,
+      chosen,
+      settings.get_key(chosen['provider']),
+      guide=args.guide,
+      request=args.request,
+      overwrite=args.overwrite,
     )
+    _written(path, args)
     return 0
 
   if args.command == 'pack':
@@ -685,7 +771,7 @@ def run(args):
       use_tools=not args.no_tools,
       overwrite=args.overwrite,
     )
-    print(path)
+    _written(path, args)
     return 0
 
   if args.command == 'frame':

@@ -108,13 +108,17 @@ def test_frame_limit_and_bad_time_are_reported_to_the_model(processed, fake_mode
   assert result['is_error'] and 'outside the video' in result['content'][0]['text']
 
 
-def test_no_tools_and_refuses_to_overwrite(processed, fake_model, no_proxy):
+def test_no_tools_and_a_second_summary_is_kept_beside_the_first(processed, fake_model, no_proxy):
   video, workspace = processed
-  server = fake_model([{'stop_reason': 'end_turn', 'content': [{'type': 'text', 'text': SUMMARY}]}])
-  summarize_video(video, workspace, config('anthropic', server.url), 'k', use_tools=False, status=lambda message: None)
+  reply = {'stop_reason': 'end_turn', 'content': [{'type': 'text', 'text': SUMMARY}]}
+  server = fake_model([reply, {**reply, 'content': [{'type': 'text', 'text': '# 第二版\n\n' + '内容' * 30}]}])
+  first = summarize_video(
+    video, workspace, config('anthropic', server.url), 'k', use_tools=False, status=lambda m: None
+  )
   assert 'tools' not in server.requests[0]['body']
-  with pytest.raises(SummaryError, match='already exists'):
-    summarize_video(video, workspace, config('anthropic', server.url), 'k', status=lambda message: None)
+  second = summarize_video(video, workspace, config('anthropic', server.url), 'k', status=lambda message: None)
+  assert first.name == '总结.md' and first.read_text(encoding='utf-8') == SUMMARY, 'the current one stays'
+  assert second.name.startswith('总结 (') and second.read_text(encoding='utf-8').startswith('# 第二版')
 
 
 def test_requires_processing_first(sample_video, tmp_path):
@@ -148,23 +152,67 @@ def test_video_line_reads_like_a_title():
   assert video_line('C:/v/clip.mp4', 65).endswith('时长：1:05')
 
 
-def test_import_saves_a_pasted_summary_once(processed, monkeypatch, capsys):
+def test_imports_never_lose_a_summary_and_versions_can_be_chosen(processed, monkeypatch, capsys):
   from video_agent import cli
 
   video, workspace = processed
   pasted = f'```markdown\n{SUMMARY}```\n'
   monkeypatch.setattr('sys.stdin', io.TextIOWrapper(io.BytesIO(pasted.encode('utf-8'))))
-  assert cli.main(['summarize', str(video), '-o', str(workspace), '--import', '-']) == 0
+  assert cli.main(['summarize', str(video), '-o', str(workspace), '--import', '-', '--note', 'Gemini']) == 0
   target = asset_folder(workspace, video.resolve()) / '总结.md'
   assert target.read_text(encoding='utf-8') == SUMMARY
   again = workspace / 'again.md'
   again.write_text('# 第二版\n\n' + '内容' * 30, encoding='utf-8')
-  with pytest.raises(SystemExit) as stopped:
-    cli.main(['summarize', str(video), '-o', str(workspace), '--import', str(again)])
-  assert stopped.value.code == 2
-  assert 'already exists' in capsys.readouterr().err
-  assert cli.main(['summarize', str(video), '-o', str(workspace), '--import', str(again), '--overwrite']) == 0
+  capsys.readouterr()
+  assert cli.main(['summarize', str(video), '-o', str(workspace), '--import', str(again), '--source', '网页 AI']) == 0
+  assert target.read_text(encoding='utf-8') == SUMMARY, 'a second import does not replace the current summary'
+  assert 'make it current with' in capsys.readouterr().err
+
+  def listing():
+    assert cli.main(['versions', str(video), '-o', str(workspace), '--json']) == 0
+    return json.loads(capsys.readouterr().out)
+
+  found = listing()
+  assert (found['current']['note'], found['current']['source']) == ('Gemini', '导入')
+  [kept] = found['versions']
+  assert kept['source'] == '网页 AI'
+  assert cli.main(['versions', str(video), '-o', str(workspace), '--use', kept['file']]) == 0
+  capsys.readouterr()
   assert target.read_text(encoding='utf-8').startswith('# 第二版')
+  found = listing()
+  assert found['current']['source'] == '网页 AI'
+  [old] = found['versions']
+  assert old['note'] == 'Gemini' and (target.parent / old['file']).read_text(encoding='utf-8') == SUMMARY
+  assert cli.main(['versions', str(video), '-o', str(workspace), '--note', old['file'], '第一版']) == 0
+  capsys.readouterr()
+  assert listing()['versions'][0]['note'] == '第一版'
+  assert cli.main(['versions', str(video), '-o', str(workspace), '--delete', old['file']]) == 0
+  capsys.readouterr()
+  assert listing()['versions'] == [] and not (target.parent / old['file']).exists()
+
+
+def test_import_repairs_rewritten_links_the_video_line_and_takes_corrections(processed):
+  from video_agent import corrections
+  from video_agent.summarize import import_summary
+
+  video, workspace = processed
+  asset = asset_folder(workspace, video.resolve())
+  page = next(asset.glob('frames/*/screen/*.jpg')).relative_to(asset).as_posix()
+  text = (
+    '# 标题\n\n视频：别的名字 · 打开视频 · 时长：0:08 · 字幕：[transcript.txt](https://www.google.com/search?q=transcript.txt)\n\n'
+    f'- 一点 [画面](https://www.google.com/search?q={page})，另一点 [画面](sandbox:/mnt/data/material/{page})\n'
+    '- 外链 [官网](https://example.com/?q=frames/none.jpg) 不动\n\n'
+    '## 字幕改正\n\n- 测试画面 → 测试图像\n- `彩色` -> `彩色的`\n'
+  )
+  target, pairs = import_summary(video, workspace, text, source='网页 AI')
+  saved = target.read_text(encoding='utf-8')
+  assert f'[画面]({page})，另一点 [画面]({page})' in saved
+  assert '[transcript.txt](transcript.txt)' in saved and 'https://example.com/?q=frames/none.jpg' in saved
+  assert '[打开视频](<' in saved and '别的名字' not in saved
+  assert '字幕改正' not in saved
+  assert pairs == [('测试画面', '测试图像'), ('彩色', '彩色的')]
+  assert corrections.load(asset) == pairs
+  assert (asset / 'transcript.clean.srt').is_file()
 
 
 def test_pack_zips_the_prompt_with_frames_at_their_folder_paths(processed, capsys):

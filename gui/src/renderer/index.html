@@ -149,6 +149,12 @@
                 <span id="summary-state" class="muted"></span>
               </div>
             </div>
+            <div id="summary-versions" class="versions row" hidden>
+              <label class="grow">版本<select id="summary-version-pick"></select></label>
+              <button id="summary-version-use" type="button">设为当前</button>
+              <button id="summary-version-note" type="button" class="ghost">备注…</button>
+              <button id="summary-version-delete" type="button" class="ghost">删除这个版本</button>
+            </div>
             <article id="summary" class="markdown"></article>
           </div>
 
@@ -336,12 +342,14 @@
     <dialog id="import-dialog">
       <form method="dialog" class="settings">
         <h2>导入总结</h2>
-        <p class="muted small-text">把网页 AI 写好的总结粘贴到下面，或者选一个 Markdown 文件，保存成这个视频的 总结.md。外面包着的 ```markdown 会自动去掉。</p>
+        <p class="muted small-text">把网页 AI 写好的总结粘贴到下面，或者选一个 Markdown 文件。外面包着的 ```markdown 会自动去掉，被网页 AI 改坏的画面链接会修好，最后的「字幕改正」一节会用来整理字幕。</p>
         <textarea id="import-text" rows="14" spellcheck="false" placeholder="粘贴总结"></textarea>
         <span class="row">
           <button id="import-file" type="button">从文件读取…</button>
           <span id="import-file-name" class="muted small-text grow"></span>
         </span>
+        <label>备注（可不填）<input id="import-note" type="text" spellcheck="false" placeholder="例如：Gemini 2.5 Pro，要求写详细一点" /></label>
+        <label id="import-current-label" class="check"><input id="import-current" type="checkbox" /><span>设为当前总结（不勾就另存为一个版本，原来的总结不动）</span></label>
         <div class="row end">
           <button value="cancel" class="ghost">取消</button>
           <button id="import-save" value="save" class="primary">导入</button>

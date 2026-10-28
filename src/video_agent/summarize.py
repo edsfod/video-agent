@@ -14,12 +14,13 @@ import tempfile
 import zipfile
 from importlib import resources
 from pathlib import Path
+from urllib.parse import parse_qs, unquote, urlparse
 
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util import Retry
 
-from . import files, media, settings
+from . import files, media, processor, settings, versions
 from .processor import asset_folder
 
 SUMMARY_NAME = '总结.md'
@@ -354,8 +355,6 @@ def _summarize_locked(
 ):
   manifest_path, context_path = asset / 'manifest.json', asset / 'summary-context.md'
   target = asset / SUMMARY_NAME
-  if target.exists() and not overwrite:
-    raise SummaryError(f'{target} already exists; pass --overwrite to replace it')
   manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
 
   with tempfile.TemporaryDirectory(prefix='video-agent-') as work_dir:
@@ -364,9 +363,12 @@ def _summarize_locked(
       status(
         f'{video.name}: {dropped} screen pages do not fit in {max_images} images even on sheets; pass --max-images'
       )
-    return _ask(
+    text = _ask(
       video, info, asset, config, key, request, images, max_extra_frames, use_tools, context_path, target, status
     )
+  # An existing summary stays current unless the new one is asked to replace it; either way neither is lost.
+  path, _ = versions.save(target, text, source=f'模型 API · {config["model"]}', note=request, make_current=overwrite)
+  return path
 
 
 def _ask(video, info, asset, config, key, request, images, max_extra_frames, use_tools, context_path, target, status):
@@ -395,8 +397,7 @@ def _ask(video, info, asset, config, key, request, images, max_extra_frames, use
   text = _clean(call(_session(), config, key, template(), intro, images, tools))
   if len(text.strip()) < 40:
     raise SummaryError('The model returned no usable summary')
-  files.write_text(target, text)
-  return target
+  return text
 
 
 def _processed(video, workspace):
@@ -408,18 +409,72 @@ def _processed(video, workspace):
   return video, info, asset, json.loads(manifest_path.read_text(encoding='utf-8'))
 
 
-def import_summary(video, workspace, text, *, overwrite=False):
-  """Saves a summary written elsewhere, such as by a chat AI from `pack`, as 总结.md; a ```markdown fence is removed."""
-  video, _, asset, _ = _processed(video, workspace)
-  text = _clean(text)
+# Chat AIs rewrite links they cannot resolve: Gemini wraps a relative path in a search
+# (https://www.google.com/search?q=frames/…), ChatGPT puts it under its sandbox (sandbox:/mnt/data/<zip>/frames/…).
+LINK = re.compile(r'(\]\(<?)([^()<>\s]+)(>?\))')
+LOCAL_ROOTS = ('frames/', 'transcript', 'summary-context.md', '../')
+
+
+def _local_target(target, base):
+  """The relative path a rewritten link stands for, when that file is in `base`; None for a link to leave alone."""
+  candidates = []
+  parsed = urlparse(target)
+  if parsed.scheme in ('http', 'https'):
+    for values in parse_qs(parsed.query).values():
+      candidates += values
+  if parsed.scheme in ('http', 'https', 'sandbox', 'file') or target.startswith('/'):
+    path = unquote(parsed.path if parsed.scheme else target)
+    for root in LOCAL_ROOTS:
+      if root in path:
+        candidates.append(path[path.index(root) :])
+  for candidate in candidates:
+    candidate = unquote(candidate).strip()
+    if candidate.startswith(LOCAL_ROOTS) and (Path(base) / candidate).exists():
+      return candidate
+  return None
+
+
+def repair_links(text, base):
+  """Puts back the relative links a chat AI turned into search or sandbox links (user report, 2026-10-28)."""
+  return LINK.sub(lambda m: m[1] + (_local_target(m[2], base) or m[2]) + m[3], text)
+
+
+# A chat AI cannot run `video-agent fix`; the prompt asks it to list recurring mishearings in this section instead.
+CORRECTIONS_HEADING = '字幕改正'
+CORRECTIONS = re.compile(rf'^##\s*{CORRECTIONS_HEADING}\s*\n(.*?)(?=^##\s|\Z)', re.MULTILINE | re.DOTALL)
+PAIR = re.compile(r'^\s*(?:[-*]\s*)?`?(.+?)`?\s*(?:→|->|=>)\s*`?(.+?)`?\s*$')
+
+
+def take_corrections(text):
+  """(summary without the 字幕改正 section, [(wrong, right)] it listed)."""
+  found = CORRECTIONS.search(text)
+  if not found:
+    return text, []
+  pairs = [(m[1], m[2]) for line in found[1].splitlines() if (m := PAIR.match(line)) and m[1] != m[2]]
+  return (text[: found.start()] + text[found.end() :]).rstrip() + '\n', pairs
+
+
+def import_summary(video, workspace, text, *, overwrite=False, source='', note=''):
+  """Saves a summary written elsewhere, such as by a chat AI from `pack`, as 总结.md: a ```markdown fence is removed,
+  rewritten links point at the video's files again, the 视频 line is the one this program writes, and a 字幕改正
+  section goes into the cleaned transcript. With a summary there already, the new one is kept as a version unless
+  `overwrite` makes it current (versions.py). Returns (path written, corrections applied)."""
+  video, info, asset, manifest = _processed(video, workspace)
+  text, pairs = take_corrections(_clean(text))
   if len(text.strip()) < 40:
     raise SummaryError('The summary to import is empty or too short')
+  text = repair_links(text, asset)
+  line = video_line(video, manifest.get('duration_s') or media.duration(info))
+  text = re.sub(r'^视频：.*?时长：[0-9:]+', lambda _: line, text, count=1, flags=re.MULTILINE)
   with files.video_lock(asset, 'import the summary'):
-    target = asset / SUMMARY_NAME
-    if target.exists() and not overwrite:
-      raise SummaryError(f'{target} already exists; pass --overwrite to replace it')
-    files.write_text(target, text)
-  return target
+    target, _ = versions.save(asset / SUMMARY_NAME, text, source=source or '导入', note=note, make_current=overwrite)
+    if pairs:
+      from . import corrections
+
+      known = [pair for pair in corrections.load(asset) if pair[0] not in {wrong for wrong, _ in pairs}]
+      corrections.save(asset, known + pairs)
+      processor.refresh_transcript(asset)
+  return target, pairs
 
 
 PROMPT_NAME = '提示词.md'
@@ -437,6 +492,12 @@ def material(video, workspace, *, request='', max_images=40, work_dir=None):
   pages = [(item['time_s'], item['path']) for item in manifest.get('screen_pages') or []]
   frames = _evidence_frames(asset, manifest, max_images)
   entries, notes = [], []
+  notes.append(
+    f'你不能运行命令，所以规则里用 `video-agent fix` 整理字幕的那一步改成这样：把每次出现都识别错的名字、术语，'
+    f'在总结最后单独写一节 `## {CORRECTIONS_HEADING}`，每行一条 `错的写法 → 正确写法`；导入时程序会照它整理字幕'
+    '（原字幕保留），再把这一节从总结里去掉。只错一次的、错的写法本身也是正常词语的，只在总结里改，不列进来；'
+    '没有要改的就不写这一节。'
+  )
   if work_dir is None:
     notes.append('这次没有附上画面，材料里列出的屏幕页和画面你看不到：不要描述画面内容，也不要链接画面。')
   else:
@@ -557,8 +618,6 @@ def summarize_collection(workspace, name, config, key, *, guide=False, request='
     raise SummaryError('No API key for anthropic; run: video-agent config --provider anthropic --set-key')
   target = _collection_target(workspace, name, guide)
   with collection.lock(workspace, name, 'summarize the collection'):
-    if target.exists() and not overwrite:
-      raise SummaryError(f'{target} already exists; pass --overwrite to replace it')
     _, evidence, missing = _collection_evidence(workspace, name)
     if missing:
       raise SummaryError(
@@ -584,21 +643,19 @@ def summarize_collection(workspace, name, config, key, *, guide=False, request='
     text = _clean(call(_session(), config, key, template(), intro, [], None))
     if len(text.strip()) < 40:
       raise SummaryError('The model returned no usable text')
-    files.write_text(target, text)
-  return target
+    path, _ = versions.save(target, text, source=f'模型 API · {config["model"]}', note=request, make_current=overwrite)
+  return path
 
 
-def import_collection(workspace, name, text, *, guide=False, overwrite=False):
+def import_collection(workspace, name, text, *, guide=False, overwrite=False, source='', note=''):
   """Saves a collection overview or study guide written elsewhere, as import_summary does for one video."""
   from . import collection
 
   collection.load(workspace, name)
   target = _collection_target(workspace, name, guide)
-  text = _clean(text)
+  text = repair_links(_clean(text), target.parent)
   if len(text.strip()) < 40:
     raise SummaryError('The text to import is empty or too short')
   with collection.lock(workspace, name, 'import into the collection'):
-    if target.exists() and not overwrite:
-      raise SummaryError(f'{target} already exists; pass --overwrite to replace it')
-    files.write_text(target, text)
-  return target
+    path, _ = versions.save(target, text, source=source or '导入', note=note, make_current=overwrite)
+  return path

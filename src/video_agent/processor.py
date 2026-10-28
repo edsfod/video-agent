@@ -144,6 +144,22 @@ def _context(manifest, rows):
   return '\n'.join(lines)
 
 
+def refresh_transcript(asset):
+  """After corrections changed: rebuilds the cleaned transcript, records it in the manifest and rewrites the context.
+  Returns the changed lines. The caller holds the video's lock."""
+  from . import corrections
+
+  asset = Path(asset)
+  changes = corrections.rebuild(asset)
+  manifest_path = asset / 'manifest.json'
+  manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
+  told = manifest['transcript']
+  manifest['transcript'] = transcript_entry(asset, told['source'], told['segments'], told.get('error'))
+  _write_json(manifest_path, manifest)
+  write_context(asset)
+  return changes
+
+
 def write_context(asset):
   """Writes summary-context.md from the manifest and the transcript in use (the cleaned one when there is one), so a
   cleaned transcript reaches every summary route without processing the video again."""

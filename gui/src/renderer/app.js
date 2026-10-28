@@ -14,6 +14,7 @@ const state = {
   view: 'video', // or 'collection', with state.collection its name
   collection: null,
   doc: 'overview', // the collection file shown: overview (合集总结) or guide (学习提纲)
+  version: null, // { video, file }: a summary version shown instead of the current one
   expanded: new Set(), // collections the user opened with ▸ in the sidebar
   collapsed: new Set(), // and those closed with ▾ although they hold the page shown
   tools: null, // `video-agent tools`: where FFmpeg, yt-dlp and AutoSlides Extractor were found (null: not found)
@@ -605,11 +606,23 @@ async function renderSummary(video) {
     return;
   }
   if (!info.summary) {
+    $('summary-versions').hidden = true;
     article.replaceChildren(element('p', { className: 'placeholder', textContent: '还没有总结。' }));
     return;
   }
-  const text = await window.va.read(info.summary);
+  // Versions live beside 总结.md (versions.py), so the links in any of them resolve from the same folder.
+  const found = await window.va.cliJson(['versions', video.path, '-o', state.settings.workspace, '--json']);
+  const list = found.error ? { current: null, versions: [] } : found;
+  if (state.version?.video !== video.path || !list.versions.some((entry) => entry.file === state.version.file)) {
+    state.version = null;
+  }
+  renderVersions(list);
+  const shown = state.version ? list.versions.find((entry) => entry.file === state.version.file).path : info.summary;
+  const text = await window.va.read(shown);
   article.innerHTML = DOMPurify.sanitize(marked.parse(text || ''));
+  if (state.version) {
+    article.prepend(element('p', { className: 'version-banner', textContent: '正在看另一个版本；点「设为当前」才会换掉现在的总结。' }));
+  }
   for (const link of article.querySelectorAll('a[href]')) {
     const href = link.getAttribute('href');
     link.onclick = (event) => {
@@ -623,6 +636,48 @@ async function renderSummary(video) {
   }
 }
 
+const versionLabel = (entry) => [when(entry.created), entry.source, entry.note].filter(Boolean).join(' · ');
+
+function renderVersions(list) {
+  const others = list.versions;
+  $('summary-versions').hidden = !others.length && !list.current?.note;
+  $('summary-version-pick').replaceChildren(
+    element('option', { value: '', textContent: `当前：${list.current ? versionLabel(list.current) : ''}` }),
+    ...others.map((entry) => element('option', { value: entry.file, textContent: versionLabel(entry) })),
+  );
+  $('summary-version-pick').value = state.version?.file || '';
+  $('summary-version-use').disabled = $('summary-version-delete').disabled = !state.version;
+}
+
+const versionArgs = (...args) => ['versions', current().path, '-o', state.settings.workspace, ...args];
+$('summary-version-pick').onchange = () => {
+  const file = $('summary-version-pick').value;
+  state.version = file ? { video: current().path, file } : null;
+  renderSummary(current());
+};
+$('summary-version-use').onclick = async () => {
+  const result = await window.va.cliText(versionArgs('--use', state.version.file));
+  if (result.code !== 0) return alert(`没有换成：${(result.err || result.out).trim()}`);
+  state.version = null;
+  summaryState('已换成这个版本；原来的总结留作一个版本。');
+  await refresh(current());
+};
+$('summary-version-delete').onclick = async () => {
+  if (!confirm('删除这个版本？删除后找不回来。')) return;
+  const result = await window.va.cliText(versionArgs('--delete', state.version.file));
+  if (result.code !== 0) return alert(`没有删除：${(result.err || result.out).trim()}`);
+  state.version = null;
+  await refresh(current());
+};
+$('summary-version-note').onclick = async () => {
+  const file = state.version?.file || '总结.md';
+  const note = prompt('这个版本的备注（例如用的模型、要求）：', '');
+  if (note === null) return;
+  const result = await window.va.cliText(versionArgs('--note', file, note.trim()));
+  if (result.code !== 0) return alert(`没有保存备注：${(result.err || result.out).trim()}`);
+  renderSummary(current());
+};
+
 $('open-summary').onclick = () => current()?.info?.summary && window.va.open(current().info.summary);
 
 $('run-summary').onclick = async () => {
@@ -630,8 +685,9 @@ $('run-summary').onclick = async () => {
   const info = video.info;
   const request = $('summary-request').value.trim();
   if (state.route === 'copy') return copyMaterial();
-  if (info.summary && !confirm('已经有总结了，要重新生成并覆盖吗？')) return;
   const name = { api: '模型 API', claude: 'Claude Code', codex: 'Codex' }[state.route];
+  // A summary there already stays current; the new one is kept as a version to compare and choose.
+  if (info.summary) summaryState('已经有总结：新写的会另存为一个版本，原来的不动。');
   addTask({
     kind: 'summary',
     title: `总结（${name}）：${baseName(video.path)}`,
@@ -640,7 +696,7 @@ $('run-summary').onclick = async () => {
     video: video.path,
     folder: info.folder,
     request,
-    overwrite: !!info.summary,
+    overwrite: false,
   });
 };
 
@@ -730,6 +786,12 @@ function openImport() {
   importFile = null;
   $('import-text').value = '';
   $('import-file-name').textContent = '';
+  $('import-note').value = '';
+  $('import-current').checked = false;
+  // Choosing only matters with something there already; the first text becomes current anyway.
+  const item = importTarget && state.collections.find((entry) => entry.name === importTarget.collection);
+  const exists = importTarget ? (importTarget.guide ? item?.guide : item?.overview) : current()?.info?.summary;
+  $('import-current-label').hidden = !exists;
   $('import-dialog').showModal();
 }
 
@@ -744,12 +806,18 @@ $('import-dialog').addEventListener('close', async () => {
   if (!importFile && !text.trim()) return;
   if (importTarget) return importCollection(text);
   const video = current();
-  if (video.info.summary && !confirm('已经有总结了，要用导入的内容覆盖吗？')) return;
-  const args = ['summarize', video.path, '-o', state.settings.workspace, '--import', importFile || '-'];
-  if (video.info.summary) args.push('--overwrite');
+  const args = ['summarize', video.path, '-o', state.settings.workspace, '--import', importFile || '-', '--source', '网页 AI'];
+  const note = $('import-note').value.trim();
+  if (note) args.push('--note', note);
+  const asCurrent = !video.info.summary || $('import-current').checked;
+  if (asCurrent) args.push('--make-current');
   const result = await window.va.cliText(args, importFile ? '' : text);
   if (result.code !== 0) return alert(`没有导入：${(result.err || result.out).trim()}`);
-  summaryState('已导入总结。');
+  const fixed = /applied (\d+) transcript corrections/.exec(result.err)?.[1];
+  summaryState(
+    (asCurrent ? '已导入，设为当前总结。' : '已导入，另存为一个版本；在上面的「版本」里查看或设为当前。') +
+      (fixed ? `按总结里的「字幕改正」改了 ${fixed} 处错字，原字幕保留。` : ''),
+  );
   await refresh(video);
 });
 
@@ -1050,7 +1118,7 @@ async function writeCollectionFile(guide) {
     return;
   }
   const exists = guide ? item.guide : item.overview;
-  if (exists && !confirm(`已经有${file}了，要重新生成并覆盖吗？`)) return;
+  if (exists) $('collection-state').textContent = `已经有${file}：新写的会另存为一个版本，原来的不动。`;
   const missing = item.videos.filter((member) => !member.skipped && !member.summary);
   if (route === 'api' && missing.length) {
     return alert(`还有 ${missing.length} 集没有总结：${missing.map((member) => member.name).join('、')}。先点「总结没总结的」，或把没内容的跳过。`);
@@ -1066,7 +1134,7 @@ async function writeCollectionFile(guide) {
     route,
     agent: route === 'api' ? undefined : route,
     request,
-    overwrite: !!exists,
+    overwrite: false,
   });
 }
 $('collection-overview').onclick = () => writeCollectionFile(false);
@@ -1080,10 +1148,11 @@ async function importCollection(text) {
   const { collection, guide } = importTarget;
   const item = state.collections.find((entry) => entry.name === collection);
   const exists = guide ? item?.guide : item?.overview;
-  if (exists && !confirm('已经有了，要用导入的内容覆盖吗？')) return;
-  const args = ['summarize', '--collection', collection, '-o', state.settings.workspace, '--import', importFile || '-'];
+  const args = ['summarize', '--collection', collection, '-o', state.settings.workspace, '--import', importFile || '-', '--source', '网页 AI'];
   if (guide) args.push('--guide');
-  if (exists) args.push('--overwrite');
+  const note = $('import-note').value.trim();
+  if (note) args.push('--note', note);
+  if (!exists || $('import-current').checked) args.push('--make-current');
   const result = await window.va.cliText(args, importFile ? '' : text);
   if (result.code !== 0) return alert(`没有导入：${(result.err || result.out).trim()}`);
   $('collection-state').textContent = `已导入${guide ? '学习提纲' : '合集总结'}。`;

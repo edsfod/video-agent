@@ -2,7 +2,7 @@
 // All media and summary work happens in the CLI; this file only starts processes and relays their output.
 
 const { app, BrowserWindow, ipcMain, dialog, shell, clipboard, nativeTheme, Tray, Menu, nativeImage } = require('electron');
-const { spawn, execFileSync } = require('node:child_process');
+const { spawn, spawnSync, execFileSync } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
 const pty = require('node-pty');
@@ -275,19 +275,28 @@ function startTask(task) {
 
 // Agent route: Claude Code with the plugin, or Codex told to follow the skill file.
 function startAgent(task) {
-  const { agent, video, folder, request, overwrite, workspace, title } = task;
+  const { agent, video, folder, request, workspace, title } = task;
   const skill = path.join(pluginRoot(), 'skills', 'video-agent', 'SKILL.md');
   const file = task.guide ? '学习提纲.md' : '合集总结.md';
+  const name = agent === 'claude' ? 'Claude Code' : 'Codex';
+  // An Agent writes files itself; keep the current text as a version first, so nothing is lost even if it overwrites.
+  const [command, ...prefix] = cliCommand();
+  const target = task.kind === 'collection'
+    ? ['--collection', task.collection, ...(task.guide ? ['--guide'] : [])]
+    : [video];
+  spawnSync(command, [...prefix, 'versions', ...target, '-o', workspace, '--keep', name], { windowsHide: true, env: childEnv() });
+  const save = (what, args) =>
+    `写好后不要直接覆盖 ${what}：先写到一个临时文件，再运行 video-agent summarize ${args} -o "${workspace}" --import <临时文件> --source "${name}" 保存（已经有 ${what} 时会另存为一个版本，由用户决定用哪个），然后删掉临时文件。`;
   const text = (task.kind === 'collection'
     ? [
         `为合集「${task.collection}」写 ${file}，按 skill 里「A collection」的做法。`,
         `工作区是 ${workspace}，合集文件夹是 ${folder}。先运行 video-agent collection show "${task.collection}" -o "${workspace}" 看各集的状态；还没有总结的视频先按 skill 写总结，几乎没有内容的视频用 collection skip 跳过并写明原因。不要上传音频。`,
-        overwrite ? `已有的 ${file} 按要求重写。` : '',
+        save(file, `--collection "${task.collection}"${task.guide ? ' --guide' : ''}`),
       ]
     : [
         `总结这个视频：${video}`,
         `工作区是 ${workspace}，这个视频已经用 process 处理过，处理结果在 ${folder}。直接用这个文件夹，不要再运行 process，也不要上传音频。`,
-        overwrite ? '已有的 总结.md 按要求重写。' : '',
+        save('总结.md', `"${video}"`),
       ]
   ).concat(request ? [`用户的要求：${request}`] : []).filter(Boolean).join('\n');
   if (agent === 'claude') {

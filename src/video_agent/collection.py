@@ -82,12 +82,7 @@ def _apply_terms(workspace, name, videos, terms):
       corrections.set_shared(asset, name, terms)
       if not (asset / 'manifest.json').is_file():
         continue
-      corrections.rebuild(asset)
-      manifest = json.loads((asset / 'manifest.json').read_text(encoding='utf-8'))
-      told = manifest['transcript']
-      manifest['transcript'] = processor.transcript_entry(asset, told['source'], told['segments'], told.get('error'))
-      processor._write_json(asset / 'manifest.json', manifest)
-      processor.write_context(asset)
+      processor.refresh_transcript(asset)
 
 
 def create(workspace, name, videos=()):
