@@ -156,22 +156,64 @@ function splitCommand(text) {
 // help gives for that (pi 0.99, Hermes Agent 0.21, DeepSeek Harness's README; dsh is in developer preview). Each reads
 // the skill file as Codex does. None is limited to the workspace the way Codex's sandbox and Claude Code's allowed
 // tools are: they run commands as the user. The user may edit the command in the settings.
+// `installed`: where the program sits inside its desktop app, for one not on PATH: DeepSeek Harness's installer puts
+// `dsh` there and adds nothing to PATH (user report, 2026-10-28, installed on D:).
 const AGENTS = {
   pi: { name: 'pi', command: 'pi -p' },
   hermes: { name: 'Hermes Agent', command: 'hermes chat --query-file - -Q' },
-  dsh: { name: 'DeepSeek Harness', command: 'dsh --profile headless {prompt}' },
+  dsh: {
+    name: 'DeepSeek Harness',
+    command: 'dsh --profile headless {prompt}',
+    installed: { app: 'DeepSeek Harness', file: 'resources/runtime/cli/bin/dsh.cmd' },
+  },
 };
+
+// The folders an app was installed to, from the uninstall entries Windows keeps (any drive), and the default ones.
+function installFolders(app) {
+  const folders = [];
+  for (const hive of ['HKCU', 'HKLM']) {
+    try {
+      const key = `${hive}\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall`;
+      // /f prints only the matching values (DisplayName), so each matching entry is read for its InstallLocation.
+      const reg = (args) => execFileSync('reg.exe', ['query', ...args], { encoding: 'utf8', windowsHide: true });
+      for (const entry of reg([key, '/s', '/f', app, '/d']).match(/^HKEY_\S.*$/gm) || []) {
+        try {
+          const location = /InstallLocation\s+REG_\w+\s+(.+?)\s*$/m.exec(reg([entry.trim(), '/v', 'InstallLocation']))?.[1];
+          if (location) folders.push(location);
+        } catch {
+          // an entry without InstallLocation
+        }
+      }
+    } catch {
+      // no entry, or reg.exe found nothing
+    }
+  }
+  for (const root of [process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, 'Programs'), process.env.ProgramFiles]) {
+    if (root) folders.push(path.join(root, app));
+  }
+  return folders;
+}
+
+// A preset's program: on PATH, or else inside its app's install folder.
+function presetProgram(key) {
+  const preset = AGENTS[key];
+  const name = splitCommand(preset.command)[0];
+  if (which(name) || !preset.installed) return name;
+  const inside = installFolders(preset.installed.app).map((folder) => path.join(folder, preset.installed.file));
+  return inside.find((file) => fs.existsSync(file)) || name;
+}
 
 const commandFound = (file) => (path.isAbsolute(file) ? fs.existsSync(file) : !!which(file));
 
 // The other agents the summary routes offer, each with its command split and whether that command is here.
 function otherAgents() {
   const { agents } = loadSettings();
-  const chosen = agents ?? Object.keys(AGENTS).filter((key) => commandFound(splitCommand(AGENTS[key].command)[0])).map((key) => ({ key }));
+  const chosen = agents ?? Object.keys(AGENTS).filter((key) => commandFound(presetProgram(key))).map((key) => ({ key }));
   return chosen.flatMap(({ key, command }) => {
     const line = (command || '').trim() || AGENTS[key]?.command || '';
     if (!line) return [];
-    const [file, ...args] = splitCommand(line);
+    let [file, ...args] = splitCommand(line);
+    if (AGENTS[key] && file === splitCommand(AGENTS[key].command)[0]) file = presetProgram(key); // as the preset names it
     const name = AGENTS[key]?.name || path.basename(file).replace(/\.(exe|cmd|bat)$/i, '');
     return [{ key, name, command: line, file, args, found: commandFound(file) }];
   });
@@ -509,7 +551,7 @@ function registerIpc() {
     codex: which('codex'),
     others: otherAgents(),
     agents: Object.fromEntries(
-      Object.entries(AGENTS).map(([key, { name, command }]) => [key, { name, command, found: commandFound(splitCommand(command)[0]) }]),
+      Object.entries(AGENTS).map(([key, { name, command }]) => [key, { name, command, found: commandFound(presetProgram(key)) }]),
     ),
     shells: shells().map(({ id, label }) => ({ id, label })),
     pluginRoot: pluginRoot(),

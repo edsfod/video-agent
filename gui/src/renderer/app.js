@@ -498,9 +498,12 @@ async function startProcess(extra = {}) {
     ...extra,
   });
 }
-// This program's downloads go to <workspace>\下载; any other video is the user's own file, which is replaced only with
-// their agreement: the setting, or a confirmation here.
-const downloaded = (video) => video.path.toLowerCase().startsWith(joinPath(state.settings.workspace, '下载').toLowerCase() + '\\');
+// This program's downloads go to <workspace>\下载, or to the folder a followed list saves to; any other video is the
+// user's own file, which is replaced only with their agreement: the setting, or a confirmation here.
+const downloaded = (video) =>
+  [joinPath(state.settings.workspace, '下载'), ...state.collections.map((item) => item.source?.folder).filter(Boolean)].some(
+    (folder) => video.path.toLowerCase().startsWith(folder.replace(/[\\/]+$/, '').toLowerCase() + '\\'),
+  );
 $('run-compress').onclick = async () => {
   const video = current();
   if (!video) return;
@@ -1194,6 +1197,22 @@ $('collection-add-files').onclick = async () => {
   await addLocalVideos(paths);
   await collectionCommand(['add', currentCollection().name, ...paths]);
 };
+// Every video of the collection; compress itself skips those compressed before or already efficient. Videos that are
+// not this program's downloads are the user's own files: replaced only with the setting on, or after asking here.
+$('collection-compress-all').onclick = async () => {
+  const members = currentCollection().videos.filter((entry) => !entry.skipped);
+  const own = members.filter((member) => !downloaded({ path: member.video }));
+  if (own.length && !state.settings.compressLocal) {
+    const asked = `其中 ${own.length} 集不是本程序下载的，是你电脑上的文件。压缩会用压缩后的文件替换它们，原文件不保留。也压缩这几集吗？\n\n选「取消」只压缩本程序下载的 ${members.length - own.length} 集。`;
+    if (!confirm(asked)) members.splice(0, members.length, ...members.filter((member) => !own.includes(member)));
+  }
+  for (const member of members) {
+    if (!state.videos.some((video) => sameVideo(video.path, member.video))) await addVideos([member.video], { show: false });
+    await addTask({ kind: 'compress', title: `压缩：${baseName(member.video)}`, video: member.video });
+  }
+  $('collection-state').textContent = members.length ? `已把 ${members.length} 集排进压缩；压缩过的会自动跳过。` : '没有要压缩的。';
+};
+
 $('collection-process-all').onclick = async () => {
   for (const member of currentCollection().videos.filter((entry) => !entry.skipped && !entry.processed)) {
     if (!state.videos.some((video) => sameVideo(video.path, member.video))) await addVideos([member.video]);
