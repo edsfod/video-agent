@@ -36,7 +36,8 @@ def _camera(name, size='320x180', box='30x60'):
 def _video(tmp_path, name, graph):
   target = tmp_path / f'{name}.mp4'
   command = [media.tool('ffmpeg'), '-y', '-v', 'error', '-filter_complex', graph, '-map', '[out]']
-  subprocess.run([*command, '-c:v', 'libx264', '-pix_fmt', 'yuv420p', str(target)], check=True)
+  # mpeg4 rather than libx264, so the LGPL FFmpeg the installer ships can make it too.
+  subprocess.run([*command, '-c:v', 'mpeg4', '-q:v', '3', '-pix_fmt', 'yuv420p', str(target)], check=True)
   return target
 
 

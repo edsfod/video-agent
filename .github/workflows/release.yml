@@ -13,11 +13,7 @@ permissions:
   contents: write
 
 jobs:
-  ffmpeg:
-    uses: ./.github/workflows/ffmpeg.yml
-
   release:
-    needs: ffmpeg
     runs-on: windows-latest
     timeout-minutes: 30
     defaults:
@@ -25,10 +21,7 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/download-artifact@v8
-        with:
-          name: ffmpeg-lgpl
-          path: build/ffmpeg
+      - uses: ./.github/actions/ffmpeg # from the cache, or built and cached; no separate job to wait for
       - uses: astral-sh/setup-uv@v10.3.0
       - uses: actions/setup-node@v6
         with:

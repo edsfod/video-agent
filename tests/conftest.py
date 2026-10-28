@@ -28,7 +28,7 @@ def own_appdata(tmp_path_factory, monkeypatch):
 
 @pytest.fixture(scope='session')
 def sample_video(tmp_path_factory):
-  """An 8-second H.264 video with a sine tone, its colours changing at 4 s, and a matching `.srt` beside it."""
+  """An 8-second MPEG-4 video with a sine tone, its colours changing at 4 s, and a matching `.srt` beside it."""
   folder = tmp_path_factory.mktemp('media')
   video = folder / 'sample clip [test].mp4'
   subprocess.run(
@@ -38,26 +38,20 @@ def sample_video(tmp_path_factory):
       '-hide_banner',
       '-loglevel',
       'error',
-      '-f',
-      'lavfi',
-      '-i',
-      'testsrc=duration=4:size=320x240:rate=10',
-      '-f',
-      'lavfi',
-      '-i',
-      'smptebars=duration=4:size=320x240:rate=10',
-      '-f',
-      'lavfi',
-      '-i',
-      'sine=frequency=440:duration=8',
+      # Filter sources and mpeg4, so the LGPL FFmpeg the installer ships can make it too (no lavfi, no libx264).
       '-filter_complex',
-      '[0:v][1:v]concat=n=2:v=1:a=0[v]',
+      (
+        'testsrc=duration=4:size=320x240:rate=10[a];smptebars=duration=4:size=320x240:rate=10[b];'
+        '[a][b]concat=n=2:v=1:a=0[v];sine=frequency=440:duration=8[s]'
+      ),
       '-map',
       '[v]',
       '-map',
-      '2:a',
+      '[s]',
       '-c:v',
-      'libx264',
+      'mpeg4',
+      '-q:v',
+      '3',
       '-pix_fmt',
       'yuv420p',
       '-c:a',

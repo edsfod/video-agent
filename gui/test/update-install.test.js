@@ -1,6 +1,7 @@
 // End-to-end test of installing an update on an installed build (CI only: set VA_E2E_INSTALLED to its
-// "Video Agent.exe"). The fake feed offers this same installer as 9.9.9, so the differential download should fetch
-// next to nothing against the copy the installer left in the cache; then "重启并安装" must quit the app, run the
+// "Video Agent.exe"). The fake feed offers this same installer as 9.9.9, with an old blockmap in which every 40th
+// block differs, so the differential download must fetch those blocks one range at a time (as github.com allows)
+// against the copy the installer left in the cache, and little else; then "重启并安装" must quit the app, run the
 // installer silently and start the app again.
 
 const test = require('node:test');
@@ -10,6 +11,7 @@ const fs = require('node:fs');
 const http = require('node:http');
 const os = require('node:os');
 const path = require('node:path');
+const zlib = require('node:zlib');
 const { execFileSync, spawnSync } = require('node:child_process');
 const yaml = require('js-yaml');
 const { _electron: electron } = require('playwright-core');
@@ -29,7 +31,8 @@ function mainProcesses() {
   return out ? [].concat(JSON.parse(out)) : [];
 }
 
-// Serves files with single and multiple byte ranges, as the differential download asks for them.
+// Serves files with single byte ranges, as the differential download asks for them. Several ranges in one request
+// get 501, as github.com and ghfast.top answer, so a client that asks for them falls back to the full download here too.
 function serve(files, counted) {
   let bytes = 0;
   const server = http.createServer((request, response) => {
@@ -50,14 +53,8 @@ function serve(files, counted) {
       response.setHeader('Content-Range', `bytes ${start}-${end}/${body.length}`);
       return response.end(send(body.subarray(start, end + 1)));
     }
-    const boundary = 'va-boundary';
-    response.setHeader('Content-Type', `multipart/byteranges; boundary=${boundary}`);
-    const parts = ranges.map(([start, end]) => Buffer.concat([
-      Buffer.from(`--${boundary}\r\nContent-Type: application/octet-stream\r\nContent-Range: bytes ${start}-${end}/${body.length}\r\n\r\n`),
-      send(body.subarray(start, end + 1)),
-      Buffer.from('\r\n'),
-    ]));
-    response.end(Buffer.concat([...parts, Buffer.from(`--${boundary}--\r\n`)]));
+    response.statusCode = 501;
+    return response.end('multiple ranges are not supported');
   });
   return { server, bytes: () => bytes };
 }
@@ -69,6 +66,13 @@ test('an update installs silently and the app starts again', { skip: !INSTALLED 
   const name = info.path;
   const installer = fs.readFileSync(path.join(DIST, name));
   const blockmap = fs.readFileSync(path.join(DIST, `${name}.blockmap`));
+  // The "old" version: every 40th block changed, scattered as a real update's are.
+  const map = JSON.parse(zlib.gunzipSync(blockmap));
+  let changed = 0;
+  for (const file of map.files) {
+    file.checksums = file.checksums.map((sum, i) => (i % 40 === 7 ? (changed += file.sizes[i], `changed${i}`) : sum));
+  }
+  const oldBlockmap = zlib.gzipSync(JSON.stringify(map));
   const text = yaml.dump({ ...info, version: NEW, releaseNotes: '安装测试' }, { lineWidth: -1 });
   const sig = signature.sign(text, privateKey.export({ type: 'pkcs8', format: 'pem' }));
   const files = {
@@ -78,7 +82,7 @@ test('an update installs silently and the app starts again', { skip: !INSTALLED 
     [`/releases/download/v${NEW}/latest.yml.sig`]: sig,
     [`/releases/download/v${NEW}/${name}`]: installer,
     [`/releases/download/v${NEW}/${name}.blockmap`]: blockmap,
-    [`/releases/download/v${current}/${name}.blockmap`]: blockmap,
+    [`/releases/download/v${current}/${name}.blockmap`]: oldBlockmap,
   };
   const { server, bytes } = serve(files, name);
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -110,8 +114,9 @@ test('an update installs silently and the app starts again', { skip: !INSTALLED 
   step('downloading the update');
   await page.waitForFunction(() => /已下载并通过校验/.test(document.querySelector('#update-status').textContent), null, { timeout: 300_000 });
   const fetched = bytes();
-  step(`downloaded and verified, ${fetched} of ${installer.length} bytes fetched`);
-  assert.ok(fetched < installer.length / 10, `differential download fetched ${fetched} of ${installer.length} bytes`);
+  step(`downloaded and verified, ${fetched} of ${installer.length} bytes fetched for ${changed} changed`);
+  assert.ok(fetched >= changed && fetched < installer.length / 10,
+    `differential download fetched ${fetched} of ${installer.length} bytes for ${changed} changed`);
 
   const closed = new Promise((resolve) => app.process().once('exit', resolve));
   await page.click('#update-install');

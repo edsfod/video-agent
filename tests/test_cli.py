@@ -350,7 +350,16 @@ def test_download_tells_yt_dlp_where_ffmpeg_is(fake_yt_dlp, tmp_path, monkeypatc
 @pytest.mark.parametrize('bundled', [False, True])
 def test_no_scene_changes_is_not_an_error(tmp_path, monkeypatch, bundled):
   still = tmp_path / 'still.mp4'
-  command = [media.tool('ffmpeg'), '-y', '-v', 'error', '-f', 'lavfi', '-i', 'color=gray:size=160x120:rate=5:d=3']
+  command = [
+    media.tool('ffmpeg'),
+    '-y',
+    '-v',
+    'error',
+    '-filter_complex',
+    'color=gray:size=160x120:rate=5:d=3[v]',
+    '-map',
+    '[v]',
+  ]
   subprocess.run([*command, '-pix_fmt', 'yuv420p', str(still)], check=True)
   if bundled:
     monkeypatch.setattr(media.shutil, 'which', lambda name: None)

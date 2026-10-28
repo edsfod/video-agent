@@ -24,8 +24,11 @@ concurrency:
 
 jobs:
   changes:
-    runs-on: ubuntu-latest # only reads git history; starts faster than Windows
+    runs-on: ubuntu-latest # only reads git history and the runs; starts faster than Windows
     timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
     outputs:
       cli: ${{ steps.pick.outputs.cli }}
       gui: ${{ steps.pick.outputs.gui }}
@@ -41,6 +44,9 @@ jobs:
           REF: ${{ github.ref_name }}
           BEFORE: ${{ github.event.before }}
           PR_BASE: ${{ github.event.pull_request.base.sha }}
+          SHA: ${{ github.sha }}
+          REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
 
   cli:
     needs: changes
@@ -50,7 +56,17 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v10.3.0 # publishes no major-version tag
-      - run: choco install ffmpeg --no-progress -y
+      # The LGPL FFmpeg the installer ships, from the cache only (the installer job builds it on a miss); choco's
+      # full build only when there is no cached copy yet.
+      - id: ffmpeg
+        uses: actions/cache/restore@v6
+        with:
+          path: build/ffmpeg
+          key: ffmpeg-lgpl-${{ hashFiles('packaging/ffmpeg/build.sh') }}
+      - if: steps.ffmpeg.outputs.cache-hit == 'true'
+        run: Add-Content $env:GITHUB_PATH "$env:GITHUB_WORKSPACE\build\ffmpeg\bin"
+      - if: steps.ffmpeg.outputs.cache-hit != 'true'
+        run: choco install ffmpeg --no-progress -y
       - run: uv run ruff check src tests
       - run: uv run ruff format --check src tests
       - run: uv run pytest
@@ -73,7 +89,17 @@ jobs:
         with:
           path: ~\AppData\Local\electron\Cache
           key: electron-${{ hashFiles('gui/package-lock.json') }}
-      - run: choco install ffmpeg --no-progress -y
+      # The LGPL FFmpeg the installer ships, from the cache only (the installer job builds it on a miss); choco's
+      # full build only when there is no cached copy yet.
+      - id: ffmpeg
+        uses: actions/cache/restore@v6
+        with:
+          path: build/ffmpeg
+          key: ffmpeg-lgpl-${{ hashFiles('packaging/ffmpeg/build.sh') }}
+      - if: steps.ffmpeg.outputs.cache-hit == 'true'
+        run: Add-Content $env:GITHUB_PATH "$env:GITHUB_WORKSPACE\build\ffmpeg\bin"
+      - if: steps.ffmpeg.outputs.cache-hit != 'true'
+        run: choco install ffmpeg --no-progress -y
       - run: uv tool install .
       - run: Add-Content $env:GITHUB_PATH "$env:USERPROFILE\.local\bin"
       - run: npm ci
