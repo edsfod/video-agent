@@ -360,3 +360,12 @@ def test_imported_windows_line_endings_stay_single(processed):
   assert b'```\n  [Intent]\n     |\n  [Spec]\n```' in saved
   again, _ = import_summary(video, workspace, saved.decode('utf-8'), overwrite=True)
   assert again.read_bytes() == saved, 'importing a saved summary again changes nothing'
+
+
+def test_the_code_block_a_chat_ai_puts_the_summary_in_is_taken_off():
+  from video_agent.summarize import _clean
+
+  inner = '# 标题\n\n```python\nprint(1)\n```\n'
+  assert _clean(f'````markdown\n{inner}````') == inner  # four backticks, as the material asks (user, 2026-10-28)
+  assert _clean('```md\n# 标题\n```') == '# 标题\n'
+  assert _clean(inner) == inner  # a summary that starts and ends otherwise is left as it is

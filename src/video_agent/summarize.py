@@ -334,10 +334,18 @@ def video_line(video, seconds):
   return f'视频：{video_name(video)} · [打开视频](<{Path(video).as_posix()}>) · 时长：{length_text(seconds)}'
 
 
+# A chat AI is asked to put the whole file in one code block (OUTPUT_FENCE), so its copy button gives the Markdown as
+# written; four backticks, so the ``` blocks inside stay inside. Any fence of three or more is taken off on import.
+OUTPUT_FENCE = (
+  '把整篇内容放在一个 Markdown 代码块里输出：第一行写 ````markdown（四个反引号），最后一行写 ````，'
+  '代码块外面不要加任何说明。用四个反引号，正文里的 ``` 代码块就不会把它截断。'
+)
+
+
 def _clean(text):
   text = text.replace('\r\n', '\n').replace('\r', '\n').strip()
-  fenced = re.fullmatch(r'```(?:markdown|md)?\s*\n(.*)\n```', text, re.DOTALL)
-  return (fenced.group(1) if fenced else text).strip() + '\n'
+  fenced = re.fullmatch(r'(`{3,}|~{3,})(?:markdown|md)?[ \t]*\n(.*)\n\1', text, re.DOTALL)
+  return (fenced.group(2) if fenced else text).strip() + '\n'
 
 
 def summarize_video(
@@ -578,7 +586,7 @@ def material(video, workspace, *, request='', max_images=40, work_dir=None, max_
   text = '\n\n'.join(
     part
     for part in (
-      f'请按下面的规则和模板，为这个视频写 {SUMMARY_NAME}（Markdown）。只输出文件内容，前后不要加说明。',
+      f'请按下面的规则和模板，为这个视频写 {SUMMARY_NAME}（Markdown）。{OUTPUT_FENCE}',
       f'我的要求：{request}' if request else '',
       *notes,
       f'「视频」那一行的开头照抄：{video_line(video, media.duration(info))}',
@@ -681,7 +689,7 @@ def collection_material(workspace, name, *, guide=False, request=''):
   return '\n\n'.join(
     part
     for part in (
-      f'请按下面的规则和模板，为合集「{name}」写 {target.name}（Markdown）。只输出文件内容，前后不要加说明。',
+      f'请按下面的规则和模板，为合集「{name}」写 {target.name}（Markdown）。{OUTPUT_FENCE}',
       f'我的要求：{request}' if request else '',
       *notes,
       template(),
