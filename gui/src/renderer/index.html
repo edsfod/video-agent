@@ -178,8 +178,9 @@
               <h2>各集</h2>
               <div id="collection-members" class="members"></div>
               <div class="row">
-                <select id="collection-add-choice"></select>
+                <select id="collection-add-choice" title="视频列表里还没进这个合集的视频"></select>
                 <button id="collection-add">加入</button>
+                <button id="collection-add-files" class="ghost">从文件添加…</button>
                 <span class="spacer"></span>
                 <button id="collection-process-all">处理未处理的</button>
                 <button id="collection-summarize-all">总结没总结的</button>
@@ -240,7 +241,10 @@
 
     <dialog id="settings">
       <form method="dialog" class="settings">
-        <h2>设置</h2>
+        <header class="dialog-head">
+          <h2>设置</h2>
+          <button id="close-settings" type="button" class="ghost close-x" title="关闭（Esc）" aria-label="关闭">×</button>
+        </header>
         <label>工作区（处理结果和下载的视频都放在这里）
           <span class="row"><input id="set-workspace" type="text" readonly /><button id="pick-workspace" type="button">选择…</button></span>
         </label>
@@ -305,8 +309,9 @@
           <span class="row"><input id="set-key" type="password" placeholder="不修改就留空" autocomplete="off" /><button id="delete-key" type="button">删除已存的 key</button></span>
         </label>
         <div id="api-info" class="muted small-text"></div>
-        <div class="row end">
-          <button value="cancel" class="ghost">取消</button>
+        <div class="row end dialog-foot">
+          <span id="settings-unsaved" class="unsaved" hidden>有改动还没保存</span>
+          <button id="discard-settings" value="cancel" class="ghost">取消</button>
           <button id="save-settings" value="save" class="primary">保存</button>
         </div>
       </form>
@@ -348,6 +353,20 @@
         <div class="row end">
           <button value="cancel" class="ghost">取消</button>
           <button value="save" class="primary">确定</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="playlist-dialog">
+      <form method="dialog" class="settings">
+        <h2>下载整个列表？</h2>
+        <p id="playlist-dialog-info"></p>
+        <ol id="playlist-dialog-titles" class="muted small-text"></ol>
+        <label class="check"><input id="playlist-dialog-join" type="checkbox" checked /><span>放进一个合集，下载完按顺序排好</span></label>
+        <label id="playlist-dialog-name-label">合集名字<input id="playlist-dialog-name" type="text" spellcheck="false" /></label>
+        <div class="row end">
+          <button value="cancel" class="ghost">不下载</button>
+          <button value="save" class="primary">全部下载</button>
         </div>
       </form>
     </dialog>

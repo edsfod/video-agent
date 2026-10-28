@@ -149,6 +149,7 @@ async function taskFinished(task) {
   if (task.kind === 'download') {
     if (task.paths.length && $('download-url').value.trim() === task.url) $('download-url').value = '';
     if (task.paths.length) await addVideos(task.paths);
+    if (!task.paths.length && task.lists?.length) askPlaylist(task.lists[0], task.then);
     return;
   }
   const video = state.videos.find((item) => sameVideo(item.path, task.video));
@@ -805,8 +806,12 @@ async function renderCollection() {
     $('collection-members').replaceChildren(element('p', { className: 'muted', textContent: '还没有视频。在下面选一个加进来，或在视频页点「加入合集」。' }));
   }
   const others = state.videos.filter((video) => !memberOf(item, video.path));
-  $('collection-add-choice').replaceChildren(...others.map((video) => element('option', { value: video.path, textContent: baseName(video.path) })));
-  $('collection-add').disabled = !others.length;
+  $('collection-add-choice').replaceChildren(
+    element('option', { value: '', textContent: others.length ? '从视频列表选一个…' : '视频列表里没有可加的视频' }),
+    ...others.map((video) => element('option', { value: video.path, textContent: baseName(video.path) })),
+  );
+  $('collection-add-choice').disabled = !others.length;
+  $('collection-add').disabled = true;
   const live = item.videos.filter((member) => !member.skipped);
   $('collection-process-all').disabled = !live.some((member) => !member.processed);
   $('collection-summarize-all').disabled = !live.some((member) => member.processed && !member.summary);
@@ -871,9 +876,17 @@ $('collection-delete').onclick = async () => {
   await collectionCommand(['delete', item.name]);
   renderVideo();
 };
+$('collection-add-choice').onchange = () => ($('collection-add').disabled = !$('collection-add-choice').value);
 $('collection-add').onclick = () => {
   const path = $('collection-add-choice').value;
   if (path) collectionCommand(['add', currentCollection().name, path]);
+};
+// Local files go into the video list too, so they can be processed from there.
+$('collection-add-files').onclick = async () => {
+  const paths = await window.va.pickVideos();
+  if (!paths?.length) return;
+  await addVideos(paths);
+  await collectionCommand(['add', currentCollection().name, ...paths]);
 };
 $('collection-process-all').onclick = async () => {
   for (const member of currentCollection().videos.filter((entry) => !entry.skipped && !entry.processed)) {
@@ -1096,6 +1109,33 @@ $('download-form').onsubmit = (event) => {
   const then = $('download-then-process').checked ? 'process' : undefined;
   addTask({ kind: 'download', title: `下载：${url}`, url, then });
 };
+// A link that stands for a list (a season, a series, a channel) is not downloaded until the user says so.
+let pendingList = null;
+function askPlaylist(found, then) {
+  pendingList = { url: found.url, then };
+  const title = found.title || found.url;
+  $('playlist-dialog-info').textContent = `这个链接是一个列表：「${title}」，共 ${found.count} 个视频。`;
+  const shown = found.titles.filter(Boolean);
+  $('playlist-dialog-titles').replaceChildren(
+    ...shown.map((name) => element('li', { textContent: name })),
+    ...(found.count > shown.length && shown.length ? [element('li', { textContent: '…' })] : []),
+  );
+  $('playlist-dialog-titles').hidden = !shown.length;
+  $('playlist-dialog-name').value = title.replace(/^合集[·・:：]\s*/, '');
+  $('playlist-dialog-join').checked = true;
+  $('playlist-dialog-name-label').hidden = false;
+  $('playlist-dialog').showModal();
+}
+$('playlist-dialog-join').onchange = () => ($('playlist-dialog-name-label').hidden = !$('playlist-dialog-join').checked);
+$('playlist-dialog').addEventListener('close', async () => {
+  if ($('playlist-dialog').returnValue !== 'save' || !pendingList) return;
+  const { url, then } = pendingList;
+  pendingList = null;
+  const collection = $('playlist-dialog-join').checked ? $('playlist-dialog-name').value.trim() : '';
+  const added = await addTask({ kind: 'download', title: `下载列表：${collection || url}`, url, then, playlist: true, collection: collection || undefined });
+  if (added && $('download-url').value.trim() === url) $('download-url').value = '';
+});
+
 $('download-then-process').onchange = () =>
   window.va.saveSettings({ processAfterDownload: $('download-then-process').checked }).then((next) => (state.settings = next));
 
@@ -1144,8 +1184,33 @@ $('open-settings').onclick = async () => {
     $('set-base-url').value = config.base_url || '';
     $('api-info').textContent = `API key：${config.key || '还没有'}`;
   }
+  $('settings-unsaved').hidden = true;
   $('settings').showModal();
+  settingsShown = settingsValues();
 };
+
+// Closing by ×, Esc or a click outside keeps nothing; with changes it asks first, otherwise it just closes.
+let settingsShown = '';
+const SETTINGS_FIELDS = [
+  'set-workspace', 'set-cli', 'set-close-to-tray', 'set-check-updates', 'set-update-mirror', 'set-limit-download',
+  'set-limit-process', 'set-limit-summary', 'set-provider', 'set-model', 'set-base-url', 'set-key',
+];
+const settingsValues = () => JSON.stringify(SETTINGS_FIELDS.map((id) => ($(id).type === 'checkbox' ? $(id).checked : $(id).value)));
+function closeSettings() {
+  if (settingsValues() === settingsShown) return $('settings').close('cancel');
+  $('settings-unsaved').hidden = false;
+  $('discard-settings').textContent = '不保存';
+  $('save-settings').focus();
+}
+$('close-settings').onclick = closeSettings;
+$('settings').addEventListener('cancel', (event) => (event.preventDefault(), closeSettings()));
+$('settings').addEventListener('click', (event) => event.target === $('settings') && closeSettings());
+$('settings').addEventListener('close', () => {
+  $('settings-unsaved').hidden = true;
+  $('discard-settings').textContent = '取消';
+});
+// Read-only windows close on a click outside too.
+for (const id of ['skill-dialog', 'logs']) $(id).addEventListener('click', (event) => event.target === $(id) && $(id).close());
 
 for (const agent of ['claude', 'codex']) {
   $(`install-${agent}`).onclick = async () => {

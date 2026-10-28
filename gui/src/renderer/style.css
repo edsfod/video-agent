@@ -259,6 +259,14 @@ dialog {
   padding: 0;
 }
 dialog::backdrop { background: rgba(0, 0, 0, 0.35); }
+/* The settings scroll; the title with its close button and the save row stay in view. */
+.dialog-head { display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; margin: -20px -24px 0; padding: 14px 16px 6px 24px; background: var(--bg-card); z-index: 1; }
+.dialog-head h2 { margin: 0; }
+.close-x { font-size: 22px; line-height: 1; width: 36px; height: 36px; padding: 0; }
+.dialog-foot { position: sticky; bottom: 0; margin: 0 -24px -20px; padding: 12px 24px 16px; background: var(--bg-card); border-top: 1px solid var(--border); align-items: center; }
+.unsaved { color: var(--warn, #d9a441); margin-right: auto; font-size: 13px; }
+#collection-add-choice { flex: 1 1 240px; min-width: 200px; max-width: 420px; }
+#playlist-dialog-titles { margin: 0; padding-left: 20px; }
 .settings { width: 560px; padding: 20px 24px; display: flex; flex-direction: column; gap: 10px; }
 .skill-text { overflow: auto; flex: 1; min-height: 0; }
 #import-text { width: 100%; box-sizing: border-box; font-family: var(--mono); font-size: 12px; resize: vertical; }

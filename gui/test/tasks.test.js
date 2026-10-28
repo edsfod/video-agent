@@ -158,3 +158,14 @@ test('one collection task at a time per collection, never the same file twice', 
   tasks.exited(overview.id, 0);
   assert.equal(tasks.get(guide.id).status, 'running');
 });
+
+test('a download that only found a list ends done, holding the list for the window to ask about', () => {
+  const { tasks, add } = queue();
+  const download = add({ kind: 'download', url: 'https://space.example/lists/1' });
+  tasks.output(download.id, 'stdout', '{"playlist": {"url": "https://space.example/lists/1", "title": "合集·课", "count": 10, "titles": []}}\n');
+  tasks.exited(download.id, 1);
+  assert.equal(tasks.get(download.id).status, 'done');
+  assert.equal(tasks.get(download.id).lists[0].count, 10);
+  const again = tasks.retry(download.id).task;
+  assert.deepEqual(again.lists, [], 'a retry starts without the old result');
+});

@@ -56,6 +56,9 @@ SUBTITLE_LANGS = 'all,-danmaku,-live_chat'
 # user chose a plain _ instead (2026-10-28), not the fullwidth forms.
 TITLE_FIXES = ['--replace-in-metadata', 'title', r'[/\\]', '_']
 
+# Entry titles reported for a list found without --playlist, so a front end can show what it would download.
+LIST_TITLES = 5
+
 
 def _base_command(program, config, cookies):
   # yt-dlp looks for ffmpeg only on PATH; point it at ours so separate video and audio streams get merged.
@@ -67,7 +70,8 @@ def _base_command(program, config, cookies):
   return command
 
 
-def _is_playlist(program, url, config, cookies):
+def _list_info(program, url, config, cookies):
+  """The list a URL stands for even without --playlist (a series, a season, a channel), or None for one video."""
   command = [
     *_base_command(program, config, cookies),
     '--no-playlist',
@@ -92,7 +96,15 @@ def _is_playlist(program, url, config, cookies):
     info = json.loads(result.stdout)
   except json.JSONDecodeError as error:
     raise DownloadError('yt-dlp returned invalid JSON while checking whether the URL is a playlist') from error
-  return isinstance(info, dict) and info.get('_type') in ('playlist', 'multi_video')
+  if not isinstance(info, dict) or info.get('_type') not in ('playlist', 'multi_video'):
+    return None
+  entries = [entry for entry in info.get('entries') or [] if isinstance(entry, dict)]
+  return {
+    'url': url,
+    'title': info.get('title') or '',
+    'count': info.get('playlist_count') or len(entries),
+    'titles': [entry['title'] for entry in entries if entry.get('title')][:LIST_TITLES],  # Bilibili lists give none
+  }
 
 
 def _run(command, output):
@@ -137,7 +149,9 @@ def download_urls(
   config_path=None,
   cookies_path=None,
   status=print,
+  found_list=None,
 ):
+  """Downloads each URL; a URL that stands for a list without `playlist` is skipped and passed to `found_list`."""
   program = executable(executable_path)
   output = Path(output).expanduser().resolve()
   output.mkdir(parents=True, exist_ok=True)
@@ -153,8 +167,11 @@ def download_urls(
   for url in urls:
     if not playlist:
       try:
-        if _is_playlist(program, url, config, cookies):
-          status('yt-dlp: URL resolves to a playlist; pass --playlist to download its entries')
+        found = _list_info(program, url, config, cookies)
+        if found:
+          status(f'yt-dlp: URL is a list of {found["count"]} videos; pass --playlist to download its entries')
+          if found_list:
+            found_list(found)
           failed += 1
           continue
       except DownloadError as error:

@@ -454,6 +454,7 @@ def run(args):
         config_path=args.yt_dlp_config,
         cookies_path=args.cookies,
         status=_progress(args),
+        found_list=(lambda found: _emit({'playlist': found})) if args.json else None,
       )
     except DownloadError as error:
       print(f'download: ERROR: {error}')

@@ -68,6 +68,7 @@ class TaskQueue {
     if (existing) return { added: false, existing: this.summary(existing) };
     const task = { ...spec, id: newId(), key, status: 'queued', added: Date.now(), output: [], size: 0, lines: '' };
     task.paths = [];
+    task.lists = [];
     this.tasks.push(task);
     this.pump();
     return { added: true, task: this.summary(task) };
@@ -94,14 +95,15 @@ class TaskQueue {
     task.output.push([stream, text]);
     task.size += text.length;
     while (task.size > OUTPUT_LIMIT && task.output.length > 1) task.size -= task.output.shift()[1].length;
-    // A download prints one JSON object per saved file on stdout.
+    // A download prints one JSON object per saved file on stdout, and one per link that stands for a list it left.
     if (task.kind === 'download' && stream === 'stdout') {
       const lines = (task.lines + text).split(/\r?\n/);
       task.lines = lines.pop();
       for (const line of lines) {
         try {
-          const path = JSON.parse(line).path;
-          if (path) task.paths.push(path);
+          const result = JSON.parse(line);
+          if (result.path) task.paths.push(result.path);
+          if (result.playlist) task.lists.push(result.playlist);
         } catch {
           // not a result line
         }
@@ -117,7 +119,9 @@ class TaskQueue {
   finish(task, code) {
     task.code = code;
     task.ended = Date.now();
-    task.status = task.stopping ? 'stopped' : code === 0 ? 'done' : 'failed';
+    // A download that only found a list did what it could: the window asks whether to fetch the whole list.
+    const asked = task.kind === 'download' && !task.paths.length && task.lists?.length;
+    task.status = task.stopping ? 'stopped' : code === 0 || asked ? 'done' : 'failed';
     // A download that saved files is followed up even if another URL in it failed.
     const follow = task.status !== 'stopped' && (code === 0 || task.paths.length) ? this.followUp(task) : [];
     for (const spec of follow) this.add(spec);
@@ -146,7 +150,7 @@ class TaskQueue {
   retry(id) {
     const task = this.get(id);
     if (!task || ACTIVE.has(task.status)) return null;
-    const { id: _, key, status, added, started, ended, code, output, size, lines, paths, stopping, ...spec } = task;
+    const { id: _, key, status, added, started, ended, code, output, size, lines, paths, lists, stopping, ...spec } = task;
     return this.add(spec);
   }
 

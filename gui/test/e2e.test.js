@@ -165,7 +165,8 @@ test('a collection lists its videos and copies the material for its overview', a
   await page.fill('#collection-dialog-name', '测试合集');
   await page.click('#collection-dialog button[value=save]');
   await page.waitForSelector('#collection:not([hidden]) #collection-name:text("测试合集")');
-  await page.selectOption('#collection-add-choice', { index: 0 });
+  assert.equal(await page.isDisabled('#collection-add'), true, 'nothing chosen yet');
+  await page.selectOption('#collection-add-choice', { index: 1 }); // 0 is the prompt
   await page.click('#collection-add');
   await page.waitForSelector('#collection-members .member .badge:text("已总结")');
   assert.match(await page.textContent('#collection-list'), /测试合集1 集/);
@@ -210,6 +211,28 @@ test('settings dialog saves the model through the CLI', async () => {
     assert.equal(shown.key, 'Credential Manager');
     cli(['config', '--provider', 'openai', '--delete-key']);
   }
+});
+
+test('settings close at once without changes and ask first with them', async () => {
+  const shown = () => page.$eval('#settings', (dialog) => dialog.open);
+  await page.click('#open-settings');
+  await page.waitForSelector('#settings[open]');
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => !document.querySelector('#settings').open);
+  await page.click('#open-settings');
+  await page.waitForSelector('#settings[open]');
+  const limit = await page.inputValue('#set-limit-download');
+  await page.fill('#set-limit-download', String(Number(limit) + 1));
+  await page.click('#close-settings');
+  assert.equal(await shown(), true);
+  assert.equal(await page.isVisible('#settings-unsaved'), true);
+  await page.click('#discard-settings');
+  await page.waitForFunction(() => !document.querySelector('#settings').open);
+  await page.click('#open-settings');
+  await page.waitForSelector('#settings[open]');
+  assert.equal(await page.inputValue('#set-limit-download'), limit, 'the change was dropped');
+  await page.mouse.click(5, 5); // outside the dialog
+  await page.waitForFunction(() => !document.querySelector('#settings').open);
 });
 
 test('logs record every job and never the API key', async () => {

@@ -213,8 +213,12 @@ const isBilibili = (url) => /(^|[/.])(bilibili\.com|b23\.tv)([/:?#]|$)/i.test(ur
 function cliArgs(task) {
   const out = ['-o', task.workspace];
   switch (task.kind) {
-    case 'download':
-      return ['download', task.url, '-o', path.join(task.workspace, '下载'), '--json'];
+    case 'download': {
+      const args = ['download', task.url, '-o', path.join(task.workspace, '下载'), '--json'];
+      if (task.playlist) args.push('--playlist');
+      if (task.collection) args.push('--collection', task.collection, '--workspace', task.workspace);
+      return args;
+    }
     case 'process': {
       const args = ['process', task.video, ...out, '--json', '--frame-interval', String(task.interval)];
       if (task.maxFrames) args.push('--max-frames', String(task.maxFrames));

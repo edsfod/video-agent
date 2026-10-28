@@ -71,7 +71,10 @@ FAKE_YT_DLP = textwrap.dedent("""
   args = sys.argv[1:]
   url = args[-1]
   if '--dump-single-json' in args:
-    print(json.dumps({'_type': 'playlist' if 'list' in url else 'video', 'id': 'x'}))
+    if 'list' in url:
+      print(json.dumps({'_type': 'playlist', 'id': 'x', 'title': '合集·系列', 'entries': [{'title': 'one'}, {}]}))
+    else:
+      print(json.dumps({'_type': 'video', 'id': 'x'}))
     sys.exit(0)
   if 'fail' in url or ('subtitle-error' in url and '--write-subs' in args):
     sys.exit(1)
@@ -92,15 +95,17 @@ def fake_yt_dlp(tmp_path, monkeypatch):
 
 
 def test_download_returns_paths_and_refuses_playlists(fake_yt_dlp, tmp_path):
-  messages = []
+  messages, lists = [], []
   paths, failed = download.download_urls(
     ['https://example.com/video', 'https://example.com/list', 'https://example.com/fail'],
     tmp_path / 'downloads',
     status=messages.append,
+    found_list=lists.append,
   )
   assert [path.name for path in paths] == ['Clip [abc].mp4']
   assert failed == 2
   assert any('pass --playlist' in message for message in messages)
+  assert lists == [{'url': 'https://example.com/list', 'title': '合集·系列', 'count': 2, 'titles': ['one']}]
 
   paths, failed = download.download_urls(['https://example.com/list'], tmp_path / 'more', playlist=True, status=print)
   assert len(paths) == 1 and failed == 0
@@ -398,3 +403,11 @@ def test_a_playlist_download_can_fill_a_collection(fake_yt_dlp, tmp_path):
   args = ['download', 'https://example.com/list', '--playlist', '-o', str(tmp_path / 'dl'), '--collection', '系列']
   assert cli.main([*args, '--workspace', str(workspace)]) == 0
   assert [Path(video).name for video in collection.load(workspace, '系列')['videos']] == ['Clip [abc].mp4']
+
+
+def test_a_list_found_without_playlist_is_reported_as_json(fake_yt_dlp, tmp_path, capsys):
+  assert cli.main(['download', 'https://example.com/list', '-o', str(tmp_path / 'dl'), '--json']) == 1
+  lines = [json.loads(line) for line in capsys.readouterr().out.splitlines() if line.startswith('{')]
+  assert lines == [
+    {'playlist': {'url': 'https://example.com/list', 'title': '合集·系列', 'count': 2, 'titles': ['one']}}
+  ]
