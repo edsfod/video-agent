@@ -1,7 +1,7 @@
 <div align="center">
   <img src="docs/images/icon.png" width="112" alt="Video Agent 图标" />
   <h1>Video Agent</h1>
-  <p>总结任何视频：本地文件或链接，先拿到字幕和画面，再写出带时间点的总结。</p>
+  <p>从视频到笔记：下载视频，提取字幕和屏幕画面，再由 Agent 写出带时间点和截图的总结。</p>
   <p>
     <img src="https://img.shields.io/badge/platform-Windows-lightgrey" alt="平台：Windows" />
     <img src="https://img.shields.io/badge/license-AGPL--3.0--or--later-blue" alt="许可证：AGPL-3.0-or-later" />
@@ -188,14 +188,22 @@ npm run dist               # 先用 PyInstaller 打包命令行工具（需要 u
 npm run screenshots -- <工作区> <视频>   # 重新生成本页截图
 ```
 
-## 许可
+## 许可证 · License
 
-Copyright (C) 2026 edsfod。以 [GNU Affero 通用公共许可证第 3 版](LICENSE)或（由你选择）任何更新的版本发布（AGPL-3.0-or-later）：分发修改版，或让用户通过网络使用修改版时，都必须以同一许可证公开完整源码。
+Copyright (C) 2026 edsfod
+
+This program is free software: you can redistribute it and/or modify it under the terms of the GNU Affero General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License along with this program (see [LICENSE](LICENSE)). If not, see <https://www.gnu.org/licenses/>.
+
+中文提示：分发修改版，或让别人通过网络使用修改版时，须以同一许可证公开完整源码。以上英文和 [LICENSE](LICENSE) 原文为准。
 
 ## 鸣谢
 
 - 本项目受 [windlandneko/yanhekit](https://github.com/windlandneko/yanhekit) 启发：做成 Claude Code、Codex 插件的形式，以及用必剪转录字幕的思路，都参考了它。
-- 下载用 [yt-dlp](https://github.com/yt-dlp/yt-dlp)，媒体处理用 [FFmpeg](https://ffmpeg.org/)（安装程序里是自己编译的 LGPL 版，带 [dav1d](https://code.videolan.org/videolan/dav1d) 解码 AV1，源码随每个发布版提供；用 uv 或 pip 安装时随 [imageio-ffmpeg](https://github.com/imageio/imageio-ffmpeg) 装上），安装程序里的命令行工具用 [PyInstaller](https://pyinstaller.org/) 打包，PPT 提取用 [AutoSlides Extractor](https://github.com/bit-admin/AutoSlides-Extractor)。
+- 下载用 [yt-dlp](https://github.com/yt-dlp/yt-dlp)，媒体处理用 [FFmpeg](https://ffmpeg.org/)（安装程序里是自己编译的 LGPL 版，带 [dav1d](https://code.videolan.org/videolan/dav1d) 解码 AV1，源码随每个发布版提供；用 uv 或 pip 安装时随 [imageio-ffmpeg](https://github.com/imageio/imageio-ffmpeg) 装上），安装程序里的命令行工具用 [PyInstaller](https://pyinstaller.org/) 打包，另外提取幻灯片用 [AutoSlides Extractor](https://github.com/bit-admin/AutoSlides-Extractor)。
 - 界面的浅色和深色配色取自 [AutoSlides](https://github.com/bit-admin/Yanhekt-AutoSlides) 的主题文件（Apache License 2.0）；任务队列的设计（排队而不是拒绝、按类型限制同时运行的数量、去重）参考了它的下载队列，代码是本项目自己写的。
 - 安装程序附带的所有第三方组件和它们的许可证，见安装目录里的 `THIRD-PARTY-NOTICES.txt`。
 - 截图里的视频和字幕来自 NASA 戈达德太空飞行中心的 [NASA's Fermi Mission Shows How Luck Favors the Prepared](https://images.nasa.gov/details/GSFC_20181108_FERMI_m13042_Luck4K)（2018），按 [NASA 的媒体使用规定](https://www.nasa.gov/nasa-brand-center/images-and-media/)用于演示。截图里的总结由 AI（Qwen3.5，经模型 API）生成，不是 NASA 的说法，未经 NASA 审核，NASA 不对其准确性负责；本项目与 NASA 无关，也未获 NASA 认可。
