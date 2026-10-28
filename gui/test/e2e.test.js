@@ -206,7 +206,11 @@ test('another agent writes a summary from standard input or from a task file', a
   await page.click('#open-settings');
   await page.selectOption('#set-agent', '');
   await page.click('#save-settings');
-  await page.waitForSelector('#route-other[hidden]', { state: 'attached' });
+  await page.waitForSelector('#route-other-name:text("其他 Agent")');
+  // With none chosen it still shows, says where to choose one, and writes nothing.
+  assert.match(await page.textContent('#route-note'), /设置.*其他 Agent/);
+  assert.equal(await page.isDisabled('#run-summary'), true);
+  await page.check('input[name=route][value=api]');
 });
 
 test('a version note is edited in a dialog that starts from the note it has', async () => {

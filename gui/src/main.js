@@ -477,7 +477,9 @@ function registerIpc() {
     claude: which('claude'),
     codex: which('codex'),
     other: otherAgent(),
-    agents: Object.fromEntries(Object.entries(AGENTS).map(([key, { name, command }]) => [key, { name, command }])),
+    agents: Object.fromEntries(
+      Object.entries(AGENTS).map(([key, { name, command }]) => [key, { name, command, found: !!which(splitCommand(command)[0]) }]),
+    ),
     shells: shells().map(({ id, label }) => ({ id, label })),
     pluginRoot: pluginRoot(),
     bundled: !!bundledCli(),

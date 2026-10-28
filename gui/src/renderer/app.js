@@ -583,14 +583,20 @@ const ROUTE_NOTES = {
 // The route's name in task titles; another agent goes by the name the settings give it.
 const routeName = (route) => ({ api: '模型 API', claude: 'Claude Code', codex: 'Codex', other: state.env.other?.name })[route];
 const routeMissing = (route) =>
-  (route === 'claude' && !state.env.claude) || (route === 'codex' && !state.env.codex) || (route === 'other' && !state.env.other?.found);
+  (route === 'claude' && !state.env.claude) || (route === 'codex' && !state.env.codex) || (route === 'other' && state.env.other?.found === false);
+
+// 其他 Agent always shows, so it can be found; until the settings name one, choosing it says where to and which are here.
+function otherNote() {
+  const other = state.env.other;
+  if (other) return `在后台运行 ${other.name}，按同一份 skill 写总结。它以你的身份运行命令，不限于工作区。`;
+  const here = Object.values(state.env.agents).filter((agent) => agent.found).map((agent) => agent.name);
+  return `还没选用哪个 Agent：在「设置」→「其他 Agent」里选 pi、Hermes Agent、DeepSeek Harness，或填你自己的命令。${here.length ? `这台电脑上找到了 ${here.join('、')}。` : ''}`;
+}
 
 function renderRoutes() {
   const other = state.env.other;
-  $('route-other').hidden = !other;
-  $('route-other-name').textContent = other?.name || '';
-  ROUTE_NOTES.other = other ? `在后台运行 ${other.name}，按同一份 skill 写总结。它以你的身份运行命令，不限于工作区。` : '';
-  if (state.route === 'other' && !other) state.route = 'api';
+  $('route-other-name').textContent = other?.name || '其他 Agent';
+  ROUTE_NOTES.other = otherNote();
   for (const input of document.querySelectorAll('input[name=route]')) {
     const missing = routeMissing(input.value);
     input.disabled = missing;
@@ -609,13 +615,14 @@ async function renderSummary(video) {
   renderRoutes();
   const article = $('summary');
   const info = video.info;
-  $('run-summary').disabled = !info?.processed;
+  $('run-summary').disabled = !info?.processed || (state.route === 'other' && !state.env.other);
   $('run-summary').textContent = state.route === 'copy' ? '复制材料' : info?.summary ? '重新生成总结' : '生成总结';
   $('open-summary').hidden = !info?.summary;
   const copying = state.route === 'copy' && !!info?.processed;
   for (const id of ['export-zip', 'export-folder', 'export-limit-label', 'import-summary']) $(id).hidden = !copying;
   $('export-limit').value = state.settings.webFiles || 50;
   if (!info?.processed) {
+    $('summary-versions').hidden = true;
     article.replaceChildren(element('p', { className: 'placeholder', textContent: '先在「处理」里处理这个视频，再生成总结。' }));
     return;
   }
@@ -1409,6 +1416,10 @@ $('open-settings').onclick = async () => {
   $('set-agent').value = state.settings.agent || '';
   $('set-agent-command').value = state.settings.agentCommand || state.env.agents[state.settings.agent]?.command || '';
   renderAgentCommand();
+  for (const option of $('set-agent').options) {
+    const agent = state.env.agents[option.value];
+    if (agent) option.textContent = `${agent.name}${agent.found ? '（已找到）' : '（没有找到）'}`;
+  }
   $('set-key').value = '';
   $('set-close-to-tray').checked = state.settings.closeToTray !== false;
   $('set-theme').value = state.settings.theme || 'system';
