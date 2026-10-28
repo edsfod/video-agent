@@ -140,14 +140,14 @@ def acquire(video, streams, output_dir, *, asr='none', allow_remote_asr=False, s
     raise MediaError(f'Unsupported ASR provider: {asr}')
   if not allow_remote_asr:
     raise MediaError('BCut sends extracted audio to Bilibili; add --allow-remote-asr only if you agree to that upload')
-  from .providers.bcut import BCut, BcutError
+  from .providers import bcut
 
   audio = Path(output_dir) / '.audio-for-bcut.m4a'
   try:
     extract_audio(video, audio)
     try:
-      rows = BCut(status).transcribe(audio)
-    except BcutError as error:
+      rows = bcut.transcribe(audio, status)
+    except bcut.BcutError as error:
       raise MediaError(f'BCut transcription failed: {error}') from error
     except Exception as error:
       raise MediaError(f'BCut transcription failed ({type(error).__name__})') from error
