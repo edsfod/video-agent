@@ -290,6 +290,9 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.35); }
 .settings label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
 .settings label .row input { flex: 1; }
 .settings label.check { flex-direction: row; }
+.agent-row { margin: 6px 0; }
+.agent-row .check { width: 210px; flex: none; }
+.agent-row input[type=text] { flex: 1; }
 .sidebar-foot { display: flex; gap: 4px; }
 .sidebar-foot button { flex: 1; }
 .logs { width: min(1100px, 90vw); height: min(720px, 84vh); display: flex; flex-direction: column; padding: 16px 20px; gap: 10px; }

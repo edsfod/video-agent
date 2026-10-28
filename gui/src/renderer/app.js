@@ -580,42 +580,49 @@ const ROUTE_NOTES = {
   copy: '把规则、模板和字幕材料复制到剪贴板，贴进任何聊天 AI。要连画面一起给，用「导出 zip」；不收 zip、文件数有上限的（如 DeepSeek 网页版最多 50 个），用「导出文件夹」，屏幕页会拼成总图凑进上限。写好后用「导入总结」存回来，画面链接照样能点开。',
 };
 
+// Each other agent the settings show is a route of its own, keyed as in the settings (pi, hermes, dsh, custom).
+const otherRoute = (route) => state.env.others.find((agent) => agent.key === route);
 // The route's name in task titles; another agent goes by the name the settings give it.
-const routeName = (route) => ({ api: '模型 API', claude: 'Claude Code', codex: 'Codex', other: state.env.other?.name })[route];
+const routeName = (route) => ({ api: '模型 API', claude: 'Claude Code', codex: 'Codex' })[route] || otherRoute(route)?.name;
 const routeMissing = (route) =>
-  (route === 'claude' && !state.env.claude) || (route === 'codex' && !state.env.codex) || (route === 'other' && state.env.other?.found === false);
+  (route === 'claude' && !state.env.claude) || (route === 'codex' && !state.env.codex) || otherRoute(route)?.found === false;
+const routeNote = (route) =>
+  ROUTE_NOTES[route] ||
+  (otherRoute(route)
+    ? `在后台运行 ${otherRoute(route).name}，按同一份 skill 写总结。它以你的身份运行命令，不限于工作区。`
+    : '还没有其他 Agent：在「设置」→「其他 Agent」里勾上 pi、Hermes Agent、DeepSeek Harness，或填你自己的命令。');
 
-// 其他 Agent always shows, so it can be found; until the settings name one, choosing it says where to and which are here.
-function otherNote() {
-  const other = state.env.other;
-  if (other) return `在后台运行 ${other.name}，按同一份 skill 写总结。它以你的身份运行命令，不限于工作区。`;
-  const here = Object.values(state.env.agents).filter((agent) => agent.found).map((agent) => agent.name);
-  return `还没选用哪个 Agent：在「设置」→「其他 Agent」里选 pi、Hermes Agent、DeepSeek Harness，或填你自己的命令。${here.length ? `这台电脑上找到了 ${here.join('、')}。` : ''}`;
+// With no other agent, a 其他 Agent route still shows, so it can be found, and says where to add one.
+function otherRouteLabels() {
+  const others = state.env.others.length ? state.env.others : [{ key: 'other', name: '其他 Agent' }];
+  return others.map(({ key, name }) =>
+    element('label', { className: 'route-agent' }, [element('input', { type: 'radio', name: 'route', value: key }), ` ${name}`]),
+  );
 }
 
 function renderRoutes() {
-  const other = state.env.other;
-  $('route-other-name').textContent = other?.name || '其他 Agent';
-  ROUTE_NOTES.other = otherNote();
+  for (const label of document.querySelectorAll('#routes .route-agent')) label.remove();
+  $('routes').querySelector('input[value=api]').parentElement.before(...otherRouteLabels());
+  if (!document.querySelector(`input[name=route][value="${state.route}"]`)) state.route = 'api';
   for (const input of document.querySelectorAll('input[name=route]')) {
     const missing = routeMissing(input.value);
     input.disabled = missing;
     input.parentElement.classList.toggle('unavailable', missing);
-    input.parentElement.title = missing ? `没有找到 ${input.value === 'other' ? other?.file : input.value} 命令` : '';
+    input.parentElement.title = missing ? `没有找到 ${otherRoute(input.value)?.file || input.value} 命令` : '';
     input.checked = input.value === state.route;
     input.onchange = () => {
       state.route = input.value;
       renderSummary(current());
     };
   }
-  $('route-note').textContent = ROUTE_NOTES[state.route];
+  $('route-note').textContent = routeNote(state.route);
 }
 
 async function renderSummary(video) {
   renderRoutes();
   const article = $('summary');
   const info = video.info;
-  $('run-summary').disabled = !info?.processed || (state.route === 'other' && !state.env.other);
+  $('run-summary').disabled = !info?.processed || state.route === 'other';
   $('run-summary').textContent = state.route === 'copy' ? '复制材料' : info?.summary ? '重新生成总结' : '生成总结';
   $('open-summary').hidden = !info?.summary;
   const copying = state.route === 'copy' && !!info?.processed;
@@ -1001,11 +1008,14 @@ async function renderCollection() {
   const live = item.videos.filter((member) => !member.skipped);
   $('collection-process-all').disabled = !live.some((member) => !member.processed);
   $('collection-summarize-all').disabled = !live.some((member) => member.processed && !member.summary);
+  const chosen = $('collection-route').value;
+  for (const option of $('collection-route').querySelectorAll('.route-agent')) option.remove();
+  $('collection-route').querySelector('option[value=api]').before(
+    ...state.env.others.map(({ key, name }) => element('option', { className: 'route-agent', value: key, textContent: name })),
+  );
+  $('collection-route').value = chosen;
+  if (!$('collection-route').value) $('collection-route').value = 'api';
   for (const option of $('collection-route').options) option.disabled = routeMissing(option.value);
-  const other = $('collection-route').querySelector('option[value=other]');
-  other.hidden = !state.env.other;
-  other.textContent = state.env.other?.name || '';
-  if (!state.env.other && $('collection-route').value === 'other') $('collection-route').value = 'api';
   if ($('collection-route').selectedOptions[0]?.disabled) $('collection-route').value = 'api';
   const copying = $('collection-route').value === 'copy';
   $('collection-overview').textContent = copying ? '复制合集总结的材料' : item.overview ? '重新生成合集总结' : '生成合集总结';
@@ -1413,13 +1423,7 @@ document.addEventListener('drop', (event) => {
 $('open-settings').onclick = async () => {
   $('set-workspace').value = state.settings.workspace;
   $('set-cli').value = state.settings.cli;
-  $('set-agent').value = state.settings.agent || '';
-  $('set-agent-command').value = state.settings.agentCommand || state.env.agents[state.settings.agent]?.command || '';
-  renderAgentCommand();
-  for (const option of $('set-agent').options) {
-    const agent = state.env.agents[option.value];
-    if (agent) option.textContent = `${agent.name}${agent.found ? '（已找到）' : '（没有找到）'}`;
-  }
+  renderAgentRows();
   $('set-key').value = '';
   $('set-close-to-tray').checked = state.settings.closeToTray !== false;
   $('set-theme').value = state.settings.theme || 'system';
@@ -1432,7 +1436,7 @@ $('open-settings').onclick = async () => {
   const cli = state.env.bundled ? '安装程序自带的 video-agent' : state.env.cli.join(' ');
   $('env-info').textContent =
     `正在用的命令：${cli} · Claude Code：${state.env.claude ? '已找到' : '没有找到'} · Codex：${state.env.codex ? '已找到' : '没有找到'}` +
-    (state.env.other ? ` · ${state.env.other.name}：${state.env.other.found ? '已找到' : '没有找到'}` : '');
+    state.env.others.map((agent) => ` · ${agent.name}：${agent.found ? '已找到' : '没有找到'}`).join('');
   $('install-claude').disabled = !state.env.claude;
   $('install-codex').disabled = !state.env.codex;
   $('plugin-output').hidden = true;
@@ -1453,10 +1457,11 @@ $('open-settings').onclick = async () => {
 // Closing by ×, Esc or a click outside keeps nothing; with changes it asks first, otherwise it just closes.
 let settingsShown = '';
 const SETTINGS_FIELDS = [
-  'set-theme', 'set-workspace', 'set-cli', 'set-agent', 'set-agent-command', 'set-close-to-tray', 'set-check-updates', 'set-update-mirror', 'set-limit-download',
+  'set-theme', 'set-workspace', 'set-cli', 'set-close-to-tray', 'set-check-updates', 'set-update-mirror', 'set-limit-download',
   'set-limit-process', 'set-limit-summary', 'set-provider', 'set-model', 'set-base-url', 'set-key',
 ];
-const settingsValues = () => JSON.stringify(SETTINGS_FIELDS.map((id) => ($(id).type === 'checkbox' ? $(id).checked : $(id).value)));
+const settingsValues = () =>
+  JSON.stringify([SETTINGS_FIELDS.map((id) => ($(id).type === 'checkbox' ? $(id).checked : $(id).value)), agentRowsValue()]);
 function closeSettings() {
   if (settingsValues() === settingsShown) return $('settings').close('cancel');
   $('settings-unsaved').hidden = false;
@@ -1467,14 +1472,31 @@ $('close-settings').onclick = closeSettings;
 $('settings').addEventListener('cancel', (event) => (event.preventDefault(), closeSettings()));
 $('settings').addEventListener('click', (event) => event.target === $('settings') && closeSettings());
 $('set-theme').onchange = () => window.va.previewTheme($('set-theme').value);
-// Choosing an agent puts its command in the box to edit; 自定义 starts empty.
-function renderAgentCommand() {
-  $('set-agent-command').disabled = !$('set-agent').value;
+// One row per preset and one for a command of the user's own: ticked ones become summary routes. A preset's box holds
+// its command to edit; until the settings were saved with these rows, the presets found here are the ticked ones.
+let agentRowsShown = '';
+function renderAgentRows() {
+  const saved = Object.fromEntries(state.env.others.map((agent) => [agent.key, agent.command]));
+  const rows = [...Object.entries(state.env.agents), ['custom', { name: '自定义命令', command: '' }]].map(([key, preset]) => {
+    const on = element('input', { type: 'checkbox', checked: key in saved });
+    const command = element('input', {
+      type: 'text', spellcheck: false, value: saved[key] || preset.command, placeholder: '例如 my-agent run --print', disabled: !on.checked,
+    });
+    on.dataset.agent = key;
+    command.dataset.agentCommand = key;
+    on.onchange = () => (command.disabled = !on.checked);
+    const found = 'found' in preset ? (preset.found ? '（已找到）' : '（没有找到）') : '';
+    const label = element('label', { className: 'check inline' }, [on, element('span', { textContent: preset.name + found })]);
+    return element('div', { className: 'row agent-row' }, [label, command]);
+  });
+  $('set-agents').replaceChildren(...rows);
+  agentRowsShown = JSON.stringify(agentRowsValue());
 }
-$('set-agent').onchange = () => {
-  $('set-agent-command').value = state.env.agents[$('set-agent').value]?.command || '';
-  renderAgentCommand();
-};
+const agentRowsValue = () =>
+  [...document.querySelectorAll('#set-agents input[data-agent]')].filter((box) => box.checked).map((box) => {
+    const command = document.querySelector(`#set-agents input[data-agent-command="${box.dataset.agent}"]`).value.trim();
+    return { key: box.dataset.agent, command: command === state.env.agents[box.dataset.agent]?.command ? '' : command };
+  });
 $('settings').addEventListener('close', () => {
   if ($('settings').returnValue !== 'save') window.va.previewTheme(state.settings.theme || 'system');
   $('settings-unsaved').hidden = true;
@@ -1565,8 +1587,8 @@ $('settings').addEventListener('close', async () => {
   state.settings = await window.va.saveSettings({
     workspace: $('set-workspace').value,
     cli: $('set-cli').value.trim(),
-    agent: $('set-agent').value,
-    agentCommand: $('set-agent').value ? $('set-agent-command').value.trim() : '',
+    // Left as they were shown, the agents stay as saved, so presets installed later still show while none were chosen.
+    agents: JSON.stringify(agentRowsValue()) === agentRowsShown ? state.settings.agents : agentRowsValue(),
     closeToTray: $('set-close-to-tray').checked,
     theme: $('set-theme').value,
     checkUpdates: $('set-check-updates').checked,

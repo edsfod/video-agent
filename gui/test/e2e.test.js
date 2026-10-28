@@ -184,12 +184,12 @@ test('another agent writes a summary from standard input or from a task file', a
   for (const [command, from] of [[`"${process.execPath}" "${script}"`, '标准输入'], [`"${process.execPath}" "${script}" {prompt}`, '文件']]) {
     await page.click('#open-settings');
     await page.waitForSelector('#settings[open]');
-    await page.selectOption('#set-agent', 'custom');
-    await page.fill('#set-agent-command', command);
+    await page.check('#set-agents input[data-agent=custom]');
+    await page.fill('#set-agents input[data-agent-command=custom]', command);
     await page.click('#save-settings');
     await page.click('.tabs button[data-tab=summary]');
-    await page.waitForSelector('#route-other:not([hidden]) #route-other-name:text("node")');
-    await page.check('input[name=route][value=other]');
+    await page.waitForSelector('#routes .route-agent:has-text("node")');
+    await page.check('input[name=route][value=custom]');
     await page.click('#run-summary');
     let found;
     for (let i = 0; i < 120 && !found; i++) {
@@ -203,11 +203,21 @@ test('another agent writes a summary from standard input or from a task file', a
     }
     assert.equal(found.source, 'node');
   }
+  // Several at once: each ticked agent is a route of its own; one whose command is not here shows but cannot be chosen.
   await page.click('#open-settings');
-  await page.selectOption('#set-agent', '');
+  await page.check('#set-agents input[data-agent=dsh]');
+  await page.fill('#set-agents input[data-agent-command=dsh]', 'va-e2e-no-such-agent {prompt}');
   await page.click('#save-settings');
-  await page.waitForSelector('#route-other-name:text("其他 Agent")');
+  await page.waitForSelector('#routes .route-agent:has-text("DeepSeek Harness")');
+  assert.equal(await page.isDisabled('input[name=route][value=dsh]'), true);
+  assert.equal(await page.isDisabled('input[name=route][value=custom]'), false);
+  await page.click('#open-settings');
+  await page.uncheck('#set-agents input[data-agent=custom]');
+  await page.uncheck('#set-agents input[data-agent=dsh]');
+  await page.click('#save-settings');
+  await page.waitForSelector('#routes .route-agent:has-text("其他 Agent")');
   // With none chosen it still shows, says where to choose one, and writes nothing.
+  await page.check('input[name=route][value=other]');
   assert.match(await page.textContent('#route-note'), /设置.*其他 Agent/);
   assert.equal(await page.isDisabled('#run-summary'), true);
   await page.check('input[name=route][value=api]');

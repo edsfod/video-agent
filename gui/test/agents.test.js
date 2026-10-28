@@ -12,7 +12,7 @@ const { _electron: electron } = require('playwright-core');
 const wanted = (process.env.VA_E2E_AGENTS || '').split(',').filter(Boolean);
 const GUI = path.resolve(__dirname, '..');
 
-const OTHERS = ['pi', 'hermes', 'dsh']; // presets in main.js (AGENTS), run through the 其他 Agent route
+const OTHERS = ['pi', 'hermes', 'dsh']; // presets in main.js (AGENTS), each a route of its own once ticked in the settings
 
 for (const agent of ['claude', 'codex', ...OTHERS]) {
   test(`summary through ${agent}`, { skip: !wanted.includes(agent) && `set VA_E2E_AGENTS=${agent}`, timeout: 600_000 }, async () => {
@@ -29,7 +29,7 @@ for (const agent of ['claude', 'codex', ...OTHERS]) {
     execFileSync('video-agent', ['process', video, '-o', workspace]);
     const userData = path.join(root, 'gui-data');
     fs.mkdirSync(userData);
-    const other = OTHERS.includes(agent) ? { agent } : {};
+    const other = OTHERS.includes(agent) ? { agents: [{ key: agent }] } : {};
     fs.writeFileSync(path.join(userData, 'settings.json'), JSON.stringify({ workspace, videos: [video], ...other }));
 
     const app = await electron.launch({ executablePath: require('electron'), args: ['.', `--user-data=${userData}`], cwd: GUI });
@@ -37,7 +37,7 @@ for (const agent of ['claude', 'codex', ...OTHERS]) {
       const page = await app.firstWindow();
       await page.waitForSelector('#video-list .video-item .badge:text("已处理")');
       await page.click('.tabs button[data-tab=summary]');
-      await page.check(`input[name=route][value=${OTHERS.includes(agent) ? 'other' : agent}]`);
+      await page.check(`input[name=route][value=${agent}]`);
       await page.fill('#summary-request', '写得简短一些');
       await page.click('#run-summary');
       // Wait for the job to end either way, then judge it; a failed run says why in the log.

@@ -63,8 +63,9 @@ function defaults() {
     updateMirror: '',
     limits: DEFAULT_LIMITS, // tasks of each kind that may run at once (see tasks.js)
     processAfterDownload: true, // downloaded files are processed, so their subtitles are imported at once
-    agent: '', // another agent for summaries: a key of AGENTS, 'custom' or none
-    agentCommand: '', // its command line; {prompt} stands for the task where it takes no standard input
+    // Other agents shown as summary routes, [{ key, command }]: a key of AGENTS or 'custom', and its command line, where
+    // {prompt} stands for the task if it takes no standard input. null shows the presets found on this computer.
+    agents: null,
     webFiles: 50, // files a chat AI takes at once, for 导出文件夹 (DeepSeek's web chat: 50)
   };
 }
@@ -78,6 +79,10 @@ function loadSettings() {
   }
   // Up to 0.2.0 every processing run saved the old fixed cap of 36 frames; it was not a choice, so it no longer caps.
   if (saved.maxFrames === 36) saved.maxFrames = null;
+  // 0.8.2 and 0.8.3 kept one other agent, or none, as `agent` and `agentCommand`.
+  if (!('agents' in saved) && 'agent' in saved) saved.agents = saved.agent ? [{ key: saved.agent, command: saved.agentCommand || '' }] : null;
+  delete saved.agent;
+  delete saved.agentCommand;
   return { ...defaults(), ...saved };
 }
 
@@ -150,13 +155,19 @@ const AGENTS = {
   dsh: { name: 'DeepSeek Harness', command: 'dsh --profile headless {prompt}' },
 };
 
-function otherAgent() {
-  const { agent, agentCommand } = loadSettings();
-  const command = agentCommand.trim() || AGENTS[agent]?.command || '';
-  if (!agent || !command) return null;
-  const [file, ...args] = splitCommand(command);
-  const found = path.isAbsolute(file) ? fs.existsSync(file) : !!which(file);
-  return { name: AGENTS[agent]?.name || path.basename(file).replace(/\.(exe|cmd|bat)$/i, ''), file, args, found };
+const commandFound = (file) => (path.isAbsolute(file) ? fs.existsSync(file) : !!which(file));
+
+// The other agents the summary routes offer, each with its command split and whether that command is here.
+function otherAgents() {
+  const { agents } = loadSettings();
+  const chosen = agents ?? Object.keys(AGENTS).filter((key) => commandFound(splitCommand(AGENTS[key].command)[0])).map((key) => ({ key }));
+  return chosen.flatMap(({ key, command }) => {
+    const line = (command || '').trim() || AGENTS[key]?.command || '';
+    if (!line) return [];
+    const [file, ...args] = splitCommand(line);
+    const name = AGENTS[key]?.name || path.basename(file).replace(/\.(exe|cmd|bat)$/i, '');
+    return [{ key, name, command: line, file, args, found: commandFound(file) }];
+  });
 }
 
 // The folder that holds .claude-plugin/ and skills/: the repository in development, resources/plugin when packaged.
@@ -305,9 +316,9 @@ function startAgent(task) {
   const { agent, video, folder, request, workspace, title } = task;
   const skill = path.join(pluginRoot(), 'skills', 'video-agent', 'SKILL.md');
   const file = task.guide ? '学习提纲.md' : '合集总结.md';
-  const other = agent === 'other' ? otherAgent() : null;
-  if (agent === 'other' && !other) {
-    queue.output(task.id, 'stderr', '设置里没有选其他 Agent。\n');
+  const other = agent === 'claude' || agent === 'codex' ? null : otherAgents().find((entry) => entry.key === agent);
+  if (agent !== 'claude' && agent !== 'codex' && !other) {
+    queue.output(task.id, 'stderr', `设置里没有 ${agent} 这个 Agent。\n`);
     return queue.exited(task.id, -1);
   }
   const name = agent === 'claude' ? 'Claude Code' : agent === 'codex' ? 'Codex' : other.name;
@@ -476,9 +487,9 @@ function registerIpc() {
     cli: cliCommand(),
     claude: which('claude'),
     codex: which('codex'),
-    other: otherAgent(),
+    others: otherAgents(),
     agents: Object.fromEntries(
-      Object.entries(AGENTS).map(([key, { name, command }]) => [key, { name, command, found: !!which(splitCommand(command)[0]) }]),
+      Object.entries(AGENTS).map(([key, { name, command }]) => [key, { name, command, found: commandFound(splitCommand(command)[0]) }]),
     ),
     shells: shells().map(({ id, label }) => ({ id, label })),
     pluginRoot: pluginRoot(),
