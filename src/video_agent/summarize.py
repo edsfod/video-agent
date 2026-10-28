@@ -461,6 +461,20 @@ CORRECTIONS = re.compile(rf'^##\s*{CORRECTIONS_HEADING}\s*\n(.*?)(?=^##\s|\Z)', 
 PAIR = re.compile(r'^\s*(?:[-*]\s*)?`?(.+?)`?\s*(?:→|->|=>)\s*`?(.+?)`?\s*$')
 
 
+# Shown after the template as a section of it, with its form, so a chat AI writes it as it writes the others.
+CORRECTIONS_SECTION = f"""## 字幕改正（网页 AI 写在总结最后）
+
+你不能运行命令，所以规则里用 `video-agent fix` 整理字幕的那一步改成在总结最后写这一节：每次出现都识别错的名字、术语，\
+每行一条。导入时程序会照它整理字幕（原字幕保留），再把这一节从总结里去掉。只错一次的、错的写法本身也是正常词语的，只在\
+总结正文里改，不列进来；没有要改的就不写这一节。
+
+```markdown
+## {CORRECTIONS_HEADING}
+
+- 错的写法 → 正确写法
+```"""
+
+
 def take_corrections(text):
   """(summary without the 字幕改正 section, [(wrong, right)] it listed)."""
   found = CORRECTIONS.search(text)
@@ -537,12 +551,6 @@ def material(video, workspace, *, request='', max_images=40, work_dir=None, max_
   pages = [(item['time_s'], item['path']) for item in manifest.get('screen_pages') or []]
   frames = _evidence_frames(asset, manifest, max_images)
   entries, notes = [], []
-  notes.append(
-    f'你不能运行命令，所以规则里用 `video-agent fix` 整理字幕的那一步改成这样：把每次出现都识别错的名字、术语，'
-    f'在总结最后单独写一节 `## {CORRECTIONS_HEADING}`，每行一条 `错的写法 → 正确写法`；导入时程序会照它整理字幕'
-    '（原字幕保留），再把这一节从总结里去掉。只错一次的、错的写法本身也是正常词语的，只在总结里改，不列进来；'
-    '没有要改的就不写这一节。'
-  )
   if work_dir is None:
     notes.append('这次没有附上画面，材料里列出的屏幕页和画面你看不到：不要描述画面内容，也不要链接画面。')
   elif max_files:
@@ -575,6 +583,7 @@ def material(video, workspace, *, request='', max_images=40, work_dir=None, max_
       *notes,
       f'「视频」那一行的开头照抄：{video_line(video, media.duration(info))}',
       template(),
+      CORRECTIONS_SECTION,
       '---',
       (asset / 'summary-context.md').read_text(encoding='utf-8'),
     )

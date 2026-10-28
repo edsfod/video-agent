@@ -15,8 +15,6 @@ const state = {
   collection: null,
   doc: 'overview', // the collection file shown: overview (合集总结) or guide (学习提纲)
   version: null, // { video, file }: a summary version shown instead of the current one
-  expanded: new Set(), // collections the user opened with ▸ in the sidebar
-  collapsed: new Set(), // and those closed with ▾ although they hold the page shown
   tools: null, // `video-agent tools`: where FFmpeg, yt-dlp and AutoSlides Extractor were found (null: not found)
   term: null,
   bilibili: { loggedIn: false }, // { loggedIn, name? }
@@ -300,8 +298,15 @@ function renderVideo() {
   $('video-name').textContent = baseName(video.path);
   $('video-path').textContent = video.path;
   $('reveal-folder').disabled = !video.info?.processed;
-  // A collection's video is not in the 视频 list, so there is nothing to take it out of.
+  // A collection's video is not in the 视频 list, so there is nothing to take it out of; its page leads back instead.
   $('remove-video').hidden = inCollection(video);
+  const holder = state.collections.find((item) => item.videos.some((member) => isVideo(member.video, video)));
+  const member = holder?.videos.find((entry) => isVideo(entry.video, video));
+  $('video-collection').hidden = !holder;
+  if (holder) {
+    $('video-collection').textContent = `← ${holder.name} · 第 ${member.index} 集`;
+    $('video-collection').onclick = () => openCollection(holder.name);
+  }
   renderTab();
 }
 
@@ -329,6 +334,7 @@ for (const button of document.querySelectorAll('#video .tabs button')) {
 
 function renderProcess(video) {
   $('opt-interval').value = state.settings.frameInterval;
+  $('opt-bcut').checked = state.settings.bcut !== false;
   // The external extractor is offered only where the CLI finds it (state.tools is null until `tools` answered).
   const extractor = !state.tools || state.tools.slide_extractor;
   $('opt-slides').disabled = !extractor;
@@ -443,8 +449,8 @@ async function startProcess(extra = {}) {
   const video = current();
   const interval = Number($('opt-interval').value) || 60;
   const maxFrames = Number($('opt-max-frames').value) || null; // empty: as many as the video has
-  state.settings = await window.va.saveSettings({ frameInterval: interval, maxFrames });
-  const added = await addTask({
+  state.settings = await window.va.saveSettings({ frameInterval: interval, maxFrames, bcut: $('opt-bcut').checked });
+  await addTask({
     kind: 'process',
     title: `处理：${baseName(video.path)}`,
     video: video.path,
@@ -454,8 +460,8 @@ async function startProcess(extra = {}) {
     slides: $('opt-slides').checked,
     ...extra,
   });
-  if (added) $('opt-bcut').checked = false; // consent covers one run only
 }
+$('opt-bcut').onchange = async () => (state.settings = await window.va.saveSettings({ bcut: $('opt-bcut').checked }));
 
 async function renderTranscript(video) {
   const box = $('transcript');
@@ -887,55 +893,27 @@ const currentCollection = () => state.collections.find((item) => item.name === s
 async function loadCollections() {
   const result = await window.va.cliJson(collectionArgs('list'));
   state.collections = Array.isArray(result) ? result : [];
-  renderList(); // also the collections, with their videos where expanded
+  renderList(); // also the collections
   if (state.view === 'collection') renderVideo();
 }
 
 // Each collection, and under it its videos when it is open: on its page, playing one of its videos, or opened with ▸.
+// The sidebar lists collections only; their videos are opened from the collection's page, where there is room
+// (user request, 2026-10-28). A collection holding the video shown is marked as well.
 function renderCollectionList() {
   $('collection-list').replaceChildren(
-    ...state.collections.flatMap((item) => {
-      const active = state.view === 'collection' && item.name === state.collection;
+    ...state.collections.map((item) => {
       const holdsCurrent = state.view === 'video' && item.videos.some((member) => isVideo(member.video, current()));
-      const open = !state.collapsed.has(item.name) && (active || holdsCurrent || state.expanded.has(item.name));
-      const caret = element('button', {
-        className: 'ghost caret', type: 'button', textContent: open ? '▾' : '▸', title: open ? '收起各集' : '展开各集',
-      });
-      caret.onclick = (event) => {
-        event.stopPropagation();
-        if (open) {
-          state.expanded.delete(item.name);
-          state.collapsed.add(item.name);
-        } else {
-          state.collapsed.delete(item.name);
-          state.expanded.add(item.name);
-        }
-        renderCollectionList();
-      };
+      const active = (state.view === 'collection' && item.name === state.collection) || holdsCurrent;
+      const busy = item.videos.filter((member) => videoTask({ path: member.video })).length; // queued or running
       const row = element('div', { className: 'video-item collection-item' + (active ? ' active' : '') }, [
-        element('span', { className: 'collection-head' }, [
-          caret,
-          element('span', { className: 'name', textContent: item.name, title: item.folder }),
-        ]),
-        element('span', { className: 'badge', textContent: `${item.videos.length} 集` }),
+        element('span', { className: 'name', textContent: item.name, title: item.folder }),
+        element('span', { className: 'badge', textContent: `${item.videos.length} 集` + (busy ? ` · ${busy} 个任务` : '') }),
       ]);
-      row.onclick = () => (state.collapsed.delete(item.name), openCollection(item.name));
-      if (!open) return [row];
-      return [row, ...item.videos.map((member) => memberItem(member))];
+      row.onclick = () => openCollection(item.name);
+      return row;
     }),
   );
-}
-
-function memberItem(member) {
-  const active = state.view === 'video' && isVideo(member.video, current());
-  const task = videoTask({ path: member.video });
-  const label = task ? null : member.skipped ? '已跳过' : member.summary ? '已总结' : member.processed ? '已处理' : '未处理';
-  const item = element('div', { className: 'video-item member-item' + (active ? ' active' : '') }, [
-    element('span', { className: 'name', textContent: `${member.index}. ${member.name}`, title: member.video }),
-    task ? badge({ path: member.video }) : element('span', { className: 'badge' + (member.summary ? ' done' : ''), textContent: label }),
-  ]);
-  item.onclick = () => openMember(member.video);
-  return item;
 }
 
 // A collection's video opens on its own page; it is kept in the window's list of known videos, hidden from 视频.
@@ -1391,7 +1369,7 @@ $('playlist-dialog').addEventListener('close', async () => {
   const collection = $('playlist-dialog-join').checked ? $('playlist-dialog-name').value.trim() : '';
   const follow = Boolean(collection) && $('playlist-dialog-follow').checked;
   const auto = follow && $('playlist-dialog-auto').checked;
-  const added = await addTask({
+  await addTask({
     kind: 'download', title: `下载列表：${collection || url}`, url, then, playlist: true,
     collection: collection || undefined, follow, auto,
   });

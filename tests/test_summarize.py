@@ -247,6 +247,8 @@ def test_pack_zips_the_prompt_with_frames_at_their_folder_paths(processed, capsy
   assert '我的要求：写短一点' in prompt
   assert '「视频」那一行的开头照抄：视频：sample clip [test] · [打开视频]' in prompt
   assert '我们看看这张图表' in prompt and '# Writing a video summary' in prompt
+  # The 字幕改正 section comes after the template with its form, like the template's own sections (user, 2026-10-28).
+  assert prompt.index('# Writing a video summary') < prompt.index('## 字幕改正\n\n- 错的写法 → 正确写法')
 
   capsys.readouterr()
   assert cli.main(['pack', str(video), '-o', str(workspace)]) == 0

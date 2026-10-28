@@ -68,6 +68,7 @@ class TaskQueue {
     if (existing) return { added: false, existing: this.summary(existing) };
     const task = { ...spec, id: newId(), key, status: 'queued', added: Date.now(), output: [], size: 0, lines: '' };
     task.paths = [];
+    task.fresh = []; // the paths this download saved, not found already there
     task.lists = [];
     this.tasks.push(task);
     this.pump();
@@ -103,6 +104,7 @@ class TaskQueue {
         try {
           const result = JSON.parse(line);
           if (result.path) task.paths.push(result.path);
+          if (result.path && result.new !== false) task.fresh.push(result.path);
           if (result.playlist) task.lists.push(result.playlist);
         } catch {
           // not a result line

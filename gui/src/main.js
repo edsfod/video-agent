@@ -63,6 +63,9 @@ function defaults() {
     updateMirror: '',
     limits: DEFAULT_LIMITS, // tasks of each kind that may run at once (see tasks.js)
     processAfterDownload: true, // downloaded files are processed, so their subtitles are imported at once
+    // A video without subtitles is transcribed with BCut, which uploads its audio to Bilibili: on unless the user turns
+    // it off, also for videos processed after a download (user decision, 2026-10-28). The CLI still needs the flag.
+    bcut: true,
     // Other agents shown as summary routes, [{ key, command }]: a key of AGENTS or 'custom', and its command line, where
     // {prompt} stands for the task if it takes no standard input. null shows the presets found on this computer.
     agents: null,
@@ -264,7 +267,7 @@ function cliArgs(task) {
     case 'process': {
       const args = ['process', task.video, ...out, '--json', '--frame-interval', String(task.interval)];
       if (task.maxFrames) args.push('--max-frames', String(task.maxFrames));
-      if (task.bcut) args.push('--asr', 'bcut', '--allow-remote-asr'); // consent given for this one task
+      if (task.bcut) args.push('--asr', 'bcut', '--allow-remote-asr'); // the user's BCut setting, on by default
       if (task.slides) args.push('--extract-slides');
       if (task.screenRegion) args.push('--screen-region', task.screenRegion);
       return args;
@@ -372,18 +375,20 @@ function startAgent(task) {
   }
 }
 
-// "Process after download": the saved files are processed with the window's frame settings, without BCut (which
-// needs consent per run) or slides; a video without subtitles is then processed again by hand if wanted.
+// "Process after download": the saved files are processed with the window's frame settings and BCut setting, without
+// slides. Files the download found already saved, as when a collection of downloaded videos starts following its list,
+// are left alone.
 function followUp(task) {
   if (task.kind !== 'download' || task.then !== 'process') return [];
-  const { frameInterval, maxFrames } = loadSettings();
-  return task.paths.map((video) => ({
+  const { frameInterval, maxFrames, bcut } = loadSettings();
+  return (task.fresh || task.paths).map((video) => ({
     kind: 'process',
     title: `处理：${path.basename(video)}`,
     video,
     workspace: task.workspace,
     interval: frameInterval,
     maxFrames,
+    bcut,
   }));
 }
 

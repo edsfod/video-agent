@@ -292,12 +292,15 @@ test('a collection lists its videos and copies the material for its overview', a
   assert.equal(JSON.parse(cli(['collection', 'show', '测试合集', '-o', WORKSPACE])).source.auto, true);
   await page.click('#collection-unfollow');
   await page.waitForSelector('#collection-follow-form:not([hidden])');
-  // A video in a collection is listed under it in the sidebar, not under 视频; taking it out brings it back.
+  // A video in a collection is not under 视频 and not spread out in the sidebar: it opens from the collection's page,
+  // which its page leads back to; taking it out brings it back under 视频.
   assert.equal(await page.$$eval('#video-list .video-item', (all) => all.length), 0);
-  await page.click('#collection-list .member-item');
+  assert.equal(await page.$$eval('#collection-list .video-item', (all) => all.length), 1);
+  await page.click('#collection-members .member .name');
   await page.waitForSelector('#video:not([hidden])');
-  assert.equal(await page.isVisible('#collection-list .member-item.active'), true, 'the open video is marked');
-  await page.click('#collection-list .collection-item');
+  assert.equal(await page.isVisible('#collection-list .collection-item.active'), true, 'its collection is marked');
+  assert.match(await page.textContent('#video-collection'), /测试合集 · 第 1 集/);
+  await page.click('#video-collection');
   await page.click('#collection-members .member button:text("移出")');
   await page.waitForSelector('#video-list .video-item');
   await page.click('#video-list .video-item');

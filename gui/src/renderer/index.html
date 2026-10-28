@@ -42,6 +42,7 @@
         <section id="video" class="video" hidden>
           <header class="video-head">
             <div class="video-title">
+              <button id="video-collection" type="button" class="ghost crumb" hidden></button>
               <h1 id="video-name"></h1>
               <div id="video-path" class="muted path"></div>
             </div>
@@ -71,7 +72,7 @@
               </div>
               <label class="check">
                 <input id="opt-bcut" type="checkbox" />
-                <span>没有字幕时，用必剪（B 站）转录<br /><small class="warn">会把这个视频的音轨上传到哔哩哔哩。只对这一次处理生效。</small></span>
+                <span>没有字幕时，用必剪（B 站）转录<br /><small class="warn">会把视频的音轨上传到哔哩哔哩。对之后处理的视频都有效，下载完自动处理时也会用；本地视频不想上传就取消勾选。</small></span>
               </label>
               <label class="check">
                 <input id="opt-slides" type="checkbox" />
@@ -148,8 +149,8 @@
                 <label id="export-limit-label" class="limit" hidden>最多<input id="export-limit" type="number" min="2" max="500" />个文件</label>
                 <button id="import-summary" hidden>导入总结…</button>
                 <button id="open-summary" class="ghost" hidden>用编辑器打开</button>
-                <span id="summary-state" class="muted"></span>
               </div>
+              <p id="summary-state" class="muted small-text state-line"></p>
             </div>
             <div id="summary-versions" class="versions row" hidden>
               <label class="grow">版本<select id="summary-version-pick"></select></label>

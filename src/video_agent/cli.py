@@ -555,12 +555,19 @@ def _versions(args):
   return 0
 
 
+def _files_in(folder):
+  """The files already in a download folder, so a result can say whether this run saved it or found it there."""
+  folder = Path(folder).expanduser()
+  return {path.resolve() for path in folder.iterdir()} if folder.is_dir() else set()
+
+
 def _update(args):
   workspace, name = args.output, args.name
   source = collection.load(workspace, name).get('source')
   if not source:
     print(f'collection {name} follows no list; set one with: video-agent collection follow {name} <URL>')
     return 1
+  before = _files_in(source['folder'])
   try:
     paths, failures = download_urls(
       [source['url']],
@@ -578,7 +585,7 @@ def _update(args):
     return 1
   for path in paths:
     if args.json:
-      _emit({'path': str(path)})
+      _emit({'path': str(path), 'new': path not in before})
   data = collection.checked(workspace, name, paths)
   print(f'{data["source"]["new"]} new videos in collection {name}', file=sys.stderr)
   if args.json:
@@ -638,6 +645,7 @@ def run(args):
       if not (collection.folder(args.workspace, args.collection) / collection.DATA).is_file():
         collection.create(args.workspace, args.collection)
       collection.follow(args.workspace, args.collection, args.urls[0], args.output, auto=args.auto)
+    before = _files_in(args.output)
     try:
       paths, failures = download_urls(
         args.urls,
@@ -657,7 +665,8 @@ def run(args):
       return 1
     for path in paths:
       if args.json:
-        _emit({'path': str(path)})
+        # A video yt-dlp found already saved is listed too; `new` tells the window not to process it again.
+        _emit({'path': str(path), 'new': path not in before})
       else:
         print(f'Next: process this local file separately: {path}')
     if following:

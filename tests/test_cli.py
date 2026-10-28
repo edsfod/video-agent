@@ -508,10 +508,17 @@ def test_an_existing_collection_can_follow_its_list_later(fake_yt_dlp, tmp_path,
   )
   assert cli.main(['collection', 'follow', '旧', url, '--folder', str(folder), '-o', str(workspace)]) == 0
   (tmp_path / 'ids.txt').write_text('abc\nxyz')
-  assert cli.main(['collection', 'update', '旧', '-o', str(workspace)]) == 0
+  capsys.readouterr()
+  assert cli.main(['collection', 'update', '旧', '-o', str(workspace), '--json']) == 0
   # The first update has no archive yet, so yt-dlp meets abc again; it stays where it was, xyz comes after it.
   names = [Path(video).name for video in collection.load(workspace, '旧')['videos']]
   assert names == ['Clip [abc].mp4', 'Clip xyz [xyz].mp4']
+  # abc was in the folder already: the window does not process it again after the download (user report, 2026-10-28).
+  out = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+  assert [(Path(item['path']).name, item['new']) for item in out if 'path' in item] == [
+    ('Clip [abc].mp4', False),
+    ('Clip xyz [xyz].mp4', True),
+  ]
 
 
 def test_tools_reports_each_program_or_null(monkeypatch, capsys):
