@@ -48,6 +48,7 @@ else
       gui/*) why='window: gui, installer'; gui=true installer=true ;;
       packaging/* | .github/actions/ffmpeg/*) why='packaging: installer'; installer=true ;;
       .github/workflows/release.yml) why='release only: none' ;;
+      .github/scripts/changed-jobs.sh) why='job choice, run by the changes job itself: none' ;;
       docs/* | notes/* | LICENSE | *.md) why='documentation: none' ;;
       *) why='unknown: all'; cli=true gui=true installer=true ;;
     esac
