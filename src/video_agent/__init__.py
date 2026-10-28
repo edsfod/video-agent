@@ -1,3 +1,3 @@
 """Package metadata for the local video processing CLI."""
 
-__version__ = '0.8.2'
+__version__ = '0.8.3'
