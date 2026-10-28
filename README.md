@@ -11,6 +11,14 @@
   </p>
 </div>
 
+## 交流群
+
+QQ 群：1132547729，用 QQ 扫码也可以加入。问题和建议也可以提 [issue](https://github.com/edsfod/video-agent/issues)。
+
+<p align="center">
+  <img src="docs/images/qq-group.webp" width="240" alt="VideoAgent QQ 群二维码，群号 1132547729" />
+</p>
+
 <p align="center">
   <img src="docs/images/summary-split.webp" width="90%" alt="总结页：选择总结方式，下方是生成的总结；左边浅色，右边深色" />
 </p>
@@ -22,14 +30,6 @@ Video Agent 由三部分组成，按需取用：
 - **桌面程序**：在窗口里完成以上全部操作，内嵌终端，支持托盘和任务日志。
 
 只支持 Windows。
-
-## 交流群
-
-QQ 群：1132547729，用 QQ 扫码也可以加入。问题和建议也可以提 [issue](https://github.com/edsfod/video-agent/issues)。
-
-<p align="center">
-  <img src="docs/images/qq-group.webp" width="240" alt="VideoAgent QQ 群二维码，群号 1132547729" />
-</p>
 
 ## 能做什么
 
