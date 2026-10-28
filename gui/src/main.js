@@ -214,9 +214,13 @@ function cliArgs(task) {
   const out = ['-o', task.workspace];
   switch (task.kind) {
     case 'download': {
+      // A followed list's new videos: the collection knows the list and the folder.
+      if (task.update) return ['collection', 'update', task.update, ...out, '--json'];
       const args = ['download', task.url, '-o', path.join(task.workspace, '下载'), '--json'];
       if (task.playlist) args.push('--playlist');
       if (task.collection) args.push('--collection', task.collection, '--workspace', task.workspace);
+      if (task.follow) args.push('--follow');
+      if (task.auto) args.push('--auto');
       return args;
     }
     case 'process': {

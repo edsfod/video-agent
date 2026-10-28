@@ -176,6 +176,17 @@ test('a collection lists its videos and copies the material for its overview', a
   const copied = await app.evaluate(({ clipboard }) => clipboard.readText());
   assert.match(copied, /为合集「测试合集」写 合集总结\.md/);
   assert.match(copied, /# 测试视频/);
+  // Following a list keeps its link for later checks; nothing is downloaded until 检查新视频.
+  assert.equal(await page.isVisible('#collection-follow-form'), true);
+  await page.fill('#collection-follow-url', 'https://example.com/list');
+  await page.click('#collection-follow-form button[type=submit]');
+  await page.waitForSelector('#collection-following:not([hidden])');
+  assert.match(await page.textContent('#collection-source-info'), /example\.com\/list.*还没检查过/);
+  await page.click('#collection-auto');
+  await page.waitForFunction(() => document.querySelector('#collection-state').textContent === '');
+  assert.equal(JSON.parse(cli(['collection', 'show', '测试合集', '-o', WORKSPACE])).source.auto, true);
+  await page.click('#collection-unfollow');
+  await page.waitForSelector('#collection-follow-form:not([hidden])');
   await page.click('#video-list .video-item');
   await page.waitForSelector('#video:not([hidden])');
 });

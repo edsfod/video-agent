@@ -150,8 +150,11 @@ def download_urls(
   cookies_path=None,
   status=print,
   found_list=None,
+  archive_path=None,
 ):
-  """Downloads each URL; a URL that stands for a list without `playlist` is skipped and passed to `found_list`."""
+  """Downloads each URL; a URL that stands for a list without `playlist` is skipped and passed to `found_list`. With
+  `archive_path`, yt-dlp records each video it fetched there and skips those it finds listed, so a list can be fetched
+  again later for its new videos only."""
   program = executable(executable_path)
   output = Path(output).expanduser().resolve()
   output.mkdir(parents=True, exist_ok=True)
@@ -162,6 +165,7 @@ def download_urls(
   if cookies is not None and not cookies.is_file():
     raise DownloadError(f'cookies file does not exist: {cookies}')
   template = output / '%(title)s [%(id)s].%(ext)s'
+  archive = ['--download-archive', str(Path(archive_path).resolve())] if archive_path else []
   downloaded, failed = [], 0
 
   for url in urls:
@@ -181,6 +185,7 @@ def download_urls(
     command = [
       *_base_command(program, config, cookies),
       '--yes-playlist' if playlist else '--no-playlist',
+      *archive,
       '--format',
       format_selector,
       *TITLE_FIXES,
@@ -208,6 +213,8 @@ def download_urls(
     if code != 0:
       status(f'yt-dlp: download failed with exit status {code}')
       failed += 1
+    elif not paths and archive:
+      status('yt-dlp: nothing new; every video is in the download archive')
     elif not paths:
       status('yt-dlp: finished without reporting a saved video path')
       failed += 1

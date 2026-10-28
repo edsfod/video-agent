@@ -79,11 +79,23 @@ FAKE_YT_DLP = textwrap.dedent("""
   if 'fail' in url or ('subtitle-error' in url and '--write-subs' in args):
     sys.exit(1)
   template = args[args.index('--output') + 1]
-  path = Path(template.replace('%(title)s', 'Clip').replace('%(id)s', 'abc').replace('%(ext)s', 'mp4'))
-  path.write_bytes(b'video')
-  if '--write-subs' in args:
-    path.with_suffix('.ai-zh.srt').write_text('1\\n00:00:01,000 --> 00:00:02,000\\nhi\\n', encoding='utf-8')
-  print(path)
+  # A list holds the ids in ids.txt beside this script (one video, abc, without it); an archive skips those it lists.
+  listed = Path(__file__).with_name('ids.txt')
+  ids = listed.read_text().split() if 'list' in url and listed.is_file() else ['abc']
+  archive = Path(args[args.index('--download-archive') + 1]) if '--download-archive' in args else None
+  done = archive.read_text().split('\\n') if archive and archive.is_file() else []
+  for vid in ids:
+    if f'fake {vid}' in done:
+      continue
+    title = 'Clip' if vid == 'abc' else f'Clip {vid}'
+    path = Path(template.replace('%(title)s', title).replace('%(id)s', vid).replace('%(ext)s', 'mp4'))
+    path.write_bytes(b'video')
+    if '--write-subs' in args:
+      path.with_suffix('.ai-zh.srt').write_text('1\\n00:00:01,000 --> 00:00:02,000\\nhi\\n', encoding='utf-8')
+    print(path)
+    if archive:
+      with archive.open('a') as file:
+        file.write(f'fake {vid}\\n')
 """)
 
 
@@ -420,3 +432,53 @@ def test_a_list_found_without_playlist_is_reported_as_json(fake_yt_dlp, tmp_path
   assert lines == [
     {'playlist': {'url': 'https://example.com/list', 'title': '合集·系列', 'count': 2, 'titles': ['one']}}
   ]
+
+
+def test_a_followed_list_downloads_only_its_new_videos(fake_yt_dlp, tmp_path, capsys):
+  from video_agent import collection
+
+  ids = tmp_path / 'ids.txt'
+  ids.write_text('abc')
+  workspace, folder = tmp_path / 'work', tmp_path / 'dl'
+  url = 'https://example.com/list'
+  args = ['download', url, '--playlist', '--collection', '连载', '--follow', '-o', str(folder)]
+  assert cli.main([*args, '--workspace', str(workspace)]) == 0
+  source = collection.load(workspace, '连载')['source']
+  assert (source['url'], source['folder'], source['auto'], source['new']) == (url, str(folder.resolve()), False, 1)
+
+  ids.write_text('abc\ndef')
+  capsys.readouterr()
+  assert cli.main(['collection', 'update', '连载', '-o', str(workspace), '--json']) == 0
+  out = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+  assert [Path(item['path']).name for item in out if 'path' in item] == ['Clip def [def].mp4']
+  data = collection.load(workspace, '连载')
+  assert [Path(video).name for video in data['videos']] == ['Clip [abc].mp4', 'Clip def [def].mp4']
+  assert data['source']['new'] == 1 and data['source']['checked']
+
+  assert cli.main(['collection', 'update', '连载', '-o', str(workspace)]) == 0
+  assert collection.load(workspace, '连载')['source']['new'] == 0
+
+  assert cli.main(['collection', 'follow', '连载', '--auto', '-o', str(workspace)]) == 0
+  assert collection.load(workspace, '连载')['source']['auto'] is True
+  assert cli.main(['collection', 'unfollow', '连载', '-o', str(workspace)]) == 0
+  assert 'source' not in collection.load(workspace, '连载')
+  assert not collection.archive(workspace, '连载').exists()
+  assert cli.main(['collection', 'update', '连载', '-o', str(workspace)]) == 1
+
+
+def test_an_existing_collection_can_follow_its_list_later(fake_yt_dlp, tmp_path, capsys):
+  from video_agent import collection
+
+  (tmp_path / 'ids.txt').write_text('abc')
+  workspace, folder = tmp_path / 'work', tmp_path / 'dl'
+  url = 'https://example.com/list'
+  assert (
+    cli.main(['download', url, '--playlist', '--collection', '旧', '-o', str(folder), '--workspace', str(workspace)])
+    == 0
+  )
+  assert cli.main(['collection', 'follow', '旧', url, '--folder', str(folder), '-o', str(workspace)]) == 0
+  (tmp_path / 'ids.txt').write_text('abc\nxyz')
+  assert cli.main(['collection', 'update', '旧', '-o', str(workspace)]) == 0
+  # The first update has no archive yet, so yt-dlp meets abc again; it stays where it was, xyz comes after it.
+  names = [Path(video).name for video in collection.load(workspace, '旧')['videos']]
+  assert names == ['Clip [abc].mp4', 'Clip xyz [xyz].mp4']

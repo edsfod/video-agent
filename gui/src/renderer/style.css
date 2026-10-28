@@ -267,6 +267,7 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.35); }
 .unsaved { color: var(--warn, #d9a441); margin-right: auto; font-size: 13px; }
 #collection-add-choice { flex: 1 1 240px; min-width: 200px; max-width: 420px; }
 #playlist-dialog-titles { margin: 0; padding-left: 20px; }
+#collection-follow-url { flex: 1; }
 .settings { width: 560px; padding: 20px 24px; display: flex; flex-direction: column; gap: 10px; }
 .skill-text { overflow: auto; flex: 1; min-height: 0; }
 #import-text { width: 100%; box-sizing: border-box; font-family: var(--mono); font-size: 12px; resize: vertical; }

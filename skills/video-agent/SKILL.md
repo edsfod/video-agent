@@ -29,7 +29,7 @@ When a command fails, tell the user what it said instead of working around it: d
 
 ## A collection
 
-Several related videos (a course, a series, a playlist, a workshop) form a collection, with an overview (`合集总结.md`) and, when the user wants to study or revise, a study guide with self-test questions (`学习提纲.md`), both in `<workspace>/合集/<name>/`. Use one when the user names a series or a set of videos, or downloads a playlist (`<video-agent> download "<URL>" --playlist -o <folder> --collection "<name>" --workspace <workspace>` fills it in order).
+Several related videos (a course, a series, a playlist, a workshop) form a collection, with an overview (`合集总结.md`) and, when the user wants to study or revise, a study guide with self-test questions (`学习提纲.md`), both in `<workspace>/合集/<name>/`. Use one when the user names a series or a set of videos, or downloads a playlist (`<video-agent> download "<URL>" --playlist -o <folder> --collection "<name>" --workspace <workspace>` fills it in order; add `--follow` for a series that is still growing, and later `<video-agent> collection update "<name>" -o <workspace>` downloads only its new videos).
 
 1. **Gather the videos**: `<video-agent> collection create "<name>" <videos>... -o <workspace>`, or `collection add` to an existing one; `collection show "<name>" -o <workspace>` prints each video's state as JSON.
 2. **Process** them (`process` takes several at once).

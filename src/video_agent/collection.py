@@ -5,11 +5,16 @@ their own (ARCHITECTURE.md, "Collections"). Generalised from yanhe-agent's cours
 A collection lives in `<workspace>/合集/<name>/`: `collection.json` (the videos in order, shared terms, skipped videos
 and why), `合集总结.md` (overview) and `学习提纲.md` (study guide with self-test questions). Each video keeps its own
 folder and `总结.md`; the collection's files link to them.
+
+A collection may follow a source, such as a Bilibili season or a playlist that is still growing (user request,
+2026-10-28): `collection.json` keeps its link and download folder, and `downloaded.txt` beside it is yt-dlp's download
+archive, the ids already fetched, so an update downloads only the new videos and adds them at the end.
 """
 
 import json
 import re
 import shutil
+from datetime import UTC, datetime
 from pathlib import Path
 
 from . import corrections, files, processor
@@ -18,6 +23,7 @@ FOLDER = '合集'
 DATA = 'collection.json'
 OVERVIEW = '合集总结.md'
 GUIDE = '学习提纲.md'
+ARCHIVE = 'downloaded.txt'
 # A video counts as possibly empty (a cancelled class, a recording of an empty room) when it is this short or this
 # little of it is speech; the Agent or the user decides whether to skip it.
 SHORT_S = 120
@@ -190,8 +196,58 @@ def status(workspace, name):
     'overview': str(place / OVERVIEW) if (place / OVERVIEW).is_file() else None,
     'guide': str(place / GUIDE) if (place / GUIDE).is_file() else None,
     'terms': data['terms'],
+    'source': data.get('source'),
     'videos': members,
   }
+
+
+def archive(workspace, name):
+  """yt-dlp's download archive for the collection's source: one line per video id already fetched."""
+  return folder(workspace, name) / ARCHIVE
+
+
+def follow(workspace, name, url, download_folder, auto=False):
+  """Remembers where the collection's videos come from, so `update` can fetch the ones added there later."""
+  data = load(workspace, name)
+  old = data.get('source') or {}
+  data['source'] = {
+    'url': url,
+    'folder': str(Path(download_folder).expanduser().resolve()),
+    'auto': bool(auto),
+    'checked': old.get('checked') if old.get('url') == url else None,
+    'new': old.get('new', 0) if old.get('url') == url else 0,
+  }
+  _save(workspace, data)
+  return data
+
+
+def unfollow(workspace, name):
+  data = load(workspace, name)
+  data.pop('source', None)
+  _save(workspace, data)
+  archive(workspace, name).unlink(missing_ok=True)
+  return data
+
+
+def set_auto(workspace, name, auto):
+  data = load(workspace, name)
+  if not data.get('source'):
+    raise CollectionError(f'collection {name!r} follows no source; set one with: video-agent collection follow')
+  data['source']['auto'] = bool(auto)
+  _save(workspace, data)
+  return data
+
+
+def checked(workspace, name, saved):
+  """Records an update: adds what it saved at the end (members already there stay where they are) and notes when it
+  ran and how many videos it added."""
+  before = len(load(workspace, name)['videos'])
+  data = add(workspace, name, saved) if saved else load(workspace, name)
+  if data.get('source'):
+    data['source']['checked'] = datetime.now(UTC).isoformat(timespec='seconds')
+    data['source']['new'] = len(data['videos']) - before
+    _save(workspace, data)
+  return data
 
 
 def lock(workspace, name, action):

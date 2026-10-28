@@ -148,7 +148,7 @@ async function taskFinished(task) {
   loadCollections(); // a member's state or a collection file may have changed
   if (task.kind === 'download') {
     if (task.paths.length && $('download-url').value.trim() === task.url) $('download-url').value = '';
-    if (task.paths.length) await addVideos(task.paths);
+    if (task.paths.length) await addVideos(task.paths, { show: !task.update && !task.collection });
     if (!task.paths.length && task.lists?.length) askPlaylist(task.lists[0], task.then);
     return;
   }
@@ -202,7 +202,8 @@ $('open-tasks').onclick = () => {
 
 // ---------- video list ----------
 
-async function addVideos(paths) {
+// `show: false` adds them without opening the last one, for downloads that fill a collection in the background.
+async function addVideos(paths, { show = true } = {}) {
   for (const path of paths) {
     if (!state.videos.some((video) => video.path.toLowerCase() === path.toLowerCase())) {
       state.videos.push({ path, info: null });
@@ -210,7 +211,7 @@ async function addVideos(paths) {
   }
   await persistList();
   renderList();
-  if (paths.length) await select(paths[paths.length - 1]);
+  if (paths.length && show) await select(paths[paths.length - 1]);
   await Promise.all(state.videos.filter((video) => !video.info).map(refresh));
 }
 
@@ -782,6 +783,7 @@ async function renderCollection() {
   }
   $('collection-name').textContent = item.name;
   $('collection-path').textContent = item.folder;
+  renderSource(item);
   $('collection-members').replaceChildren(
     ...item.videos.map((member) => {
       const name = element('span', { className: 'name', textContent: member.name, title: member.video });
@@ -876,6 +878,54 @@ $('collection-delete').onclick = async () => {
   await collectionCommand(['delete', item.name]);
   renderVideo();
 };
+// ---------- following a list ----------
+
+const CHECK_EVERY_MS = 6 * 3600 * 1000;
+
+function renderSource(item) {
+  const source = item.source;
+  $('collection-following').hidden = !source;
+  $('collection-follow-form').hidden = Boolean(source);
+  if (!source) return;
+  const when = source.checked ? new Date(source.checked).toLocaleString('zh-CN') : '还没检查过';
+  const found = source.checked ? `，上次新增 ${source.new} 个` : '';
+  const running = state.tasks.some((task) => ACTIVE.has(task.status) && task.update === item.name);
+  $('collection-source-info').textContent = `${source.url} · 新视频存到 ${source.folder} · 上次检查：${when}${found}`;
+  $('collection-check').disabled = running;
+  $('collection-check').textContent = running ? '正在检查…' : '检查新视频';
+  $('collection-auto').checked = Boolean(source.auto);
+}
+
+function checkSource(item) {
+  return addTask({
+    kind: 'download',
+    title: `检查新视频：${item.name}`,
+    url: item.source.url, // for the Bilibili login and so the same list is not checked twice at once
+    update: item.name,
+    then: state.settings.processAfterDownload !== false ? 'process' : undefined,
+  });
+}
+
+$('collection-check').onclick = () => checkSource(currentCollection()).then(() => renderVideo());
+$('collection-auto').onchange = () =>
+  collectionCommand(['follow', currentCollection().name, $('collection-auto').checked ? '--auto' : '--no-auto']);
+$('collection-unfollow').onclick = () => collectionCommand(['unfollow', currentCollection().name], '不再跟踪这个列表');
+$('collection-follow-form').onsubmit = async (event) => {
+  event.preventDefault();
+  const url = $('collection-follow-url').value.trim();
+  if (!url) return;
+  if (await collectionCommand(['follow', currentCollection().name, url], '已跟踪；点「检查新视频」下载还没有的')) {
+    $('collection-follow-url').value = '';
+  }
+};
+
+// Lists set to check on their own: a while after start, then every six hours, while the app runs (also in the tray).
+function checkFollowed() {
+  for (const item of state.collections.filter((entry) => entry.source?.auto)) checkSource(item);
+}
+setTimeout(checkFollowed, 60 * 1000);
+setInterval(checkFollowed, CHECK_EVERY_MS);
+
 $('collection-add-choice').onchange = () => ($('collection-add').disabled = !$('collection-add-choice').value);
 $('collection-add').onclick = () => {
   const path = $('collection-add-choice').value;
@@ -1123,16 +1173,31 @@ function askPlaylist(found, then) {
   $('playlist-dialog-titles').hidden = !shown.length;
   $('playlist-dialog-name').value = title.replace(/^合集[·・:：]\s*/, '');
   $('playlist-dialog-join').checked = true;
-  $('playlist-dialog-name-label').hidden = false;
+  $('playlist-dialog-follow').checked = true;
+  $('playlist-dialog-auto').checked = false;
+  renderPlaylistDialog();
   $('playlist-dialog').showModal();
 }
-$('playlist-dialog-join').onchange = () => ($('playlist-dialog-name-label').hidden = !$('playlist-dialog-join').checked);
+// Following needs a collection to keep the list in; checking on its own needs following.
+function renderPlaylistDialog() {
+  const joined = $('playlist-dialog-join').checked;
+  $('playlist-dialog-name-label').hidden = !joined;
+  $('playlist-dialog-follow-label').hidden = !joined;
+  $('playlist-dialog-auto-label').hidden = !joined || !$('playlist-dialog-follow').checked;
+}
+$('playlist-dialog-join').onchange = renderPlaylistDialog;
+$('playlist-dialog-follow').onchange = renderPlaylistDialog;
 $('playlist-dialog').addEventListener('close', async () => {
   if ($('playlist-dialog').returnValue !== 'save' || !pendingList) return;
   const { url, then } = pendingList;
   pendingList = null;
   const collection = $('playlist-dialog-join').checked ? $('playlist-dialog-name').value.trim() : '';
-  const added = await addTask({ kind: 'download', title: `下载列表：${collection || url}`, url, then, playlist: true, collection: collection || undefined });
+  const follow = Boolean(collection) && $('playlist-dialog-follow').checked;
+  const auto = follow && $('playlist-dialog-auto').checked;
+  const added = await addTask({
+    kind: 'download', title: `下载列表：${collection || url}`, url, then, playlist: true,
+    collection: collection || undefined, follow, auto,
+  });
   if (added && $('download-url').value.trim() === url) $('download-url').value = '';
 });
 

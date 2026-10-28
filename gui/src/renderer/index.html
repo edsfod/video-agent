@@ -174,6 +174,22 @@
             </div>
           </header>
           <div class="panel">
+            <div id="collection-source" class="card">
+              <h2>跟踪的列表</h2>
+              <div id="collection-following">
+                <p id="collection-source-info" class="small-text"></p>
+                <div class="row">
+                  <button id="collection-check" class="primary">检查新视频</button>
+                  <label class="check inline"><input id="collection-auto" type="checkbox" /><span>程序开着时每 6 小时自动检查</span></label>
+                  <span class="spacer"></span>
+                  <button id="collection-unfollow" class="ghost">不再跟踪</button>
+                </div>
+              </div>
+              <form id="collection-follow-form" class="row">
+                <input id="collection-follow-url" type="text" spellcheck="false" placeholder="连载合集、播放列表的链接；跟踪后可以一键下载新出的视频" />
+                <button type="submit">跟踪</button>
+              </form>
+            </div>
             <div class="card">
               <h2>各集</h2>
               <div id="collection-members" class="members"></div>
@@ -364,6 +380,8 @@
         <ol id="playlist-dialog-titles" class="muted small-text"></ol>
         <label class="check"><input id="playlist-dialog-join" type="checkbox" checked /><span>放进一个合集，下载完按顺序排好</span></label>
         <label id="playlist-dialog-name-label">合集名字<input id="playlist-dialog-name" type="text" spellcheck="false" /></label>
+        <label id="playlist-dialog-follow-label" class="check"><input id="playlist-dialog-follow" type="checkbox" checked /><span>跟踪这个列表：以后出了新视频，在合集页点「检查新视频」就只下载新的</span></label>
+        <label id="playlist-dialog-auto-label" class="check"><input id="playlist-dialog-auto" type="checkbox" /><span>程序开着时每 6 小时自动检查一次</span></label>
         <div class="row end">
           <button value="cancel" class="ghost">不下载</button>
           <button value="save" class="primary">全部下载</button>

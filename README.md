@@ -98,7 +98,7 @@ FFmpeg 和 yt-dlp 会作为依赖一起装上，不需要 git。电脑上已经�
   </picture>
 </p>
 
-几个相关的视频可以放进一个「合集」（侧栏「合集」→「新建」，或在视频页点「加入合集」）：合集页面列出各集的状态，可以一次处理、总结没做完的几集，跳过没有内容的一集并写明原因，再生成合集总结和学习提纲，也能设置各集共用的术语改正。下载时粘贴的是 B 站合集、播放列表这类链接，会先问你要不要全部下载，默认放进一个以列表命名的合集。
+几个相关的视频可以放进一个「合集」（侧栏「合集」→「新建」，或在视频页点「加入合集」）：合集页面列出各集的状态，可以一次处理、总结没做完的几集，跳过没有内容的一集并写明原因，再生成合集总结和学习提纲，也能设置各集共用的术语改正。下载时粘贴的是 B 站合集、播放列表这类链接，会先问你要不要全部下载，默认放进一个以列表命名的合集并跟踪这个列表：以后在合集页点「检查新视频」只下载新出的，也可以让程序开着时每 6 小时自动检查。
 
 「终端」页内嵌一个终端，可以选 PowerShell 7、Windows PowerShell、命令提示符或 Git Bash，打开在这个视频的处理结果文件夹里，可以直接运行 `video-agent` 或交互式的 `claude`、`codex`。
 
@@ -138,6 +138,13 @@ video-agent collection terms "机器学习" --replace 剃度下降 梯度下降 
 video-agent summarize --collection "机器学习" -o D:\Video-Work
 video-agent summarize --collection "机器学习" --guide -o D:\Video-Work
 video-agent download "https://www.bilibili.com/video/BV..." --playlist -o D:\Videos --collection "机器学习" --workspace D:\Video-Work
+```
+
+还在更新的连载、播放列表可以跟踪：下载时加 `--follow`（或之后用 `collection follow` 补上链接），以后运行 `collection update` 只下载新出的视频，按顺序加到合集末尾。已经下过的记在合集文件夹里的 `downloaded.txt`。
+
+```powershell
+video-agent download "https://space.bilibili.com/.../lists/...?type=season" --playlist --follow -o D:\Videos --collection "连载" --workspace D:\Video-Work
+video-agent collection update "连载" -o D:\Video-Work
 ```
 
 字幕里反复识别错的名字、术语可以用 `fix` 改正，原始字幕不动，另存整理版 `transcript.clean.*`，之后的总结都用它；`--remove` 撤销某一条：

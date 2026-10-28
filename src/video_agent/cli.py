@@ -14,6 +14,9 @@ from .processor import asset_folder, process_video
 from .summarize import import_summary, material, pack, summarize_video, template
 from .transcript import format_clock as transcript_clock
 
+# Where the window saves downloads in a workspace, and so where a followed list's new videos go by default.
+DOWNLOADS = '下载'
+
 
 def positive_float(value):
   number = float(value)
@@ -84,6 +87,12 @@ def build_parser():
     default=Path.cwd() / 'video-agent-output',
     help='the workspace that holds --collection (default: video-agent-output)',
   )
+  download.add_argument(
+    '--follow',
+    action='store_true',
+    help='with --playlist and --collection: remember the list, so `collection update` fetches its new videos later',
+  )
+  download.add_argument('--auto', action='store_true', help='with --follow: let the window check the list on its own')
 
   inspect = commands.add_parser('inspect', help='inspect streams and duration without changing the video')
   inspect.add_argument('video', type=Path)
@@ -233,6 +242,9 @@ def build_parser():
     ('skip', 'mark a video as skipped, with --reason (an empty reason takes it back)'),
     ('terms', "shared corrections, applied to every video's cleaned transcript"),
     ('list', 'the collections in the workspace'),
+    ('follow', 'remember the list the videos come from (a series, a season, a playlist), or turn --auto on or off'),
+    ('unfollow', 'forget the list; the videos stay'),
+    ('update', "download the followed list's new videos and add them at the end"),
   ):
     sub = actions.add_parser(action, help=text)
     if action != 'list':
@@ -247,6 +259,20 @@ def build_parser():
     if action == 'terms':
       sub.add_argument('--replace', nargs=2, action='append', default=[], metavar=('WRONG', 'RIGHT'))
       sub.add_argument('--remove', action='append', default=[], metavar='WRONG')
+    if action == 'follow':
+      sub.add_argument('url', nargs='?', help='the list; leave out to change --auto only')
+      sub.add_argument('--folder', type=Path, help='where new videos are saved (default: <workspace>/下载)')
+      sub.add_argument(
+        '--auto',
+        action=argparse.BooleanOptionalAction,
+        help='whether the window checks the list on its own while it runs',
+      )
+    if action == 'update':
+      sub.add_argument('--cookies', type=Path, help='Netscape cookies file for yt-dlp (Bilibili subtitles)')
+      sub.add_argument('--no-subs', action='store_true', help="don't save the site's subtitle tracks")
+      sub.add_argument('--yt-dlp', type=Path, help='path to yt-dlp executable')
+      sub.add_argument('--yt-dlp-config', type=Path, help='explicit yt-dlp config file; other configs are ignored')
+      sub.add_argument('--json', action='store_true', help='one JSON object per saved file, then the collection')
     workspace_option(sub)
 
   fixing = commands.add_parser(
@@ -392,8 +418,53 @@ def _collection(args):
     collection.skip(workspace, args.name, args.video, args.reason)
   elif action == 'terms':
     collection.set_terms(workspace, args.name, args.replace, args.remove)
+  elif action == 'follow':
+    if args.url:
+      where = args.folder or Path(workspace) / DOWNLOADS
+      collection.follow(workspace, args.name, args.url, where, auto=bool(args.auto))
+    elif args.auto is not None:
+      collection.set_auto(workspace, args.name, args.auto)
+    else:
+      print('collection follow: give the list URL, or --auto / --no-auto')
+      return 2
+  elif action == 'unfollow':
+    collection.unfollow(workspace, args.name)
+  elif action == 'update':
+    return _update(args)
   _emit(collection.status(workspace, args.name))
   return 0
+
+
+def _update(args):
+  workspace, name = args.output, args.name
+  source = collection.load(workspace, name).get('source')
+  if not source:
+    print(f'collection {name} follows no list; set one with: video-agent collection follow {name} <URL>')
+    return 1
+  try:
+    paths, failures = download_urls(
+      [source['url']],
+      source['folder'],
+      playlist=True,
+      subtitles=not args.no_subs,
+      executable_path=args.yt_dlp,
+      config_path=args.yt_dlp_config,
+      cookies_path=args.cookies,
+      status=_progress(args),
+      archive_path=collection.archive(workspace, name),
+    )
+  except DownloadError as error:
+    print(f'collection update: ERROR: {error}')
+    return 1
+  for path in paths:
+    if args.json:
+      _emit({'path': str(path)})
+  data = collection.checked(workspace, name, paths)
+  print(f'{data["source"]["new"]} new videos in collection {name}', file=sys.stderr)
+  if args.json:
+    _emit(collection.status(workspace, name))
+  # yt-dlp reports a failure for one entry of a list as a failure of the whole run; what it saved is kept.
+  return 1 if failures and not paths else 0
 
 
 def _fix(args):
@@ -443,6 +514,15 @@ def _fix(args):
 
 def run(args):
   if args.command == 'download':
+    following = args.follow and args.collection and args.playlist and len(args.urls) == 1
+    if args.follow and not following:
+      print('download: --follow needs --playlist, --collection and exactly one URL')
+      return 2
+    if following:
+      # Made first, so the download archive has its folder and records this first download.
+      if not (collection.folder(args.workspace, args.collection) / collection.DATA).is_file():
+        collection.create(args.workspace, args.collection)
+      collection.follow(args.workspace, args.collection, args.urls[0], args.output, auto=args.auto)
     try:
       paths, failures = download_urls(
         args.urls,
@@ -455,6 +535,7 @@ def run(args):
         cookies_path=args.cookies,
         status=_progress(args),
         found_list=(lambda found: _emit({'playlist': found})) if args.json else None,
+        archive_path=collection.archive(args.workspace, args.collection) if following else None,
       )
     except DownloadError as error:
       print(f'download: ERROR: {error}')
@@ -464,8 +545,11 @@ def run(args):
         _emit({'path': str(path)})
       else:
         print(f'Next: process this local file separately: {path}')
-    if args.collection and paths:
-      if args.collection not in collection.names(args.workspace):
+    if following:
+      collection.checked(args.workspace, args.collection, paths)
+      print(f'added {len(paths)} videos to collection {args.collection}, which follows the list', file=sys.stderr)
+    elif args.collection and paths:
+      if not (collection.folder(args.workspace, args.collection) / collection.DATA).is_file():
         collection.create(args.workspace, args.collection)
       collection.add(args.workspace, args.collection, paths)
       print(f'added {len(paths)} videos to collection {args.collection}', file=sys.stderr)
