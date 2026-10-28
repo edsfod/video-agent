@@ -57,6 +57,8 @@ function fakeModel() {
 
 let app;
 let page;
+// Every confirm() is accepted unless a test asks for the other answer.
+let refuse = false;
 let model;
 
 test.before(async () => {
@@ -75,7 +77,7 @@ test.before(async () => {
     env: ENV,
   });
   page = await app.firstWindow();
-  page.on('dialog', (dialog) => dialog.accept());
+  page.on('dialog', (dialog) => (refuse ? dialog.dismiss() : dialog.accept()));
   await page.waitForSelector('#video-list .video-item .badge:text("未处理")');
 });
 
@@ -291,9 +293,10 @@ test('a collection lists its videos and copies the material for its overview', a
   await page.waitForFunction(() => document.querySelector('#collection-state').textContent === '');
   assert.equal(JSON.parse(cli(['collection', 'show', '测试合集', '-o', WORKSPACE])).source.auto, true);
   // 压缩各集 asks before replacing files that are not this program's downloads; dismissed, it compresses none.
-  page.once('dialog', (dialog) => dialog.dismiss());
+  refuse = true;
   await page.click('#collection-compress-all');
   await page.waitForFunction(() => document.querySelector('#collection-state').textContent === '没有要压缩的。');
+  refuse = false;
   await page.click('#collection-unfollow');
   await page.waitForSelector('#collection-follow-form:not([hidden])');
   // A video in a collection is not under 视频 and not spread out in the sidebar: it opens from the collection's page,
