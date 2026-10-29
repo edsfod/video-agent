@@ -105,7 +105,8 @@ MAX_PAGES = 500
 # without asking for it (user request, 2026-10-29: steps the skill described become code). A heuristic: a frame too
 # many costs little; a whole-screen recording is left out, since its screen pages already show what was on screen.
 POINTING = re.compile(
-  r'如图|如下图|看这[张个里幅边]|看一下这|大家看|我们看|这张图|这个图|这张表|这个表|这幅|屏幕上|黑板上|演示一下'
+  r'如图|如下图|看这[张个里幅边]|看一下这|[我大][们家](?:来看|看一下|看这)|这[张个幅]图(?![案形文标书])'
+  r'|这[张个]表(?![达示现情明态演])|这幅|屏幕上|黑板上|演示一下'
   r'|as you can see|look at (?:this|that|the)|this (?:slide|chart|table|figure|picture|diagram|graph)|on the screen',
   re.IGNORECASE,
 )
