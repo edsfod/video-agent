@@ -15,7 +15,7 @@ const ROOT = fs.mkdtempSync(path.join(os.tmpdir(), 'va-e2e-'));
 const WORKSPACE = path.join(ROOT, 'workspace');
 const APPDATA = path.join(ROOT, 'appdata');
 const VIDEO = path.join(ROOT, 'media', 'sample clip [e2e].mp4');
-const ENV = { ...process.env, APPDATA, NO_PROXY: '127.0.0.1,localhost', no_proxy: '127.0.0.1,localhost' };
+const ENV = { ...process.env, VA_E2E_BACKGROUND: '1', APPDATA, NO_PROXY: '127.0.0.1,localhost', no_proxy: '127.0.0.1,localhost' };
 const SUMMARY = '# 测试视频\n\n## 概要\n\n一段测试视频。[画面](frames/extra/frame-00-00-03.jpg)\n';
 
 function cli(args) {

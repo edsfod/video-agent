@@ -683,8 +683,13 @@ function registerIpc() {
 
 // ---------- window ----------
 
+// The GUI tests set this so their windows open behind the one in use instead of taking its focus (user request,
+// 2026-10-29).
+const BACKGROUND = !!process.env.VA_E2E_BACKGROUND;
+
 function createWindow() {
   win = new BrowserWindow({
+    show: !BACKGROUND,
     width: 1280,
     height: 820,
     minWidth: 960,
@@ -695,6 +700,7 @@ function createWindow() {
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, sandbox: true },
   });
   win.removeMenu();
+  if (BACKGROUND) win.showInactive();
   win.on('close', (event) => {
     if (quitting || !loadSettings().closeToTray || !tray) return;
     event.preventDefault();
@@ -740,6 +746,7 @@ function createWindow() {
 function showWindow() {
   if (!win || win.isDestroyed()) return createWindow();
   if (win.isMinimized()) win.restore();
+  if (BACKGROUND) return win.showInactive();
   win.show();
   win.focus();
 }

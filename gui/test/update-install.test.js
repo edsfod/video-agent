@@ -108,6 +108,7 @@ test('an update installs silently and the app starts again', { skip: !INSTALLED 
       VA_UPDATE_ROOT: `http://127.0.0.1:${server.address().port}/releases`,
       VA_UPDATE_PUBLIC_KEY: publicKey.export({ type: 'spki', format: 'der' }).toString('base64'),
       VA_UPDATE_DELAY_MS: '300',
+      VA_E2E_BACKGROUND: '1',
       NO_PROXY: '127.0.0.1,localhost',
     },
   });

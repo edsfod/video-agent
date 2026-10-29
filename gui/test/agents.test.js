@@ -32,7 +32,7 @@ for (const agent of ['claude', 'codex', ...OTHERS]) {
     const other = OTHERS.includes(agent) ? { agents: [{ key: agent }] } : {};
     fs.writeFileSync(path.join(userData, 'settings.json'), JSON.stringify({ workspace, videos: [video], ...other }));
 
-    const app = await electron.launch({ executablePath: require('electron'), args: ['.', `--user-data=${userData}`], cwd: GUI });
+    const app = await electron.launch({ executablePath: require('electron'), args: ['.', `--user-data=${userData}`], cwd: GUI, env: { ...process.env, VA_E2E_BACKGROUND: '1' } });
     try {
       const page = await app.firstWindow();
       await page.waitForSelector('#video-list .video-item .badge:text("已处理")');

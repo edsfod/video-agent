@@ -81,6 +81,7 @@ test.before(async () => {
       ...process.env,
       VA_UPDATE_ROOT: [`http://127.0.0.1:${deadPort}/releases`, `${base()}/slow/releases`, `${base()}/releases`].join(','),
       VA_UPDATE_PUBLIC_KEY: PUBLIC,
+      VA_E2E_BACKGROUND: '1',
       VA_UPDATE_DELAY_MS: '300',
       VA_UPDATE_SLOW: '3000,50000,2', // after 3 s, under 50 KB/s with more than 2 s to go
       NO_PROXY: '127.0.0.1,localhost',
