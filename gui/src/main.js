@@ -342,11 +342,26 @@ function cliArgs(task) {
   }
 }
 
+// A compression stopped from here is killed before it can delete its half-written copy beside the video (named by
+// files.temporary_beside); the next compression of that video would remove it too, but it may never come.
+function removeLeftovers(video) {
+  const { dir, name, ext } = path.parse(video);
+  const escape = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const pattern = new RegExp(`^\\.${escape(name)}\\.[0-9a-f]{8}\\.part${escape(ext)}$`);
+  try {
+    for (const file of fs.readdirSync(dir).filter((item) => pattern.test(item))) fs.rmSync(path.join(dir, file), { force: true });
+  } catch (error) {
+    logs.line('warn', `could not remove what a stopped compression left beside ${video}: ${error.message}`);
+  }
+}
+
 function startTask(task) {
   if (['summary', 'collection'].includes(task.kind) && task.route !== 'api') return startAgent(task);
   const [command, ...prefix] = cliCommand();
   const args = [...prefix, ...cliArgs(task)];
   const options = { cwd: task.workspace, title: task.title };
+  // A second later: FFmpeg, killed with the tree, may hold the file a moment longer than the CLI.
+  if (task.kind === 'compress') options.onClose = () => task.stopping && setTimeout(() => removeLeftovers(task.video), 1000);
   if (task.kind !== 'download' || !isBilibili(task.url)) return startJob(task.id, command, args, options);
   // The Bilibili login goes to yt-dlp as a cookies file that lives as long as the download.
   bilibili
@@ -603,9 +618,11 @@ function registerIpc() {
   ipcMain.handle('tasks:add', (_, spec) => queue.add({ ...spec, workspace: loadSettings().workspace }));
   ipcMain.handle('tasks:list', () => queue.list());
   ipcMain.handle('tasks:output', (_, id) => queue.get(id)?.output ?? []);
-  ipcMain.handle('tasks:cancel', (_, id) => {
-    logs.line('info', `task ${id} stopped by the user`);
-    queue.cancel(id);
+  ipcMain.handle('tasks:cancel', (_, ids) => {
+    for (const id of [ids].flat()) {
+      logs.line('info', `task ${id} stopped by the user`);
+      queue.cancel(id);
+    }
   });
   ipcMain.handle('tasks:retry', (_, id) => queue.retry(id));
   ipcMain.handle('tasks:clear', () => queue.clearFinished());

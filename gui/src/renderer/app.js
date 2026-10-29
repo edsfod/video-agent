@@ -1,6 +1,8 @@
 // Window logic. Every action runs the Video Agent CLI (or an Agent CLI) through window.va; nothing here touches media.
 
 const $ = (id) => document.getElementById(id);
+// Task kinds whose number at once the settings set (tasks.js DEFAULT_LIMITS).
+const LIMITED = ['download', 'process', 'summary', 'compress'];
 const state = {
   settings: null,
   env: null,
@@ -10,6 +12,7 @@ const state = {
   route: 'claude',
   tasks: [], // the queue in the main process (tasks.js), without output
   shown: null, // { id, buffer, loading }: the task whose output the panel shows
+  picked: new Set(), // ids of queued or running tasks ticked in the panel, to stop together
   collections: [], // `video-agent collection list`: each with its videos and their states
   view: 'video', // or 'collection', with state.collection its name
   collection: null,
@@ -171,12 +174,27 @@ function renderTasks() {
   $('log-title').textContent = shown ? `${shown.title} · ${STATUS[shown.status]}` : '任务';
   $('cancel-job').hidden = !shown || !ACTIVE.has(shown.status);
   $('clear-tasks').disabled = tasks.length === active;
+  // Ticked tasks that have ended since are no longer ticked.
+  for (const id of state.picked) if (!tasks.some((task) => task.id === id && ACTIVE.has(task.status))) state.picked.delete(id);
+  $('stop-picked').hidden = !state.picked.size;
+  $('stop-picked').textContent = `停止所选（${state.picked.size}）`;
+  $('stop-all').disabled = !active;
   $('task-list').replaceChildren(
     ...[...tasks].reverse().map((task) => {
       const item = element('div', { className: `task-item ${task.status}` + (task.id === state.shown?.id ? ' active' : '') }, [
         element('span', { className: 'name', textContent: task.title, title: task.title }),
         element('span', { className: `badge ${task.status}`, textContent: STATUS[task.status] }),
       ]);
+      if (ACTIVE.has(task.status)) {
+        const pick = element('input', { type: 'checkbox', className: 'pick', checked: state.picked.has(task.id), title: '选中后可以一起停止' });
+        pick.onclick = (event) => event.stopPropagation();
+        pick.onchange = () => {
+          if (pick.checked) state.picked.add(task.id);
+          else state.picked.delete(task.id);
+          renderTasks();
+        };
+        item.prepend(pick);
+      }
       if (!ACTIVE.has(task.status) && task.status !== 'done') {
         const retry = element('button', { className: 'ghost small', textContent: '重试', title: '用同样的设置再排一次' });
         retry.onclick = async (event) => {
@@ -193,6 +211,17 @@ function renderTasks() {
 }
 
 $('cancel-job').onclick = () => state.shown && window.va.cancelTask(state.shown.id);
+$('stop-picked').onclick = () => {
+  window.va.cancelTask([...state.picked]);
+  state.picked.clear();
+  renderTasks();
+};
+$('stop-all').onclick = () => {
+  const active = state.tasks.filter((task) => ACTIVE.has(task.status));
+  const running = active.filter((task) => task.status === 'running').length;
+  if (!active.length || !confirm(`停止全部 ${active.length} 个任务？正在运行的 ${running} 个会中断（压缩停下时原视频不变），排队的移出队列。`)) return;
+  window.va.cancelTask(active.map((task) => task.id));
+};
 $('clear-tasks').onclick = () => window.va.clearTasks();
 $('close-log').onclick = () => ($('log').hidden = true);
 $('open-tasks').onclick = () => {
@@ -1509,7 +1538,7 @@ $('open-settings').onclick = async () => {
   $('set-compress-local').checked = state.settings.compressLocal === true;
   $('set-theme').value = state.settings.theme || 'system';
   $('set-check-updates').checked = state.settings.checkUpdates !== false;
-  for (const kind of ['download', 'process', 'summary']) $(`set-limit-${kind}`).value = state.settings.limits[kind];
+  for (const kind of LIMITED) $(`set-limit-${kind}`).value = state.settings.limits[kind] ?? 1;
   renderWorkspaceLock();
   $('set-update-mirror').value = state.settings.updateMirror || '';
   renderUpdate(await window.va.updateState());
@@ -1539,7 +1568,7 @@ $('open-settings').onclick = async () => {
 let settingsShown = '';
 const SETTINGS_FIELDS = [
   'set-theme', 'set-workspace', 'set-cli', 'set-close-to-tray', 'set-compress-downloads', 'set-compress-local', 'set-check-updates', 'set-update-mirror', 'set-limit-download',
-  'set-limit-process', 'set-limit-summary', 'set-provider', 'set-model', 'set-base-url', 'set-key',
+  'set-limit-process', 'set-limit-summary', 'set-limit-compress', 'set-provider', 'set-model', 'set-base-url', 'set-key',
 ];
 const settingsValues = () =>
   JSON.stringify([SETTINGS_FIELDS.map((id) => ($(id).type === 'checkbox' ? $(id).checked : $(id).value)), agentRowsValue()]);
@@ -1677,7 +1706,7 @@ $('settings').addEventListener('close', async () => {
     checkUpdates: $('set-check-updates').checked,
     updateMirror: $('set-update-mirror').value.trim(),
     limits: Object.fromEntries(
-      ['download', 'process', 'summary'].map((kind) => [kind, Math.min(8, Math.max(1, Number($(`set-limit-${kind}`).value) || 1))]),
+      LIMITED.map((kind) => [kind, Math.min(8, Math.max(1, Number($(`set-limit-${kind}`).value) || 1))]),
     ),
   });
   const args = ['config', '--provider', $('set-provider').value];

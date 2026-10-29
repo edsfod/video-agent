@@ -87,6 +87,9 @@ def compress(video, *, status=print):
     f'{video.name}: compressing ({"a still picture, " + str(STILL_FPS) + " frames a second" if still else "a moving picture"})'
   )
   setting = f'{MARK}: AV1 CRF {CRF}' + (f', {STILL_FPS} fps' if still else '')
+  # A compression that was stopped (the window kills the process) leaves its half-written copy behind.
+  for leftover in files.leftover_temporaries(video):
+    leftover.unlink(missing_ok=True)
   temporary = files.temporary_beside(video)  # keeps the extension, by which FFmpeg picks the container
   command = [media.tool('ffmpeg'), '-y', '-hide_banner', '-loglevel', 'error', '-stats', '-i', str(video)]
   command += ['-map', '0:v:0', '-map', '0:a?', '-map', '0:s?', '-map_metadata', '0']

@@ -500,3 +500,34 @@ test('added local videos are processed at once, and those without subtitles are 
   await page.waitForSelector('#video-list .video-item:has-text("with subs") .badge:text("已处理")', { timeout: 60_000 });
   assert.match(await page.textContent('#video-list .video-item:has-text("bare")'), /未处理/);
 });
+
+test('ticked tasks stop together, and 全部停止 stops the rest', async () => {
+  const waiting = path.join(ROOT, 'waiting-agent.js');
+  fs.writeFileSync(waiting, 'setTimeout(() => {}, 120_000);\n');
+  await page.click('#open-settings');
+  await page.waitForSelector('#settings[open]');
+  await page.check('#set-agents input[data-agent=custom]');
+  await page.fill('#set-agents input[data-agent-command=custom]', `"${process.execPath}" "${waiting}"`);
+  await page.click('#save-settings');
+  // Summaries of three videos by an agent that only waits: two run (the default limit), the third is queued.
+  const videos = ['甲', '乙', '丙'].map((name) => path.join(ROOT, `${name}.mp4`));
+  await page.evaluate((all) => Promise.all(all.map((video, i) => window.va.addTask({
+    kind: 'summary', route: 'custom', agent: 'custom', title: `等待${'甲乙丙'[i]}`, video, folder: video,
+  }))), videos);
+  if (await page.isHidden('#log')) await page.click('#open-tasks');
+  const item = (name) => `#task-list .task-item:has-text("等待${name}")`;
+  await page.waitForSelector(`${item('乙')} .badge:text("运行中")`);
+  assert.equal(await page.isDisabled('#stop-all'), false);
+  assert.equal(await page.isHidden('#stop-picked'), true, 'nothing ticked yet');
+  await page.check(`${item('甲')} .pick`);
+  await page.check(`${item('丙')} .pick`);
+  assert.equal(await page.textContent('#stop-picked'), '停止所选（2）');
+  await page.click('#stop-picked');
+  await page.waitForSelector(`${item('甲')} .badge:text("已停止")`);
+  await page.waitForSelector(`${item('丙')} .badge:text("已停止")`);
+  assert.equal(await page.textContent(`${item('乙')} .badge`), '运行中', 'the one not ticked goes on');
+  await page.click('#stop-all'); // its confirm() is accepted
+  await page.waitForSelector(`${item('乙')} .badge:text("已停止")`);
+  assert.equal(await page.isDisabled('#stop-all'), true);
+  assert.equal(await page.$$eval('#task-list .pick', (all) => all.length), 0);
+});

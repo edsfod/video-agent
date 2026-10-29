@@ -257,6 +257,8 @@
             <span id="task-note" class="task-note"></span>
             <span class="spacer"></span>
             <button id="cancel-job" class="ghost small" hidden>停止</button>
+            <button id="stop-picked" class="ghost small" hidden>停止所选</button>
+            <button id="stop-all" class="ghost small">全部停止</button>
             <button id="clear-tasks" class="ghost small">清除已结束</button>
             <button id="close-log" class="ghost small">收起</button>
           </header>
@@ -283,8 +285,9 @@
           <label>下载<input id="set-limit-download" type="number" min="1" max="8" /></label>
           <label>处理<input id="set-limit-process" type="number" min="1" max="8" /></label>
           <label>总结<input id="set-limit-summary" type="number" min="1" max="8" /></label>
+          <label>压缩<input id="set-limit-compress" type="number" min="1" max="8" /></label>
         </div>
-        <p class="muted small-text">处理很吃 CPU，同时处理几个视频只会一起变慢，所以默认一次一个；其余的排队。同一个视频的处理和总结不会同时进行。</p>
+        <p class="muted small-text">处理和压缩都很吃 CPU：一个压缩已经用上所有核心，同时压几个总共只快一点，各自都变慢，所以默认一次一个，其余的排队。同一个视频的处理、压缩和总结不会同时进行。</p>
         <label>Video Agent 命令（留空自动查找）
           <input id="set-cli" type="text" placeholder="例如 C:\Users\me\.local\bin\video-agent.exe" spellcheck="false" />
         </label>

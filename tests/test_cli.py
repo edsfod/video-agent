@@ -627,6 +627,9 @@ def test_compress_replaces_the_video_once_and_leaves_efficient_ones(sample_video
   video = tmp_path / 'lecture.mp4'
   video.write_bytes(sample_video.read_bytes())
   before = video.stat().st_size
+  (tmp_path / '.lecture.0123abcd.part.mp4').write_bytes(b'half written by a stopped compression')
+  other = tmp_path / '.lecture 2.0123abcd.part.mp4'  # another video's
+  other.write_bytes(b'x')
   capsys.readouterr()
   assert cli.main(['compress', str(video), '--json']) == 0
   result = json.loads(capsys.readouterr().out)
@@ -637,5 +640,5 @@ def test_compress_replaces_the_video_once_and_leaves_efficient_ones(sample_video
   assert compress.skip_reason(info) == 'already compressed by Video Agent'
   assert cli.main(['compress', str(video), '--json']) == 0
   assert json.loads(capsys.readouterr().out)['skipped'] == 'already compressed by Video Agent'
-  assert not [path for path in tmp_path.iterdir() if '.part' in path.name]
+  assert [path for path in tmp_path.iterdir() if '.part' in path.name] == [other], 'the leftover is gone'
   assert compress.skip_reason({'streams': [{'codec_type': 'video', 'codec_name': 'hevc'}]}).startswith('already HEVC')

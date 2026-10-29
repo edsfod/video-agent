@@ -8,6 +8,7 @@ replaced in one step, so they see the old or the new version, never a part.
 """
 
 import os
+import re
 import time
 import uuid
 from contextlib import contextmanager
@@ -25,6 +26,13 @@ def temporary_beside(path, prefix='.'):
   """A unique name in the same folder (so the final rename stays on one drive), hidden from `frame-*.jpg` globs."""
   path = Path(path)
   return path.with_name(f'{prefix}{path.stem}.{uuid.uuid4().hex[:8]}.part{path.suffix}')
+
+
+def leftover_temporaries(path, prefix='.'):
+  """Names `temporary_beside` gave for `path` that are still there, left by a process that was killed."""
+  path = Path(path)
+  pattern = re.compile(re.escape(f'{prefix}{path.stem}.') + r'[0-9a-f]{8}' + re.escape(f'.part{path.suffix}') + '$')
+  return [item for item in path.parent.glob(f'{prefix}*.part{path.suffix}') if pattern.match(item.name)]
 
 
 def replace(source, target, attempts=10):
