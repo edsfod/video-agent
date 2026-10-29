@@ -1,5 +1,5 @@
 // The task queue: every download, processing, summary and frame job the window asks for. Free of Electron, so the
-// rules can be tested on their own (test/tasks.test.js); main.js supplies how to start and stop a task.
+// rules can be tested on their own (test/tasks.test.js); jobs.js supplies how to start and stop a task.
 //
 // Which jobs may run at the same time (ARCHITECTURE.md, "Concurrent jobs"), modelled on AutoSlides' download queue:
 // - Nothing is refused for being busy: a task waits in the queue until it may start.

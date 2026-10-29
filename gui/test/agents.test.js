@@ -12,7 +12,7 @@ const { _electron: electron } = require('playwright-core');
 const wanted = (process.env.VA_E2E_AGENTS || '').split(',').filter(Boolean);
 const GUI = path.resolve(__dirname, '..');
 
-const OTHERS = ['pi', 'hermes', 'dsh']; // presets in main.js (AGENTS), each a route of its own once ticked in the settings
+const OTHERS = ['pi', 'hermes', 'dsh']; // presets in programs.js (AGENTS), each a route of its own once ticked in the settings
 
 for (const agent of ['claude', 'codex', ...OTHERS]) {
   test(`summary through ${agent}`, { skip: !wanted.includes(agent) && `set VA_E2E_AGENTS=${agent}`, timeout: 600_000 }, async () => {

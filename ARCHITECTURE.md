@@ -52,7 +52,14 @@ Agents and shells           other agents follow it        commands
 
 | File | Does |
 | --- | --- |
-| `src/main.js` | Main process: settings, IPC handlers, building CLI and Agent command lines, plugin and skill installs, tray, windows. |
+| `src/main.js` | Main process: starts the others and the app. |
+| `src/shared.js` | What its modules share: the window, tray, logs, updater, task queue, running jobs and terminals. |
+| `src/settings.js` | The window's settings. |
+| `src/programs.js` | Finding and running programs: the CLI, Claude Code, Codex and the other agents, shells, the plugin and licence files. |
+| `src/jobs.js` | Running the queue's tasks: each kind's command line, Agent routes, cookies for downloads, follow-ups. |
+| `src/plugins.js` | Installing the Agent plugin and copying the skill. |
+| `src/ipc.js` | Every handler the page can call. |
+| `src/window.js` | The window and the tray. |
 | `src/tasks.js` | The task queue and which tasks may run together; free of Electron. |
 | `src/cli-types.d.ts` | The CLI's JSON types for the app, written from `contract.py` by `scripts/cli_types.py`. |
 | `src/va.d.ts` | The types of `window.va`, which `preload.js` is checked against and the page uses. |

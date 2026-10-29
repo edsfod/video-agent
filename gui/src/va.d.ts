@@ -11,7 +11,7 @@ import type { Logs } from './logs.js';
 type Answer<F extends (...args: any) => any> = Promise<Awaited<ReturnType<F>>>;
 type Listener<T> = (callback: (value: T) => void) => () => void;
 
-/** The window's settings (main.js `defaults()` and what the window saves). */
+/** The window's settings (settings.js `defaults()` and what the window saves). */
 export interface Settings {
   workspace: string;
   cli: string;
@@ -51,7 +51,7 @@ export interface OtherAgent {
   model: boolean;
 }
 
-/** An agent preset (main.js AGENTS): its name, command line, whether it is installed, where it reads skills. */
+/** An agent preset (programs.js AGENTS): its name, command line, whether it is installed, where it reads skills. */
 export interface Preset {
   name: string;
   command: string;
