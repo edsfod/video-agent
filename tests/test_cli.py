@@ -69,13 +69,9 @@ def test_a_processed_video_is_used_as_it_is_unless_forced_or_asked_for_more(samp
   assert 'reused' not in json.loads(capsys.readouterr().out), 'other frame settings'
 
 
-def test_pointed_at_frames_and_the_layout_check():
-  rows = [(5.0, 7.0, '如图所示'), (30.0, 32.0, '大家看这个表'), (40.0, 42.0, '看这里'), (90.0, 92.0, '下面讲理论')]
-  frames = [{'time_s': 0.0}, {'time_s': 60.0}]
-  assert processor.pointing_times(rows, frames, 'camera') == [(30.0, '大家看这个表')], 'near a frame, or too soon after'
+def test_regions_given_by_hand_and_the_layout_check():
   assert layout.from_region('4,4,1912,1072', 1920, 1080).kind == 'screen', 'only the edges trimmed'
   assert layout.from_region('0,0,1280,1080', 1920, 1080).kind == 'split'
-  assert processor.pointing_times(rows, frames, 'screen') == [], 'the screen pages show it'
 
   camera = layout.Layout('camera', 640, 360, None)
   assert 'layout was probably read wrong' in processor.layout_warning(camera, 0, 3600, False)

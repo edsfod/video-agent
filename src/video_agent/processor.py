@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import quote
 
-from . import corrections, files, layout, media, page_rules, slide_extractor, transcript
+from . import corrections, files, layout, media, page_rules, picture_review, slide_extractor, transcript
 
 
 def slug(value):
@@ -100,19 +100,6 @@ def _copy_candidates(candidates, target, prefix):
 MAX_FRAMES = 500
 MAX_PAGES = 500
 
-# Words with which a speaker points at something shown: the picture at that moment is taken into frames/extra when the
-# layout has a camera and no representative frame is near, so whoever writes the summary sees what was pointed at
-# without asking for it (user request, 2026-10-29: steps the skill described become code). A heuristic: a frame too
-# many costs little; a whole-screen recording is left out, since its screen pages already show what was on screen.
-POINTING = re.compile(
-  r'如图|如下图|看这[张个里幅边]|看一下这|[我大][们家](?:来看|看一下|看这)|这[张个幅]图(?![案形文标书])'
-  r'|这[张个]表(?![达示现情明态演])|这幅|屏幕上|黑板上|演示一下'
-  r'|as you can see|look at (?:this|that|the)|this (?:slide|chart|table|figure|picture|diagram|graph)|on the screen',
-  re.IGNORECASE,
-)
-POINTED_NEAR_S = 10.0  # a representative frame this close already shows it
-POINTED_GAP_S = 20.0  # at most one pointed-at frame in this span
-MAX_POINTED = 30
 # A recording at least this long whose layout gave fewer than two screen pages may have been read wrong.
 LAYOUT_CHECK_MIN_S = 300.0
 
@@ -164,11 +151,11 @@ def _context(manifest, rows):
     # Between the still pictures the video shows other footage, so the last one is often no longer on screen.
     lines.append(
       f'{GROUPED} last picture held still on screen before they were said (a chart, a screenshot); other footage '
-      'runs between them, so link one only for the points it shows.'
+      'runs between them. Link a picture only where it shows the point.'
     )
     lines.append('')
   elif pictures:
-    lines.append(f'{GROUPED} {kind} on screen while they were said; link that picture for their points.')
+    lines.append(f'{GROUPED} {kind} on screen while they were said. Link a picture only where it shows the point.')
     lines.append('')
   marks = sorted(pictures, key=lambda item: item['time_s'])
 
@@ -211,21 +198,6 @@ def _context(manifest, rows):
       ]
     )
     lines.extend(f'- {item["time_s"]:.1f}s: ![page]({link(item["path"])})' for item in pages)
-  pointed = manifest.get('pointed_frames') or []
-  if pointed:
-    lines.extend(
-      [
-        '',
-        '## Frames where the speaker points',
-        '',
-        'Taken where the speaker refers to something shown and no representative frame is near, with what was said.',
-        '',
-      ]
-    )
-    lines.extend(
-      f'- {transcript.format_clock(item["time_s"])} 「{item["text"]}」: ![frame]({link(item["path"])})'
-      for item in pointed
-    )
   slides = (manifest.get('slide_extraction') or {}).get('slides') or []
   if slides:
     lines.extend(['', '## Extracted slides', ''])
@@ -283,12 +255,13 @@ def refresh_transcript(asset):
   return changes
 
 
-GROUPED = 'Lines are grouped by the'
+GROUPED = 'Lines are grouped under the'
 
 
 def update_context(asset, locked=False):
-  """Rewrites a summary-context.md written before its transcript marked the picture on screen (0.8.3 and earlier),
-  so videos processed then get the new form without processing again. Takes the video's lock unless `locked`."""
+  """Rewrites a summary-context.md written before its transcript marked the picture on screen in the present words
+  (1.1.0 and earlier), so videos processed then get the new form without processing again. Takes the video's lock
+  unless `locked`."""
   asset = Path(asset)
   context = asset / 'summary-context.md'
   if (asset / 'manifest.json').is_file() and context.is_file() and GROUPED not in context.read_text(encoding='utf-8'):
@@ -303,7 +276,7 @@ def write_context(asset):
   """Writes summary-context.md from the manifest and the transcript in use (the cleaned one when there is one), so a
   cleaned transcript reaches every summary route without processing the video again."""
   asset = Path(asset)
-  manifest = json.loads((asset / 'manifest.json').read_text(encoding='utf-8'))
+  manifest = picture_review.without_unused(asset, json.loads((asset / 'manifest.json').read_text(encoding='utf-8')))
   files.write_text(asset / 'summary-context.md', _context(manifest, corrections.rows_in_use(asset) or []))
 
 
@@ -328,23 +301,6 @@ def _previous_source(asset):
   except (OSError, ValueError, KeyError, TypeError):
     return 'existing-output'
   return source if source and source != 'unavailable' else 'existing-output'
-
-
-def pointing_times(rows, frames, kind):
-  """The (time, words) at which to take a pointed-at frame: lines with POINTING words, in a layout with a camera, with
-  no representative frame within POINTED_NEAR_S, at most one per POINTED_GAP_S and MAX_POINTED in all."""
-  if kind == 'screen':
-    return []
-  chosen = []
-  for start, _, text in rows:
-    if not POINTING.search(text) or any(abs(item['time_s'] - start) <= POINTED_NEAR_S for item in frames):
-      continue
-    if chosen and start - chosen[-1][0] < POINTED_GAP_S:
-      continue
-    chosen.append((start, ' '.join(text.split())))
-    if len(chosen) == MAX_POINTED:
-      break
-  return chosen
 
 
 def layout_warning(found, pages_found, length, given):
@@ -571,15 +527,6 @@ def _process_locked(
   slides = slide_result['slides'] if slide_result else []
   # A transcript taken again (--overwrite-transcript) gets its corrections again.
   corrections.rebuild(asset)
-  pointed = []
-  for second, words in pointing_times(corrections.rows_in_use(asset) or rows, frames, found.kind):
-    try:
-      saved = media.save_frame(video, asset, second, length)
-    except media.MediaError:
-      continue
-    pointed.append({'time_s': second, 'path': Path(saved).relative_to(asset).as_posix(), 'text': words})
-  if pointed:
-    status(f'{video.name}: {len(pointed)} frames where the speaker points at something')
   manifest = {
     'schema_version': 1,
     'source_video': str(video),
@@ -602,7 +549,6 @@ def _process_locked(
       'given': bool(screen_region),
       'warning': warning,
     },
-    'pointed_frames': pointed,
     'options': _options(interval, scene_threshold, max_frames),
     'screen_pages': [{'time_s': item['time_s'], 'path': item['path'].relative_to(asset).as_posix()} for item in pages],
     'limits': {

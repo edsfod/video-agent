@@ -345,6 +345,28 @@ def screen_pages(video, output_dir, region_filter, stable=PAGE_STABLE_S, duratio
   return merge_similar(pages, output_dir, duration_s)
 
 
+def grey_frames(video, start, length):
+  """One small grey copy (page_rules.THUMB) per second from `start` for `length` seconds."""
+  width, height = page_rules.THUMB
+  command = [tool('ffmpeg'), '-v', 'error', '-ss', f'{start:.3f}', '-t', f'{length:.3f}', '-i', str(video)]
+  command += [
+    '-map',
+    '0:v:0',
+    '-vf',
+    f'fps=1,scale={width}:{height}:flags=area,format=gray',
+    '-f',
+    'rawvideo',
+    'pipe:1',
+  ]
+  result = subprocess.run(command, capture_output=True, check=False)
+  if result.returncode:
+    raise MediaError(
+      f'Could not read {Path(video).name} from {start:g}s: {result.stderr.decode(errors="replace").strip()}'
+    )
+  size = width * height
+  return [result.stdout[index : index + size] for index in range(0, len(result.stdout) - size + 1, size)]
+
+
 def thumbnails(pages, work_dir):
   """Small grey copies of the pages, or None when FFmpeg cannot make them (then nothing is merged)."""
   listing = Path(work_dir) / 'thumbs.txt'

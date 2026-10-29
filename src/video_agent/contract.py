@@ -65,7 +65,7 @@ class Picture(TypedDict):
   path: str  # relative to the video's folder, with /
 
 
-class PointedFrame(Picture):
+class PointedFrame(Picture):  # frames taken for pointing words, in manifests written by 1.1.0 and earlier
   text: str
 
 

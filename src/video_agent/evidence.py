@@ -8,7 +8,7 @@ import math
 import re
 from pathlib import Path
 
-from . import media, processor
+from . import media, picture_review, processor
 from .model_api import SummaryError
 from .processor import asset_folder
 
@@ -49,14 +49,15 @@ def processed(video, workspace):
   if not manifest_path.is_file() or not context_path.is_file():
     raise SummaryError(f'{video.name} has not been processed in {workspace}; run process with the same --output first')
   processor.update_context(asset)
-  return video, info, asset, json.loads(manifest_path.read_text(encoding='utf-8'))
+  return video, info, asset, picture_review.without_unused(asset, json.loads(manifest_path.read_text(encoding='utf-8')))
 
 
 def frames(asset, manifest, limit):
   frames = [(item['time_s'], item['path']) for item in manifest.get('representative_frames') or []]
+  skip = picture_review.unused(asset)
   for path in sorted((asset / 'frames' / 'extra').glob('frame-*.jpg')):
     match = EXTRA_NAME.search(path.name)
-    if match:
+    if match and path.relative_to(asset).as_posix() not in skip:
       hours, minutes, seconds = (int(part) for part in match.groups())
       frames.append((hours * 3600 + minutes * 60 + seconds, path.relative_to(asset).as_posix()))
   frames.sort()

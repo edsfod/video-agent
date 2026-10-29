@@ -88,11 +88,11 @@ video-agent process VIDEO... [OPTIONS]
 | `--subtitles FILE` | None | Use this SRT or WebVTT file as the transcript, whatever its name; replaces an existing transcript. One video only. |
 | `--slides FOLDER` | None | Take the slide images (PNG, JPEG) in this folder: AutoSlides' `timeline.json` gives their times, otherwise each takes the time of the screen page it looks like. A `screen_<name>` video takes the `slides_<name>` folder AutoSlides keeps beside it without this option. One video only. |
 
-#### Layout check and pointed-at frames
+#### Layout check and still pictures
 
 When a recording of five minutes or more with a camera gives fewer than two screen pages, `process` says the layout may have been read wrong, names `layout.jpg` (the screen region outlined in green) and suggests `--screen-region`; `summary-context.md` carries the same note as a "Layout check" line.
 
-In a layout with a camera, a line of the transcript in which the speaker points at something shown (如图, 看这个, 这张表, as you can see, this slide, …) gets a frame in `frames/extra/` when no representative frame is within 10 seconds: at most one per 20 seconds and 30 in all. `summary-context.md` lists them with the words said under "Frames where the speaker points".
+In a video read as a camera picture only, the pictures held still on the whole frame for 2 seconds or more (a chart or a screenshot between stock footage) are its screen pages.
 
 #### Subtitle and upload behavior
 
@@ -180,6 +180,8 @@ video-agent summarize VIDEO [-o WORKSPACE] [--provider anthropic|openai] [--mode
 | `--no-tools` | Off | Send no tool definition, for models without tool calling. |
 | `--overwrite` | Off | Replace an existing `总结.md`. |
 | `--import [FILE]` | None | Save a summary written elsewhere instead of calling a model: a file, `-` for standard input, or with no value the draft beside the summary (`总结.draft.md` in the video's folder; `合集总结.draft.md` or `学习提纲.draft.md` in the collection's), which is removed once saved. |
+
+A summary from a chat AI may end with two sections that the import takes out. `## 字幕改正` lists recurring mishearings (`错的写法 → 正确写法`), which go into the cleaned transcript. `## 画面调整` lists pictures the chat AI does not need (`不用：frames/…`), which are left out of every later pack, context and model request, and spans in which it misses one (`补截：00:02:20–00:02:30 what should be visible`), in which the import takes up to four different candidates into `frames/extra/`, preferring pictures held on screen. `pack VIDEO --follow-up` (alone, `--zip` or `--folder`) then gives the next round: the candidates and the summary as saved, to rewrite. The state between rounds is in `picture-review.json` in the video's folder; an answer without a `画面调整` section ends the rounds.
 
 The API key comes from Windows Credential Manager (saved with `config --set-key`), else `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`. An OpenAI-compatible server that needs no key, such as Ollama, works without one. The summary and the frames are sent to the configured provider.
 

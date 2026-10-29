@@ -6,7 +6,18 @@ import json
 import sys
 from pathlib import Path
 
-from . import collection, contract, corrections, files, processor, settings, templates, transcript, versions
+from . import (
+  collection,
+  contract,
+  corrections,
+  files,
+  picture_review,
+  processor,
+  settings,
+  templates,
+  transcript,
+  versions,
+)
 from . import compress as compression
 from .collection_summary import collection_material, summarize_collection
 from .download import DownloadError, clean_url, download_urls
@@ -14,7 +25,7 @@ from .evidence import SUMMARY_NAME
 from .importer import draft_path, import_collection, import_summary
 from .media import MediaError, duration, parse_clock, probe, save_frame
 from .model_api import EFFORTS, list_models
-from .packing import material, pack, pack_folder
+from .packing import follow_up, material, pack, pack_folder
 from .processor import asset_folder, process_video
 from .summarize import summarize_video
 from .transcript import format_clock as transcript_clock
@@ -292,6 +303,12 @@ def build_parser():
     '--template', metavar='NAME', help='the summary template to follow (default: the chosen one; see template --list)'
   )
   packing.add_argument('--zip', type=Path, help='write 提示词.md and the frames into this zip file')
+  packing.add_argument(
+    '--follow-up',
+    action='store_true',
+    help='the next round, after importing a summary whose 画面调整 section asked for pictures: the candidates taken '
+    'and the summary to rewrite',
+  )
   packing.add_argument(
     '--folder',
     type=Path,
@@ -898,6 +915,12 @@ def _import(args):
     if pairs:
       listed = '、'.join(f'{wrong}→{right}' for wrong, right in pairs)
       print(f'applied {len(pairs)} transcript corrections from the summary: {listed}', file=sys.stderr)
+    if picture_review.load(asset_folder(args.output, probe(args.video)[0])).get('requests'):
+      print(
+        f'the summary asked for pictures; pack the next round with: video-agent pack "{args.video}" -o '
+        f'"{args.output}" --follow-up',
+        file=sys.stderr,
+      )
   if draft:
     draft.unlink(missing_ok=True)
   _written(target, args)
@@ -943,20 +966,21 @@ def _pack(args):
   if not _video_or_collection(args):
     return 2
   if args.collection:
+    if args.follow_up:
+      raise ValueError('--follow-up belongs to a video')
     sys.stdout.write(
       collection_material(args.output, args.collection, guide=args.guide, request=args.request, template=args.template)
     )
     return 0
+  chosen = {'request': args.request, 'template': args.template, 'follow': args.follow_up}
   if args.folder:
-    target, count = pack_folder(
-      args.video, args.output, args.folder, request=args.request, max_files=args.max_files, template=args.template
-    )
+    target, count = pack_folder(args.video, args.output, args.folder, max_files=args.max_files, **chosen)
     print(f'{target} ({count} pictures)')
   elif args.zip:
-    target, count = pack(
-      args.video, args.output, args.zip, request=args.request, max_images=args.max_images, template=args.template
-    )
+    target, count = pack(args.video, args.output, args.zip, max_images=args.max_images, **chosen)
     print(f'{target} ({count} pictures)')
+  elif args.follow_up:
+    sys.stdout.write(follow_up(args.video, args.output)[0])
   else:
     sys.stdout.write(material(args.video, args.output, request=args.request, template=args.template)[0])
   return 0

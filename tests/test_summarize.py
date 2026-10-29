@@ -464,7 +464,7 @@ def test_an_old_context_gets_the_picture_marks_without_processing_again(processe
     '# Video summary context\n\n## Transcript\n\n[00:00:00] 旧的\n', encoding='utf-8'
   )  # as 0.8.3 wrote
   assert cli.main(['pack', str(video), '-o', str(workspace)]) == 0
-  assert 'Lines are grouped by the' in context.read_text(encoding='utf-8')
+  assert 'Lines are grouped under the' in context.read_text(encoding='utf-8')
   assert '▶ ' in capsys.readouterr().out
 
 
@@ -483,3 +483,75 @@ def test_frames_a_chat_ai_asks_for_are_taken_on_import(processed):
   assert '[画面](frames/extra/frame-00-00-05.jpg)' in saved and '[画面](frames/extra/frame-00-00-06.jpg)' in saved
   assert (asset / 'frames' / 'extra' / 'frame-00-00-05.jpg').is_file()
   assert '[画面](补截失败:00:09:00)' in saved and any('outside the video' in line for line in said)
+
+
+def test_the_picture_section_is_read_in_the_forms_chat_ais_write():
+  from video_agent import picture_review
+
+  text = (
+    '# 标题\n\n正文\n\n## 画面调整\n\n'
+    '- 不用：[画面](frames/run/frame-001-00-00-00.jpg)、`frames/run/screen/page-002-00-00-04.jpg`（素材）\n'
+    '* 补截：`00:01:10` 至 `00:01:30`，流感阳性率的折线图\n'
+    '- 补截：1:02:03 讲者举起的书\n'
+    '- 别的话\n\n## 字幕改正\n\n- a → b\n'
+  )
+  rest, unused, wanted = picture_review.take(text)
+  assert rest == '# 标题\n\n正文\n\n## 字幕改正\n\n- a → b\n'
+  assert unused == ['frames/run/frame-001-00-00-00.jpg', 'frames/run/screen/page-002-00-00-04.jpg']
+  assert wanted == [(70, 90, '流感阳性率的折线图'), (3723, 3733, '讲者举起的书')]
+  assert picture_review.take('# 标题\n\n正文\n') == ('# 标题\n\n正文\n', [], [])
+
+
+def test_a_chat_ai_drops_pictures_and_asks_for_others_over_rounds(processed, capsys):
+  from video_agent import cli, picture_review
+
+  video, workspace = processed
+  asset = asset_folder(workspace, video.resolve())
+  manifest = json.loads((asset / 'manifest.json').read_text(encoding='utf-8'))
+  dropped = manifest['representative_frames'][0]['path']
+  answer = workspace / 'answer.md'
+  answer.write_text(
+    '# 标题\n\n视频：x · 时长：0:08\n\n- 一点 `00:00:01`，讲了彩条和测试图案各自的用途\n\n'
+    f'## 画面调整\n\n- 不用：`{dropped}`（素材画面）\n- 补截：00:00:01–00:00:06 彩条\n- 补截：00:09:00 超出的\n',
+    encoding='utf-8',
+  )
+  assert cli.main(['summarize', str(video), '-o', str(workspace), '--import', str(answer)]) == 0
+  assert '--follow-up' in capsys.readouterr().err
+  assert '画面调整' not in (asset / '总结.md').read_text(encoding='utf-8')
+  state = picture_review.load(asset)
+  assert state['unused'] == [dropped]
+  wanted, beyond = state['requests']
+  assert 1 <= len(wanted['candidates']) <= picture_review.CANDIDATES
+  assert all((asset / path).is_file() for path in wanted['candidates']) and beyond['candidates'] == []
+  # Dropped pictures are offered to no one again.
+  assert dropped not in (asset / 'summary-context.md').read_text(encoding='utf-8')
+  first = workspace / 'first.zip'
+  assert cli.main(['pack', str(video), '-o', str(workspace), '--zip', str(first)]) == 0
+  with zipfile.ZipFile(first) as archive:
+    assert dropped not in archive.namelist()
+
+  # The next round: the candidates at their paths and the summary as saved.
+  following = workspace / 'next.zip'
+  assert cli.main(['pack', str(video), '-o', str(workspace), '--follow-up', '--zip', str(following)]) == 0
+  with zipfile.ZipFile(following) as archive:
+    names = archive.namelist()
+    prompt = archive.read('提示词.md').decode('utf-8')
+  assert sorted(names) == sorted(['提示词.md', *wanted['candidates']])
+  assert '00:00:01–00:00:06 彩条：\n  - frames/extra/' in prompt and '00:09:00–00:09:10 超出的：没有截到' in prompt
+  assert '- 一点 `00:00:01`，讲了' in prompt and prompt.rstrip().endswith('整篇放进一个 ````markdown 代码块。')
+  capsys.readouterr()
+  assert cli.main(['pack', str(video), '-o', str(workspace), '--follow-up', '--folder', str(workspace / 'out')]) == 0
+  folder = next((workspace / 'out').iterdir())
+  assert folder.name == 'sample clip [test]-下一轮材料'
+  assert min(path.name for path in folder.iterdir()).startswith('001-补截-00-00-0')
+
+  # An answer that asks for nothing more ends the rounds.
+  answer.write_text(
+    '# 标题\n\n视频：x · 时长：0:08\n\n- 一点，用上了候选，讲了彩条和测试图案各自的用途\n', encoding='utf-8'
+  )
+  assert cli.main(['summarize', str(video), '-o', str(workspace), '--import', str(answer), '--make-current']) == 0
+  assert '--follow-up' not in capsys.readouterr().err
+  assert picture_review.load(asset)['unused'] == [dropped], 'what was dropped stays dropped'
+  with pytest.raises(SystemExit):
+    cli.main(['pack', str(video), '-o', str(workspace), '--follow-up'])
+  assert 'no next round' in capsys.readouterr().err

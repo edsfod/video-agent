@@ -1,13 +1,14 @@
 """Saving a text written elsewhere (a chat AI's answer to `pack`, an Agent's draft, the user's own) as a video's
 summary or a collection's overview or study guide, and repairing what chat AIs do to it on the way: a code fence
-around it, links rewritten into searches or a sandbox, frames asked for by time, and a 字幕改正 section.
+around it, links rewritten into searches or a sandbox, frames asked for by time, a 字幕改正 section and a 画面调整
+section (picture_review.py).
 """
 
 import re
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-from . import collection, files, media, processor, versions
+from . import collection, files, media, picture_review, processor, versions
 from .evidence import SUMMARY_NAME, processed, video_line
 from .model_api import SummaryError
 
@@ -89,19 +90,26 @@ def _capture_frames(text, video, asset, length, status):
 def import_summary(video, workspace, text, *, overwrite=False, source='', note='', status=lambda message: None):
   """Saves a summary written elsewhere, such as by a chat AI from `pack`, as 总结.md: a ```markdown fence is removed,
   rewritten links point at the video's files again, frames asked for with CAPTURE links are taken, the 视频 line is the
-  one this program writes, and a 字幕改正 section goes into the cleaned transcript. With a summary there already, the
+  one this program writes, a 字幕改正 section goes into the cleaned transcript and a 画面调整 section into
+  picture-review.json, with the candidates it asks for taken. With a summary there already, the
   new one is kept as a version unless `overwrite` makes it current (versions.py). Returns (path written, corrections
   applied)."""
   video, info, asset, manifest = processed(video, workspace)
   text, pairs = take_corrections(clean(text))
+  text, unused, wanted = picture_review.take(text)
   if len(text.strip()) < 40:
     raise SummaryError('The summary to import is empty or too short')
   text = repair_links(text, asset)
-  line = video_line(video, manifest.get('duration_s') or media.duration(info))
+  length = manifest.get('duration_s') or media.duration(info)
+  line = video_line(video, length)
   text = re.sub(r'^视频：.*?时长：[0-9:]+', lambda _: line, text, count=1, flags=re.MULTILINE)
   with files.video_lock(asset, 'import the summary'):
-    text = _capture_frames(text, video, asset, manifest.get('duration_s') or media.duration(info), status)
+    text = _capture_frames(text, video, asset, length, status)
     target, _ = versions.save(asset / SUMMARY_NAME, text, source=source or '导入', note=note, make_current=overwrite)
+    if unused or wanted or (asset / picture_review.NAME).is_file():
+      picture_review.apply(video, asset, target, unused, wanted, length, status)
+      if unused:
+        processor.write_context(asset)
     if pairs:
       from . import corrections
 

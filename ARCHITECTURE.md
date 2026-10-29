@@ -40,6 +40,7 @@ Agents and shells           other agents follow it        commands
 | `summarize.py` | `summarize` for one video with a model API. |
 | `packing.py` | `pack`: the prompt for chat AIs, alone, in a zip, or in a folder of numbered pictures. |
 | `importer.py` | `summarize --import`: a text written elsewhere saved as a summary or collection text, with its links and corrections repaired. |
+| `picture_review.py` | The 画面调整 section of a chat AI's summary: pictures it does not need, and the candidates taken where it misses one. |
 | `collection_summary.py` | A collection's overview and study guide, from its videos' summaries. |
 | `templates.py`, `prompts/` | Summary templates: the built-in ones and the user's. |
 | `versions.py` | Earlier versions of a summary. |
@@ -98,7 +99,7 @@ Agents and shells           other agents follow it        commands
     transcript.srt, .txt                      as acquired
     transcript.clean.srt, .txt                with corrections.json applied, when there are corrections
     frames\<run>\                             representative frames, screen\page-NNN-HH-MM-SS.jpg, layout.jpg
-    frames\extra\                             frames taken later (frame, pointed-at frames, chat AI requests)
+    frames\extra\                             frames taken later (frame, chat AI requests)
     slides\, slide-extraction\<run>\          slides, when asked for
     summary-context.md                        the material every summary route reads
     总结.md, 总结 (<time>).md, 总结.versions.json   the summary, earlier versions and their record
