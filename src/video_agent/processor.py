@@ -120,7 +120,7 @@ LAYOUT_TEXT = {
   'screen': 'the whole frame is a screen recording',
   'split': 'a screen region beside a camera picture',
   'inset': 'a camera picture inside the screen (blacked out when looking for pages)',
-  'camera': 'a camera picture only; no screen pages are looked for',
+  'camera': 'a camera picture only; pictures held still on the whole frame (charts, screenshots) are the screen pages',
 }
 
 
@@ -159,7 +159,15 @@ def _context(manifest, rows):
   # summary links the picture of the point it describes without matching times itself (user, 2026-10-28; yanhe-agent's
   # `query` did the same).
   kind, pictures = shown_pictures(manifest)
-  if pictures:
+  stills = kind == 'screen page' and (manifest.get('layout') or {}).get('kind') == 'camera'
+  if stills:
+    # Between the still pictures the video shows other footage, so the last one is often no longer on screen.
+    lines.append(
+      f'{GROUPED} last picture held still on screen before they were said (a chart, a screenshot); other footage '
+      'runs between them, so link one only for the points it shows.'
+    )
+    lines.append('')
+  elif pictures:
     lines.append(f'{GROUPED} {kind} on screen while they were said; link that picture for their points.')
     lines.append('')
   marks = sorted(pictures, key=lambda item: item['time_s'])
@@ -193,9 +201,12 @@ def _context(manifest, rows):
         '## Screen pages',
         '',
         (
-          'Each distinct page shown in the screen region (slides, code, documents), at the source resolution, '
-          'with the time it first appeared; the transcript above marks where each comes on screen.'
-        ),
+          'Each distinct picture held still on the whole frame (charts, screenshots, documents)'
+          if stills
+          else 'Each distinct page shown in the screen region (slides, code, documents)'
+        )
+        + ', at the source resolution, with the time it first appeared; the transcript above marks where each comes '
+        'on screen.',
         '',
       ]
     )
@@ -485,9 +496,11 @@ def _process_locked(
       picture = None
 
     pages, pages_found, shown_s = [], 0, None
-    if region:
-      status(f'{video.name}: looking for screen pages')
-      page_candidates, shown_s = media.screen_pages(video, temporary / 'pages', region, duration_s=length)
+    # In a video without a screen region, such as stock footage with a chart or a screenshot now and then, the
+    # pictures held still are what is shown; moving footage never stays still long enough (user report, 2026-10-29).
+    if region or found.kind == 'camera':
+      status(f'{video.name}: looking for screen pages' if region else f'{video.name}: looking for still pictures')
+      page_candidates, shown_s = media.screen_pages(video, temporary / 'pages', region or 'null', duration_s=length)
       pages_found = len(page_candidates)
       if pages_found > MAX_PAGES:
         status(f'{video.name}: {pages_found} screen pages; keeping {MAX_PAGES} spread over the video')

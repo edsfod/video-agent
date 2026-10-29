@@ -62,3 +62,14 @@ def test_merge_keeps_new_pages_and_drops_repeats_and_passing_states():
   pages = [{'time_s': time, 'path': name, 'stayed_s': stayed} for name, time, stayed, _ in shown]
   kept = merge(pages, [thumb for *_, thumb in shown], page_rules.LONG_S)
   assert [(item['time_s'], item['path']) for item in kept] == [(0, 'a, marked'), (60, 'b'), (122, 'inverted')]
+
+
+def test_a_page_cut_into_short_stays_by_changing_subtitles_stays_as_long_as_they_add_up():
+  b = page(OTHER)
+  subtitled = [page(TEXT, blocks=[(30 + 10 * index, 66, 40, 4, 0)]) for index in range(3)]  # a new line every 2-3 s
+  shown = [(0, 30, b), (30, 2, subtitled[0]), (32, 3, subtitled[1]), (35, 2, subtitled[2]), (60, 2, page(TEXT))]
+  pages = [{'time_s': time, 'path': str(time), 'stayed_s': stayed} for time, stayed, _ in shown]
+  thumbs = [thumb for *_, thumb in shown]
+  assert page_rules.stayed(pages, thumbs, 1) == 7
+  assert page_rules.stayed(pages, thumbs, 4) == 2, 'too long after the others'
+  assert [item['time_s'] for item in merge(pages, thumbs, page_rules.LONG_S)] == [0, 30]

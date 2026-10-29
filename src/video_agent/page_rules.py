@@ -99,11 +99,30 @@ def tune_long(count_for, hours):
   return LONG_STEPS[index]
 
 
+# Subtitles burnt into the picture change every few seconds and end each still period, so a chart shown for ten
+# seconds comes as several short periods of the same page (user report, 2026-10-29). Periods this close together that
+# show the same page count as one stay.
+JOINED_GAP_S = 3.0
+
+
+def stayed(pages, thumbs, index):
+  """How long the page at `index` stayed: its own still period, run on through the following periods of the same page
+  that start within JOINED_GAP_S of the previous one's end."""
+  width, height = THUMB
+  page = pages[index]
+  end = page['time_s'] + page.get('stayed_s', math.inf)
+  for other, thumb in zip(pages[index + 1 :], thumbs[index + 1 :]):
+    if other['time_s'] - end > JOINED_GAP_S or differ(thumbs[index], thumb, width, height) >= SAME_PAGE:
+      break
+    end = other['time_s'] + other.get('stayed_s', math.inf)
+  return end - page['time_s']
+
+
 def merge(pages, thumbs, long_s):
   """The pages kept (see media.merge_similar), given each page's grey copy and the LONG_S to use."""
   width, height = THUMB
   merged, firsts = [], []  # kept pages, and the grey copy each group started with
-  for page, thumb in zip(pages, thumbs):
+  for index, (page, thumb) in enumerate(zip(pages, thumbs)):
     if firsts:
       first = firsts[-1]
       if differ(first, thumb, width, height) < SAME_PAGE or added(first, thumb):
@@ -113,7 +132,7 @@ def merge(pages, thumbs, long_s):
         continue
       if any(differ(earlier, thumb, width, height) < SAME_PAGE for earlier in firsts[-RECENT - 1 : -1]):
         continue
-      if page.get('stayed_s', math.inf) < long_s and differ(first, thumb, width, height) < NEW_SCREEN:
+      if stayed(pages, thumbs, index) < long_s and differ(first, thumb, width, height) < NEW_SCREEN:
         continue
     merged.append(dict(page))
     firsts.append(thumb)

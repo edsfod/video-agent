@@ -26,6 +26,7 @@ LASTING = 0.85  # share of sampled frames in which an edge must be present to co
 SPAN = 0.9  # a split line runs across this share of the frame
 INSET_SIDE = 0.15  # a camera inset's sides run along at least this share of the frame
 MARGIN = 0.08  # borders this close to the frame's edge are frames of the picture, not splits
+WHOLE = 0.9  # a region given by hand this large in both directions is the whole screen
 ACTIVE = 0.002  # a region is active in a second when this share of it changed
 CAMERA = 0.5  # a camera picture is active in at least this share of the seconds; a screen in less
 
@@ -281,4 +282,6 @@ def from_region(text, width, height):
   if w <= 0 or h <= 0 or x < 0 or y < 0 or x + w > width or y + h > height:
     raise ValueError(f'the region {text} does not fit in the {width}x{height} video')
   x, y = x // 2 * 2, y // 2 * 2
-  return Layout('screen' if (w, h) == (width, height) else 'split', width, height, [x, y, w // 2 * 2, h // 2 * 2])
+  # A region that only trims the edges is a whole-screen recording, not a screen beside a camera.
+  whole = w >= WHOLE * width and h >= WHOLE * height
+  return Layout('screen' if whole else 'split', width, height, [x, y, w // 2 * 2, h // 2 * 2])

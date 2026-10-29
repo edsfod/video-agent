@@ -333,6 +333,10 @@ def screen_pages(video, output_dir, region_filter, stable=PAGE_STABLE_S, duratio
     else []
   )
   starts = [value for kind, value in events if kind == 'start']
+  # A region that never stays still (moving footage) selects no frame, and FFmpeg 7 and 9 fail on an empty output; the
+  # events file, opened when the filters start, tells that apart from a video FFmpeg could not read.
+  if code and not paths and not starts and log.is_file():
+    code = 0
   if code or len(paths) != len(starts):
     raise MediaError(f'FFmpeg could not find screen pages in {Path(video).name}: {errors or code}')
   # A page lasts until the next end event; the last one may run to the end of the video.
