@@ -138,12 +138,16 @@
           <div class="panel" data-panel="summary" hidden>
             <div class="card">
               <div class="routes" id="routes">
+                <label><input type="radio" name="route" value="copy" /> 复制材料</label>
                 <label><input type="radio" name="route" value="claude" /> Claude Code</label>
                 <label><input type="radio" name="route" value="codex" /> Codex</label>
                 <label><input type="radio" name="route" value="api" /> 模型 API</label>
-                <label><input type="radio" name="route" value="copy" /> 复制材料</label>
               </div>
               <p id="route-note" class="muted"></p>
+              <label id="route-model-label" class="route-model" hidden>模型
+                <input id="route-model" type="text" list="route-models" spellcheck="false" title="留空用它自己的默认模型；合集页用同一种方式时也用这个模型" />
+              </label>
+              <datalist id="route-models"></datalist>
               <textarea id="summary-request" rows="2" placeholder="对总结的要求（可不填），例如：写详细一点，重点讲数据"></textarea>
               <div class="row">
                 <button id="run-summary" class="primary">生成总结</button>
@@ -221,10 +225,10 @@
               <p class="muted small-text">根据各集的总结来写，所以先给每一集写好总结。合集总结列出各集都提到的需留意事项、各集一览和主线；学习提纲按主题列重点，附带答案的自测题。</p>
               <div class="row">
                 <select id="collection-route">
+                  <option value="copy">复制材料（网页 AI）</option>
                   <option value="claude">Claude Code</option>
                   <option value="codex">Codex</option>
                   <option value="api">模型 API</option>
-                  <option value="copy">复制材料（网页 AI）</option>
                 </select>
                 <button id="collection-overview" class="primary">生成合集总结</button>
                 <button id="collection-guide">生成学习提纲</button>
@@ -308,10 +312,16 @@
           <button id="bili-logout" type="button" class="ghost" hidden>退出登录</button>
         </span>
         <h3>Agent 插件</h3>
-        <p class="muted small-text">把总结用的 skill 装进 Claude Code 或 Codex，之后在它们里面直接说“总结这个视频”即可。从本机安装，不需要 git，也不用联网；重复点击会刷新已装的版本。</p>
+        <p class="muted small-text">把总结用的 skill 装进 Agent，之后在它们里面直接说“总结这个视频”即可。从本机安装，不需要 git，也不用联网；重复点击会刷新已装的版本，程序更新后也会自动刷新。pi、Hermes Agent、DeepSeek Harness 没有插件，是把 skill 文件夹复制到它们读 skill 的地方；别的 Agent 选它读 skill 的文件夹。在本程序里用它们写总结不需要先装。</p>
         <span class="row">
           <button id="install-claude" type="button">安装到 Claude Code</button>
           <button id="install-codex" type="button">安装到 Codex</button>
+        </span>
+        <span class="row" id="skill-targets">
+          <button type="button" data-skill="pi">复制到 pi</button>
+          <button type="button" data-skill="hermes">复制到 Hermes Agent</button>
+          <button type="button" data-skill="dsh">复制到 DeepSeek Harness</button>
+          <button type="button" data-skill="folder">复制到其他文件夹…</button>
         </span>
         <pre id="plugin-output" class="plugin-output" hidden></pre>
         <h3>其他 Agent</h3>

@@ -76,7 +76,7 @@ FFmpeg 和 yt-dlp 会作为依赖一起装上，不需要 git。电脑上已经�
     codex plugin add video-agent@video-agent
     ```
 
-- 其他 Agent：把 `skills/video-agent/` 复制到它的技能目录。
+- pi、Hermes Agent、DeepSeek Harness：在设置里点“复制到 pi”等按钮，把 skill 文件夹复制到它们读 skill 的地方（pi 是 `~/.agents/skills`，Hermes Agent 是 `~/.hermes/skills/media`，DeepSeek Harness 是 `~/.dsh/skills`）。别的 Agent 点“复制到其他文件夹…”，选它读 skill 的文件夹；没装桌面程序时，把 `skills/video-agent/` 复制过去。
 
 插件找不到 `video-agent` 命令时，会用 uv 临时拉取同一版本。用 AutoSlides Extractor 提取幻灯片要另外安装它。
 

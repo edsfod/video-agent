@@ -7,6 +7,7 @@ const { app, BrowserWindow, ipcMain, dialog, shell, clipboard, nativeTheme, Tray
 const THEMES = ['system', 'light', 'dark'];
 const { spawn, spawnSync, execFileSync } = require('node:child_process');
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 const pty = require('node-pty');
 const { Logs } = require('./logs');
@@ -158,13 +159,24 @@ function splitCommand(text) {
 // tools are: they run commands as the user. The user may edit the command in the settings.
 // `installed`: where the program sits inside its desktop app, for one not on PATH: DeepSeek Harness's installer puts
 // `dsh` there and adds nothing to PATH (user report, 2026-10-28, installed on D:).
+// `model`: the option that names a model for one run (each agent's --help, 2026-10-29); DeepSeek Harness has none and
+// takes a patch file instead (dshModel). `skills`: the folder it finds skills in without a plugin (its documentation,
+// 2026-10-29): pi reads the Agent Skills folder ~/.agents/skills; Hermes Agent <HERMES_HOME>/skills, one category
+// folder deep (its own skills sit in categories); DeepSeek Harness <dshHome>/skills (its skill-source table).
 const AGENTS = {
-  pi: { name: 'pi', command: 'pi -p' },
-  hermes: { name: 'Hermes Agent', command: 'hermes chat --query-file - -Q' },
+  pi: { name: 'pi', command: 'pi -p', model: '--model', skills: () => path.join(os.homedir(), '.agents', 'skills') },
+  hermes: {
+    name: 'Hermes Agent',
+    command: 'hermes chat --query-file - -Q',
+    model: '-m',
+    skills: () => path.join(process.env.HERMES_HOME || path.join(os.homedir(), '.hermes'), 'skills', 'media'),
+  },
   dsh: {
     name: 'DeepSeek Harness',
     command: 'dsh --profile headless {prompt}',
     installed: { app: 'DeepSeek Harness', file: 'resources/runtime/cli/bin/dsh.cmd' },
+    model: 'patch',
+    skills: () => path.join(process.env.DSH_HOME || path.join(os.homedir(), '.dsh'), 'skills'),
   },
 };
 
@@ -215,7 +227,9 @@ function otherAgents() {
     let [file, ...args] = splitCommand(line);
     if (AGENTS[key] && file === splitCommand(AGENTS[key].command)[0]) file = presetProgram(key); // as the preset names it
     const name = AGENTS[key]?.name || path.basename(file).replace(/\.(exe|cmd|bat)$/i, '');
-    return [{ key, name, command: line, file, args, found: commandFound(file) }];
+    // A command of your own takes a model where it says {model}.
+    const model = AGENTS[key]?.model || (args.includes('{model}') ? '{model}' : null);
+    return [{ key, name, command: line, file, args, found: commandFound(file), model: !!model }];
   });
 }
 
@@ -326,6 +340,7 @@ function cliArgs(task) {
       return ['compress', task.video, '--json'];
     case 'collection': {
       const args = ['summarize', '--collection', task.collection, ...out];
+      if (task.model) args.push('--model', task.model);
       if (task.guide) args.push('--guide');
       if (task.request) args.push('--request', task.request);
       if (task.overwrite) args.push('--overwrite');
@@ -333,6 +348,7 @@ function cliArgs(task) {
     }
     case 'summary': {
       const args = ['summarize', task.video, ...out];
+      if (task.model) args.push('--model', task.model);
       if (task.request) args.push('--request', task.request);
       if (task.overwrite) args.push('--overwrite');
       return args;
@@ -397,7 +413,7 @@ function startAgent(task) {
     : [video];
   spawnSync(command, [...prefix, 'versions', ...target, '-o', workspace, '--keep', name], { windowsHide: true, env: childEnv() });
   const save = (what, args) =>
-    `写好后不要直接覆盖 ${what}：先写到一个临时文件，再运行 video-agent summarize ${args} -o "${workspace}" --import <临时文件> --source "${name}" 保存（已经有 ${what} 时会另存为一个版本，由用户决定用哪个），然后删掉临时文件。`;
+    `写好后不要直接覆盖 ${what}：先写到一个临时文件，再运行 video-agent summarize ${args} -o "${workspace}" --import <临时文件> --source "${task.model ? `${name} ${task.model}` : name}" 保存（已经有 ${what} 时会另存为一个版本，由用户决定用哪个），然后删掉临时文件。`;
   const text = (task.kind === 'collection'
     ? [
         `为合集「${task.collection}」写 ${file}，按 skill 里「A collection」的做法。`,
@@ -419,25 +435,55 @@ function startAgent(task) {
       '--permission-mode', 'acceptEdits',
       '--allowedTools', 'Bash(video-agent *)', 'Read', 'Write', 'Edit', 'Skill',
       '--output-format', 'stream-json', '--verbose',
+      ...(task.model ? ['--model', task.model] : []),
     ], { cwd: workspace, stdin: prompt, title, prompt });
   } else if (agent === 'codex') {
     const prompt = `先读 ${skill} 并照它做，<video-agent> 用 video-agent 命令。\n${text}`;
     startJob(task.id, 'codex', [
-      'exec', '--skip-git-repo-check', '--cd', workspace, '--sandbox', 'workspace-write', '--json', '-',
+      'exec', '--skip-git-repo-check', '--cd', workspace, '--sandbox', 'workspace-write', '--json',
+      ...(task.model ? ['-m', task.model] : []), '-',
     ], { cwd: workspace, stdin: prompt, title, prompt });
   } else {
     const prompt = `先读 ${skill} 并照它做，<video-agent> 用 video-agent 命令。\n${text}`;
-    if (!other.args.includes('{prompt}')) {
-      return startJob(task.id, other.file, other.args, { cwd: workspace, stdin: prompt, title, prompt });
-    }
+    const temporary = [];
+    const { args: modelArgs, file: patch, after } = agentModel(task, other);
+    if (patch) temporary.push(patch);
+    // Without a model, {model} goes, and the option before it too (as in `--model {model}`).
+    let args = other.args.flatMap((arg, i, all) => {
+      if (task.model) return [arg === '{model}' ? task.model : arg];
+      return arg === '{model}' || (all[i + 1] === '{model}' && arg.startsWith('-')) ? [] : [arg];
+    });
+    const at = after && args.includes(after) ? args.indexOf(after) + 2 : args.length;
+    args.splice(at, 0, ...modelArgs);
+    const onClose = () => temporary.forEach((file) => fs.rmSync(file, { force: true }));
+    if (!args.includes('{prompt}')) return startJob(task.id, other.file, args, { cwd: workspace, stdin: prompt, title, prompt, onClose });
     // A command line keeps one line through cmd.exe, so the task goes in a file and the line points to it.
     const taskFile = path.join(app.getPath('temp'), `video-agent-task-${task.id}.md`);
     fs.writeFileSync(taskFile, prompt);
-    const args = other.args.map((arg) => (arg === '{prompt}' ? `读 ${taskFile} 并完成里面的任务。` : arg));
-    startJob(task.id, other.file, args, {
-      cwd: workspace, title, prompt, onClose: () => fs.rmSync(taskFile, { force: true }),
-    });
+    temporary.push(taskFile);
+    args = args.map((arg) => (arg === '{prompt}' ? `读 ${taskFile} 并完成里面的任务。` : arg));
+    startJob(task.id, other.file, args, { cwd: workspace, title, prompt, onClose });
   }
+}
+
+// The options that run another agent with the model chosen for this task (none: its own default). DeepSeek Harness
+// takes a patch file for its agent-default-model entry, whose config is replaced whole, so the provider it has now
+// is kept beside the new model.
+function agentModel(task, other) {
+  const how = AGENTS[other.key]?.model;
+  if (!task.model || !how || how === '{model}') return { args: [] };
+  if (how !== 'patch') return { args: [how, task.model] };
+  const profile = other.args[other.args.indexOf('--profile') + 1] || 'headless';
+  const run = launch(other.file, ['--profile', profile, '--dump-config']);
+  const dump = spawnSync(run.file, run.args, { encoding: 'utf8', windowsHide: true, shell: run.shell, env: childEnv() });
+  const provider = /dsh-agent-default-model'?\s+config:\s+provider:\s*(\S+)/.exec(dump.stdout || '')?.[1];
+  if (!provider) {
+    queue.output(task.id, 'stderr', `没读到 DeepSeek Harness 现在用的模型服务，用它的默认模型。\n`);
+    return { args: [] };
+  }
+  const file = path.join(app.getPath('temp'), `video-agent-dsh-${task.id}.yml`);
+  fs.writeFileSync(file, `- id: agent-default-model\n  config:\n    provider: ${provider}\n    model: ${JSON.stringify(task.model)}\n`);
+  return { args: ['--patch', file], file, after: '--profile' }; // a launcher option: before the task, after the profile
 }
 
 // After a download: its new files are compressed when 压缩下载的视频 is on, then processed ("process after download")
@@ -525,12 +571,53 @@ async function installPlugin(agent) {
   return { ok: true, output };
 }
 
+// Agents without a plugin system get a copy of the skill folder where they look for skills (AGENTS[key].skills), or
+// in a folder the user picks; a copy that is there again after an update is replaced by the new version.
+function installSkill(target) {
+  const parent = AGENTS[target]?.skills?.() || target;
+  const copy = path.join(parent, 'video-agent');
+  const source = path.join(pluginRoot(), 'skills', 'video-agent');
+  // Only an earlier copy is replaced: a picked folder may hold some other video-agent folder, such as this project.
+  if (fs.existsSync(copy) && !isSkillCopy(copy, source)) {
+    return { ok: false, output: `${copy} 已经存在，而且不是之前复制的 skill，没有动它。请换一个文件夹，或者先自己移走它。` };
+  }
+  try {
+    fs.rmSync(copy, { recursive: true, force: true });
+    fs.mkdirSync(parent, { recursive: true });
+    fs.cpSync(source, copy, { recursive: true });
+  } catch (error) {
+    logs.line('warn', `skill copy to ${copy} failed: ${error.message}`);
+    return { ok: false, output: `没有复制成功：${error.message}` };
+  }
+  saveSettings({ skillCopies: [...new Set([...(loadSettings().skillCopies || []), copy])] });
+  logs.line('info', `skill copied to ${copy}`);
+  return { ok: true, output: `已复制到 ${copy}` };
+}
+
+function isSkillCopy(folder, source) {
+  if ((loadSettings().skillCopies || []).includes(folder)) return true;
+  try {
+    const named = /^name:\s*video-agent\s*$/m.test(fs.readFileSync(path.join(folder, 'SKILL.md'), 'utf8'));
+    const known = new Set(fs.readdirSync(source));
+    return named && fs.readdirSync(folder).every((entry) => known.has(entry));
+  } catch {
+    return false;
+  }
+}
+
+function refreshSkillCopies() {
+  for (const copy of loadSettings().skillCopies || []) {
+    if (fs.existsSync(path.join(copy, 'SKILL.md'))) installSkill(path.dirname(copy));
+  }
+}
+
 // After an update, bring the plugin in Claude Code and Codex up to the new version where it is installed. Claude Code
 // loads it in place from the install folder but records the version; Codex keeps a copy per version.
 async function refreshPluginsAfterUpdate() {
   const previous = loadSettings().lastVersion;
   saveSettings({ lastVersion: app.getVersion() });
   if (!previous || previous === app.getVersion()) return;
+  refreshSkillCopies();
   const installed = {
     claude: (text) => text.includes('video-agent@video-agent'),
     codex: (text) => /^video-agent@video-agent\s+installed/m.test(text),
@@ -566,7 +653,9 @@ function registerIpc() {
     codex: which('codex'),
     others: otherAgents(),
     agents: Object.fromEntries(
-      Object.entries(AGENTS).map(([key, { name, command }]) => [key, { name, command, found: commandFound(presetProgram(key)) }]),
+      Object.entries(AGENTS).map(([key, { name, command, skills }]) => [
+        key, { name, command, found: commandFound(presetProgram(key)), skills: skills() },
+      ]),
     ),
     shells: shells().map(({ id, label }) => ({ id, label })),
     pluginRoot: pluginRoot(),
@@ -574,6 +663,11 @@ function registerIpc() {
   }));
 
   ipcMain.handle('plugin:install', (_, agent) => installPlugin(agent));
+  ipcMain.handle('skill:install', async (_, target) => {
+    if (target !== 'folder') return installSkill(target);
+    const picked = await dialog.showOpenDialog(win, { title: '选择 Agent 读 skill 的文件夹', properties: ['openDirectory', 'createDirectory'] });
+    return picked.canceled ? null : installSkill(picked.filePaths[0]);
+  });
   ipcMain.handle('skill:read', () => fs.readFileSync(path.join(pluginRoot(), 'skills', 'video-agent', 'SKILL.md'), 'utf8'));
 
   ipcMain.handle('bilibili:status', () => bilibili.status());

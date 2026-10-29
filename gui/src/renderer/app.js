@@ -73,6 +73,12 @@ function logAppend(text) {
 
 // Adds a task, or shows the same one already in the queue. Resolves to true when a new task was added.
 async function addTask(spec) {
+  // A summary runs with the model chosen on the summary page for its route, if any.
+  if (['summary', 'collection'].includes(spec.kind) && spec.route && modelTakes(spec.route) && modelFor(spec.route)) {
+    spec = { ...spec, model: modelFor(spec.route) };
+    spec.title = spec.title.replace(/^(总结|合集总结|学习提纲)（([^）]+)）/, `$1（$2 · ${spec.model}）`);
+    await rememberModel(spec.route, spec.model);
+  }
   const result = await window.va.addTask(spec);
   const task = result.added ? result.task : result.existing;
   await showTask(task.id);
@@ -720,6 +726,33 @@ function otherRouteLabels() {
   );
 }
 
+// The model each route runs with, chosen on the summary page and kept per route (user request, 2026-10-29: not only
+// the configured default, and not only for the model API); empty means the route's own default. The list offers the
+// models used before on that route, and Claude Code's aliases.
+const MODEL_HINTS = { claude: ['opus', 'sonnet', 'haiku'] };
+const modelFor = (route) => (state.settings.routeModels || {})[route] || '';
+const modelTakes = (route) => ['api', 'claude', 'codex'].includes(route) || !!otherRoute(route)?.model;
+
+async function rememberModel(route, model) {
+  const used = [model, ...((state.settings.modelHistory || {})[route] || []).filter((item) => item !== model)].slice(0, 8);
+  state.settings = await window.va.saveSettings({ modelHistory: { ...(state.settings.modelHistory || {}), [route]: used } });
+}
+
+function renderModel() {
+  const route = state.route;
+  $('route-model-label').hidden = !modelTakes(route);
+  if (!modelTakes(route)) return;
+  $('route-model').value = modelFor(route);
+  $('route-model').placeholder = route === 'api' ? '设置里的模型' : `${routeName(route)} 的默认模型`;
+  const offered = [...new Set([...((state.settings.modelHistory || {})[route] || []), ...(MODEL_HINTS[route] || [])])];
+  $('route-models').replaceChildren(...offered.map((value) => element('option', { value })));
+}
+
+$('route-model').onchange = async () => {
+  const routeModels = { ...(state.settings.routeModels || {}), [state.route]: $('route-model').value.trim() };
+  state.settings = await window.va.saveSettings({ routeModels });
+};
+
 function renderRoutes() {
   for (const label of document.querySelectorAll('#routes .route-agent')) label.remove();
   $('routes').querySelector('input[value=api]').parentElement.before(...otherRouteLabels());
@@ -736,6 +769,7 @@ function renderRoutes() {
     };
   }
   $('route-note').textContent = routeNote(state.route);
+  renderModel();
 }
 
 async function renderSummary(video) {
@@ -1626,6 +1660,19 @@ for (const agent of ['claude', 'codex']) {
   };
 }
 
+// Agents without plugins: the skill folder is copied where each reads skills (shown on hover), or into a picked folder.
+for (const button of document.querySelectorAll('#skill-targets button')) {
+  const target = button.dataset.skill;
+  button.onclick = async () => {
+    const result = await window.va.installSkill(target);
+    if (!result) return; // no folder picked
+    const box = $('plugin-output');
+    box.hidden = false;
+    const name = state.env.agents[target]?.name || 'Agent';
+    box.textContent = result.ok ? `${result.output}。${name} 下次启动时读到它。` : result.output;
+  };
+}
+
 // Tasks keep the workspace they were added with; changing it under them would hide their results.
 function renderWorkspaceLock() {
   const active = state.tasks.filter((task) => ACTIVE.has(task.status)).length;
@@ -1829,6 +1876,9 @@ window.va.onTrayAddVideos(async () => addLocalVideos(await window.va.pickVideos(
 async function init() {
   state.settings = await window.va.settings();
   state.env = await window.va.env();
+  for (const button of document.querySelectorAll('#skill-targets button[data-skill]:not([data-skill=folder])')) {
+    button.title = `复制到 ${state.env.agents[button.dataset.skill].skills}`;
+  }
   renderUpdate(await window.va.updateState());
   window.va.bilibiliStatus().then((status) => ((state.bilibili = status), renderBilibili()));
   state.route = state.env.claude ? 'claude' : state.env.codex ? 'codex' : 'api';

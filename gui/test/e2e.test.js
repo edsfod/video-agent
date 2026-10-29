@@ -142,9 +142,18 @@ test('frames tab takes an extra frame', async () => {
 
 test('summary through the model API, with one frame tool round', async () => {
   await page.click('.tabs button[data-tab=summary]');
+  assert.equal(await page.getAttribute('#routes label:first-child input', 'value'), 'copy', '复制材料 comes first');
   await page.check('input[name=route][value=api]');
+  // A model chosen on the page for this route, instead of the one in the settings.
+  await page.fill('#route-model', 'chosen-model');
+  await page.press('#route-model', 'Tab');
+  await page.waitForFunction(async () => (await window.va.settings()).routeModels?.api === 'chosen-model');
   await page.click('#run-summary');
   await page.waitForSelector('#summary h1:text("测试视频")', { timeout: 60_000 });
+  assert.equal(model.requests[0].model, 'chosen-model');
+  assert.equal(await page.isHidden('#route-model-label'), false);
+  await page.fill('#route-model', '');
+  await page.press('#route-model', 'Tab');
   assert.equal(model.requests.length, 2);
   assert.equal(model.requests[0].tools[0].function.name, 'frame');
   assert.equal(model.requests[1].messages.at(-1).content[1].type, 'image_url');
@@ -542,4 +551,30 @@ test('ticked tasks stop together, and 全部停止 stops the rest', async () => 
   await page.waitForSelector(`${item('乙')} .badge:text("已停止")`);
   assert.equal(await page.isDisabled('#stop-all'), true);
   assert.equal(await page.$$eval('#task-list .pick', (all) => all.length), 0);
+});
+
+test('the skill is copied into a picked folder, but never over another folder of that name', async () => {
+  const picked = path.join(ROOT, 'skills-home');
+  const other = path.join(ROOT, 'has-a-project');
+  fs.mkdirSync(path.join(other, 'video-agent'), { recursive: true });
+  fs.writeFileSync(path.join(other, 'video-agent', 'pyproject.toml'), '');
+  const pick = (folder) => app.evaluate(({ dialog }, chosen) => {
+    const open = dialog.showOpenDialog;
+    globalThis.vaRestoreDialogs = () => Object.assign(dialog, { showOpenDialog: open });
+    dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [chosen] });
+  }, folder);
+  await page.click('#open-settings');
+  await page.waitForSelector('#settings[open]');
+  await pick(picked);
+  await page.click('#skill-targets button[data-skill=folder]');
+  await page.waitForFunction(() => /已复制到/.test(document.querySelector('#plugin-output').textContent));
+  assert.ok(fs.existsSync(path.join(picked, 'video-agent', 'SKILL.md')));
+  await page.click('#skill-targets button[data-skill=folder]'); // again: the earlier copy is replaced
+  await page.waitForFunction(() => /已复制到/.test(document.querySelector('#plugin-output').textContent));
+  await pick(other);
+  await page.click('#skill-targets button[data-skill=folder]');
+  await page.waitForFunction(() => /不是之前复制的 skill，没有动它/.test(document.querySelector('#plugin-output').textContent));
+  assert.ok(fs.existsSync(path.join(other, 'video-agent', 'pyproject.toml')), 'the other folder is left alone');
+  await app.evaluate(() => globalThis.vaRestoreDialogs());
+  await page.click('#close-settings');
 });
