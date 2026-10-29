@@ -109,10 +109,12 @@ def candidates(video, asset, start, end, length):
 
 def apply(video, asset, draft, unused_paths, wanted, length, status=lambda message: None):
   """Records what the section asked for and takes the candidates; `draft` is the file the summary was saved as. The
-  caller holds the video's lock. Returns the new state."""
+  caller holds the video's lock. Returns the new state. A picture the summary links stays in use, whatever the
+  section says (DeepSeek linked a picture and listed it as 不用 in one answer, 2026-10-29)."""
   asset = Path(asset)
   state = load(asset)
-  known = [path for path in unused_paths if (asset / path).is_file()]
+  linked = Path(draft).read_text(encoding='utf-8')
+  known = [path for path in unused_paths if (asset / path).is_file() and path not in linked]
   state['unused'] = sorted(set(state.get('unused') or []) | set(known))
   requests = []
   for start, end, what in wanted:

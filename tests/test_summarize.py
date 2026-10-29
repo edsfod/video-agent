@@ -511,17 +511,19 @@ def test_a_chat_ai_drops_pictures_and_asks_for_others_over_rounds(processed, cap
   asset = asset_folder(workspace, video.resolve())
   manifest = json.loads((asset / 'manifest.json').read_text(encoding='utf-8'))
   dropped = manifest['representative_frames'][0]['path']
+  linked = manifest['representative_frames'][1]['path']
   answer = workspace / 'answer.md'
   answer.write_text(
-    '# 标题\n\n视频：x · 时长：0:08\n\n- 一点 `00:00:01`，讲了彩条和测试图案各自的用途\n\n'
-    f'## 画面调整\n\n- 不用：`{dropped}`（素材画面）\n- 补截：00:00:01–00:00:06 彩条\n- 补截：00:09:00 超出的\n',
+    f'# 标题\n\n视频：x · 时长：0:08\n\n- 一点 `00:00:01`，讲了彩条和测试图案各自的用途 [画面]({linked})\n\n'
+    f'## 画面调整\n\n- 不用：`{dropped}`（素材画面）\n- 不用：`{linked}`（也链接了）\n'
+    '- 补截：00:00:01–00:00:06 彩条\n- 补截：00:09:00 超出的\n',
     encoding='utf-8',
   )
   assert cli.main(['summarize', str(video), '-o', str(workspace), '--import', str(answer)]) == 0
   assert '--follow-up' in capsys.readouterr().err
   assert '画面调整' not in (asset / '总结.md').read_text(encoding='utf-8')
   state = picture_review.load(asset)
-  assert state['unused'] == [dropped]
+  assert state['unused'] == [dropped], 'a picture the summary links stays in use'
   wanted, beyond = state['requests']
   assert 1 <= len(wanted['candidates']) <= picture_review.CANDIDATES
   assert all((asset / path).is_file() for path in wanted['candidates']) and beyond['candidates'] == []
