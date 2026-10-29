@@ -57,6 +57,16 @@ function fakeModel() {
 
 let app;
 let page;
+
+// Waits until the saved settings pass `check`. page.waitForFunction would not wait for an async predicate: the promise
+// it returns already counts as true.
+async function saved(check, timeout = 15_000) {
+  for (const end = Date.now() + timeout; ; await new Promise((resolve) => setTimeout(resolve, 100))) {
+    const settings = await page.evaluate(() => window.va.settings());
+    if (check(settings)) return settings;
+    if (Date.now() > end) assert.fail(`the settings were not saved as expected: ${JSON.stringify(settings).slice(0, 500)}`);
+  }
+}
 // Every confirm() is accepted unless a test asks for the other answer.
 let refuse = false;
 let model;
@@ -147,7 +157,7 @@ test('summary through the model API, with one frame tool round', async () => {
   // A model chosen on the page for this route, instead of the one in the settings.
   await page.fill('#route-model', 'chosen-model');
   await page.press('#route-model', 'Tab');
-  await page.waitForFunction(async () => (await window.va.settings()).routeModels?.api === 'chosen-model');
+  await saved((settings) => settings.routeModels?.api === 'chosen-model');
   await page.click('#run-summary');
   await page.waitForSelector('#summary h1:text("测试视频")', { timeout: 60_000 });
   assert.equal(model.requests[0].model, 'chosen-model');
@@ -565,7 +575,7 @@ test('ticked tasks stop together, and 全部停止 stops the rest', async () => 
   await page.click('#save-settings');
   await page.waitForSelector('#settings[open]', { state: 'hidden' });
   // Saved once the agent shows as a route; tasks queued before that would not find it.
-  await page.waitForFunction(async () => (await window.va.settings()).agents?.some((agent) => agent.key === 'custom' && /waiting-agent/.test(agent.command)));
+  await saved((settings) => settings.agents?.some((agent) => agent.key === 'custom' && /waiting-agent/.test(agent.command)));
   // Summaries of three videos by an agent that only waits: two run (the default limit), the third is queued.
   const videos = ['甲', '乙', '丙'].map((name) => path.join(ROOT, `${name}.mp4`));
   await page.evaluate((all) => Promise.all(all.map((video, i) => window.va.addTask({
