@@ -1,14 +1,17 @@
-// The only bridge between the page and the main process; the page has no Node access.
+// The only bridge between the page and the main process; the page has no Node access. What it offers is typed in
+// va.d.ts, which this file is checked against.
 
 const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
+/** @param {string} channel @returns {(callback: (value: any) => void) => () => void} */
 const listen = (channel) => (callback) => {
   const handler = (_, value) => callback(value);
   ipcRenderer.on(channel, handler);
   return () => ipcRenderer.removeListener(channel, handler);
 };
 
-contextBridge.exposeInMainWorld('va', {
+/** @type {import('./va').Va} */
+const va = {
   settings: () => ipcRenderer.invoke('settings:get'),
   saveSettings: (changes) => ipcRenderer.invoke('settings:set', changes),
   previewTheme: (theme) => ipcRenderer.invoke('theme:preview', theme),
@@ -64,4 +67,6 @@ contextBridge.exposeInMainWorld('va', {
   ptyKill: (id) => ipcRenderer.invoke('pty:kill', id),
   onPtyData: listen('pty:data'),
   onPtyExit: listen('pty:exit'),
-});
+};
+
+contextBridge.exposeInMainWorld('va', va);

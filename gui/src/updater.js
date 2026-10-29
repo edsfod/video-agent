@@ -34,10 +34,12 @@ const publicKey = () => process.env.VA_UPDATE_PUBLIC_KEY || signature.PUBLIC_KEY
 // Metadata requests with a timeout. electron-updater reuses a check that is still running, so a slow source has to
 // fail by itself before the next one can be asked.
 async function request(provider, url, headers) {
+  /** @type {any} */
+  const internal = Provider.prototype; // httpRequest is protected
   const token = new CancellationToken();
   const timer = setTimeout(() => token.cancel(), REQUEST_TIMEOUT);
   try {
-    return await Provider.prototype.httpRequest.call(provider, url, headers, token);
+    return await internal.httpRequest.call(provider, url, headers, token);
   } catch (error) {
     if (token.cancelled) throw new Error(`连接 ${url.host} 超时`);
     throw error;
@@ -62,13 +64,15 @@ class ReleaseProvider extends GenericProvider {
   }
 
   async getLatestVersion() {
-    const root = this.configuration.url.replace(/\/+$/, '');
+    /** @type {any} */
+    const self = this; // configuration and baseUrl are private in GenericProvider
+    const root = self.configuration.url.replace(/\/+$/, '');
     // A pre-release is never GitHub's "latest"; with 接收测试版 on, the newest one is read from its own folder.
-    const latest = this.configuration.tag ? `${root}/download/${this.configuration.tag}/` : `${root}/latest/download/`;
+    const latest = self.configuration.tag ? `${root}/download/${self.configuration.tag}/` : `${root}/latest/download/`;
     const info = await signedInfo(this, new URL('latest.yml', latest), new URL('latest.yml.sig', latest));
     // Download from the versioned folder: electron-updater finds the old blockmap by putting the old version wherever
     // the new one appears in the path, so the folder must carry the version as well as the file name does.
-    this.baseUrl = new URL(`${root}/download/v${info.version}/`);
+    self.baseUrl = new URL(`${root}/download/v${info.version}/`);
     return info;
   }
 }
@@ -133,7 +137,7 @@ async function newestTag() {
     signal: AbortSignal.timeout(REQUEST_TIMEOUT),
   });
   if (!response.ok) throw new Error(`${new URL(url).host} 回答 ${response.status}`);
-  const releases = await response.json();
+  const releases = /** @type {any[]} */ (await response.json());
   const newest = releases
     .filter((release) => !release.draft && semver.valid(release.tag_name?.replace(/^v/, '')))
     .sort((a, b) => semver.rcompare(a.tag_name.replace(/^v/, ''), b.tag_name.replace(/^v/, '')))[0];
@@ -258,7 +262,7 @@ function createUpdater({ logs, send, settings, remember, running }) {
     const order = [...all.keys()].slice(index);
     const left = new Set(); // sources left for being slow
     while (order.length) {
-      const i = order.shift();
+      const i = /** @type {number} */ (order.shift());
       if (left.size && !left.has(i) && all[i].differential === false) continue;
       const source = use(i);
       const later = order.some((j) => !left.has(j) && all[j].differential !== false);

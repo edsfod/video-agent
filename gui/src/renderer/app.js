@@ -1,29 +1,63 @@
 // Window logic. Every action runs the Video Agent CLI (or an Agent CLI) through window.va; nothing here touches media.
 
+// An element by id. Typed loosely: each id stands for a known input, button or dialog, which the type checker cannot see.
+/** @type {(id: string) => any} */
 const $ = (id) => document.getElementById(id);
+/** @type {(selector: string) => NodeListOf<any>} the same for elements found by a selector */
+const $$ = (selector) => document.querySelectorAll(selector);
 // Task kinds whose number at once the settings set (tasks.js DEFAULT_LIMITS).
 const LIMITED = ['download', 'process', 'summary', 'compress'];
 // The version of the CLI's JSON this window reads (contract.py JSON_VERSION; tests/test_contract.py keeps them equal).
 const CLI_JSON_VERSION = 1;
+/**
+ * @typedef {import('../va').Va} Va
+ * @typedef {import('../cli-types').Show} Show
+ * @typedef {{ path: string, info: Show | null, error?: string }} Video a video in the list; info is `show`'s, once read
+ * @typedef {{ id: string, xterm: import('@xterm/xterm').Terminal, fit: import('@xterm/addon-fit').FitAddon }} Term
+ */
+// settings and env are read first thing in init(), before anything uses them.
 const state = {
-  settings: null,
-  env: null,
-  videos: [], // { path, info, error }
+  /** @type {import('../va').Settings} */
+  settings: /** @type {any} */ (null),
+  /** @type {import('../va').EnvInfo} */
+  env: /** @type {any} */ (null),
+  /** @type {Video[]} */
+  videos: [],
+  /** @type {string | null} the path of the video shown */
   current: null,
   tab: 'process',
   route: 'claude',
+  /** @type {any[]} */
   tasks: [], // the queue in the main process (tasks.js), without output
+  /** @type {{ id: string, buffer: string, loading: boolean } | null} */
   shown: null, // { id, buffer, loading }: the task whose output the panel shows
+  /** @type {Set<string>} */
   picked: new Set(), // ids of queued or running tasks ticked in the panel, to stop together
+  /** @type {import('../cli-types').Collection[]} */
   collections: [], // `video-agent collection list`: each with its videos and their states
+  /** @type {'video' | 'collection'} */
   view: 'video', // or 'collection', with state.collection its name
+  /** @type {string | null} */
   collection: null,
+  /** @type {'overview' | 'guide'} */
   doc: 'overview', // the collection file shown: overview (合集总结) or guide (学习提纲)
+  /** @type {{ video: string, file: string } | null} */
   version: null, // { video, file }: a summary version shown instead of the current one
+  /** @type {import('../cli-types').Tools | null} */
   tools: null, // `video-agent tools`: where FFmpeg, yt-dlp and AutoSlides Extractor were found (null: not found)
+  /** @type {Term | null} */
   term: null,
+  /** @type {Awaited<ReturnType<Va['accounts']>>} */
   accounts: [], // accounts.js status() of each site: { key, name, why, urls, ready, loggedIn, user? }
+  /** @type {import('../cli-types').Template[]} */
   templates: [], // `video-agent template --list`: each summary template, the chosen one marked current
+  /** @type {string | null} why the collection list could not be read */
+  collectionsError: null,
+  /** @type {string | null} what to say when the CLI's JSON is not this window's */
+  cliMismatch: null,
+  appVersion: '',
+  /** @type {import('../cli-types').Versions | null} */
+  versionList: null,
 };
 let ptyCounter = 0;
 
@@ -92,10 +126,11 @@ async function addTask(spec) {
   return result.added;
 }
 
+let noteTimer;
 function note(text) {
   $('task-note').textContent = text;
-  clearTimeout(note.timer);
-  if (text) note.timer = setTimeout(() => ($('task-note').textContent = ''), 6000);
+  clearTimeout(noteTimer);
+  if (text) noteTimer = setTimeout(() => ($('task-note').textContent = ''), 6000);
 }
 
 // Shows a task's output so far, then follows it live.
@@ -335,6 +370,14 @@ function renderList() {
   renderCollectionList();
 }
 
+/**
+ * Whether the CLI failed (cli:json answers { error }).
+ * @template T
+ * @param {T | import('../va').CliError} result
+ * @returns {result is import('../va').CliError}
+ */
+const failed = (result) => !!result && typeof result === 'object' && 'error' in result && !!result.error;
+
 async function refresh(video) {
   const info = await window.va.cliJson(['show', video.path, '-o', state.settings.workspace]);
   if (info.error) {
@@ -387,10 +430,10 @@ function renderVideo() {
 }
 
 function renderTab() {
-  for (const button of document.querySelectorAll('#video .tabs button')) {
+  for (const button of $$('#video .tabs button')) {
     button.classList.toggle('active', button.dataset.tab === state.tab);
   }
-  for (const panel of document.querySelectorAll('#video .panel')) {
+  for (const panel of $$('#video .panel')) {
     panel.hidden = panel.dataset.panel !== state.tab;
     if (!panel.hidden) panel.scrollTop = 0;
   }
@@ -401,7 +444,7 @@ function renderTab() {
   ](video);
 }
 
-for (const button of document.querySelectorAll('#video .tabs button')) {
+for (const button of $$('#video .tabs button')) {
   button.onclick = () => {
     state.tab = button.dataset.tab;
     renderTab();
@@ -620,7 +663,7 @@ $('transcript-original').onchange = () => renderTranscript(current());
 // Corrections go through the CLI (video-agent fix), which keeps the original and rebuilds the cleaned transcript.
 async function runFix(video, args) {
   const result = await window.va.cliJson(['fix', video.path, '-o', state.settings.workspace, '--json', ...args]);
-  if (result.error) {
+  if (failed(result)) {
     $('corrections-state').textContent = `没有改成：${result.error}`;
     return;
   }
@@ -801,10 +844,10 @@ $('route-effort').onchange = () =>
   saveRouteChoice({ routeEfforts: { ...(state.settings.routeEfforts || {}), [state.route]: $('route-effort').value } });
 
 function renderRoutes() {
-  for (const label of document.querySelectorAll('#routes .route-agent')) label.remove();
+  for (const label of $$('#routes .route-agent')) label.remove();
   $('routes').querySelector('input[value=api]').parentElement.before(...otherRouteLabels());
   if (!document.querySelector(`input[name=route][value="${state.route}"]`)) state.route = 'api';
-  for (const input of document.querySelectorAll('input[name=route]')) {
+  for (const input of $$('input[name=route]')) {
     const missing = routeMissing(input.value);
     input.disabled = missing;
     input.parentElement.classList.toggle('unavailable', missing);
@@ -841,7 +884,7 @@ async function renderSummary(video) {
   }
   // Versions live beside 总结.md (versions.py), so the links in any of them resolve from the same folder.
   const found = await window.va.cliJson(['versions', video.path, '-o', state.settings.workspace, '--json']);
-  const list = found.error ? { current: null, versions: [] } : found;
+  const list = failed(found) ? { current: null, versions: [] } : found;
   if (state.version?.video !== video.path || !list.versions.some((entry) => entry.file === state.version.file)) {
     state.version = null;
   }
@@ -988,10 +1031,11 @@ const packArgs = (video) => [
   'pack', video.path, '-o', state.settings.workspace, '--request', $('summary-request').value.trim(), '--template', chosenTemplate(),
 ];
 
+let summaryTimer;
 function summaryState(text) {
   $('summary-state').textContent = text;
-  clearTimeout(summaryState.timer);
-  summaryState.timer = setTimeout(() => ($('summary-state').textContent = ''), 10000);
+  clearTimeout(summaryTimer);
+  summaryTimer = setTimeout(() => ($('summary-state').textContent = ''), 10000);
 }
 
 async function copyMaterial() {
@@ -1084,6 +1128,7 @@ $('import-dialog').addEventListener('close', async () => {
 // A collection is an ordered set of related videos with an overview and a study guide (ARCHITECTURE.md,
 // "Collections"); everything goes through `video-agent collection`, `summarize --collection` and `pack --collection`.
 
+/** @type {(...args: string[]) => ['collection', ...string[]]} */
 const collectionArgs = (...args) => ['collection', ...args, '-o', state.settings.workspace];
 const currentCollection = () => state.collections.find((item) => item.name === state.collection) || null;
 
@@ -1256,7 +1301,7 @@ async function renderCollection() {
       return element('span', { className: 'correction' }, [element('span', { textContent: `${wrong} → ${right}` }), undo]);
     }),
   );
-  for (const button of document.querySelectorAll('.doc-tabs button')) button.classList.toggle('active', button.dataset.doc === state.doc);
+  for (const button of $$('.doc-tabs button')) button.classList.toggle('active', button.dataset.doc === state.doc);
   const file = state.doc === 'guide' ? item.guide : item.overview;
   // A summary changed after the overview or guide was written: say which, so it can be written again.
   const behind = (state.doc === 'guide' ? item.guide_behind : item.overview_behind) || [];
@@ -1289,7 +1334,7 @@ async function renderCollection() {
   }
 }
 
-for (const button of document.querySelectorAll('.doc-tabs button')) {
+for (const button of $$('.doc-tabs button')) {
   button.onclick = () => {
     state.doc = button.dataset.doc;
     renderCollection();
@@ -1605,6 +1650,7 @@ async function saveAccountLayout(changes) {
   renderAccounts();
 }
 
+/** @param {{ loggedIn: boolean, ready: boolean, user?: string }} account */
 function accountState({ loggedIn, ready, user }) {
   if (loggedIn) return `已登录${user ? `：${user}` : ''}`;
   return ready ? '可以下载（没有登录）' : '没有登录';
@@ -1670,7 +1716,7 @@ async function openCookieDialog(key) {
   cookieSite = key;
   const account = state.accounts.find((item) => item.key === key);
   $('cookie-title').textContent = `导入${account.name}的登录状态`;
-  for (const span of document.querySelectorAll('#cookie-dialog .cookie-site')) span.textContent = account.name;
+  for (const span of $$('#cookie-dialog .cookie-site')) span.textContent = account.name;
   $('cookie-home').textContent = account.home;
   $('cookie-home').href = account.home;
   $('cookie-state').hidden = true;
@@ -1708,7 +1754,7 @@ async function cookieImport(pending, waiting) {
 }
 
 $('cookie-file').onclick = () => cookieImport(window.va.accountImport(cookieSite));
-for (const link of document.querySelectorAll('#cookie-dialog a')) {
+for (const link of $$('#cookie-dialog a')) {
   link.onclick = (event) => (event.preventDefault(), /^https?:/.test(link.href) && window.va.external(link.href));
 }
 
@@ -1770,7 +1816,7 @@ $('playlist-dialog').addEventListener('close', async () => {
   const collection = $('playlist-dialog-join').checked ? $('playlist-dialog-name').value.trim() : '';
   const follow = Boolean(collection) && $('playlist-dialog-follow').checked;
   const auto = follow && $('playlist-dialog-auto').checked;
-  await addTask({
+  const added = await addTask({
     kind: 'download', title: `下载列表：${collection || url}`, url, then, playlist: true,
     collection: collection || undefined, follow, auto,
   });
@@ -1823,7 +1869,7 @@ $('open-settings').onclick = async () => {
   $('install-codex').disabled = !state.env.codex;
   $('plugin-output').hidden = true;
   const config = await window.va.cliJson(['config', '--json']);
-  if (config.error) {
+  if (failed(config)) {
     $('api-info').textContent = `读取不到 API 设置：${config.error}`;
   } else {
     $('set-provider').value = config.provider;
@@ -1859,7 +1905,9 @@ $('set-theme').onchange = () => window.va.previewTheme($('set-theme').value);
 let agentRowsShown = '';
 function renderAgentRows() {
   const saved = Object.fromEntries(state.env.others.map((agent) => [agent.key, agent.command]));
-  const rows = [...Object.entries(state.env.agents), ['custom', { name: '自定义命令', command: '' }]].map(([key, preset]) => {
+  /** @type {[string, import('../va').Preset][]} */
+  const presets = [...Object.entries(state.env.agents), ['custom', { name: '自定义命令', command: '' }]];
+  const rows = presets.map(([key, preset]) => {
     const on = element('input', { type: 'checkbox', checked: key in saved });
     const command = element('input', {
       type: 'text', spellcheck: false, value: saved[key] || preset.command, placeholder: '例如 my-agent run --print', disabled: !on.checked,
@@ -1875,8 +1923,8 @@ function renderAgentRows() {
   agentRowsShown = JSON.stringify(agentRowsValue());
 }
 const agentRowsValue = () =>
-  [...document.querySelectorAll('#set-agents input[data-agent]')].filter((box) => box.checked).map((box) => {
-    const command = document.querySelector(`#set-agents input[data-agent-command="${box.dataset.agent}"]`).value.trim();
+  [...$$('#set-agents input[data-agent]')].filter((box) => box.checked).map((box) => {
+    const command = /** @type {HTMLInputElement} */ (document.querySelector(`#set-agents input[data-agent-command="${box.dataset.agent}"]`)).value.trim();
     return { key: box.dataset.agent, command: command === state.env.agents[box.dataset.agent]?.command ? '' : command };
   });
 $('settings').addEventListener('close', () => {
@@ -1901,7 +1949,7 @@ for (const agent of ['claude', 'codex']) {
 }
 
 // Agents without plugins: the skill folder is copied where each reads skills (shown on hover), or into a picked folder.
-for (const button of document.querySelectorAll('#skill-targets button')) {
+for (const button of $$('#skill-targets button')) {
   const target = button.dataset.skill;
   button.onclick = async () => {
     const result = await window.va.installSkill(target);
@@ -1930,10 +1978,10 @@ const templateLabel = (entry) => (!entry.builtin ? `${entry.name}（自己的）
 
 async function loadTemplates() {
   const list = await window.va.cliJson(['template', '--list']);
-  $('route-template-note').textContent = list.error ? `读取不到模板：${list.error}` : '';
-  if (list.error) return;
-  state.templates = list;
-  $('route-template').replaceChildren(...list.map((entry) => element('option', { value: entry.name, textContent: templateLabel(entry) })));
+  $('route-template-note').textContent = failed(list) ? `读取不到模板：${list.error}` : '';
+  if (failed(list)) return;
+  state.templates = /** @type {import('../cli-types').Template[]} */ (list);
+  $('route-template').replaceChildren(...state.templates.map((entry) => element('option', { value: entry.name, textContent: templateLabel(entry) })));
   $('route-template').value = chosenTemplate();
 }
 
@@ -1943,11 +1991,12 @@ $('route-template').onchange = async () => {
   await loadTemplates();
 };
 
+/** @returns {Promise<Partial<import('../cli-types').Template> & { error?: string }>} */
 async function templateAction(name, flag) {
   const info = await window.va.cliJson(['template', name, flag]);
   if (info.error) alert(`没有成功：${info.error}`);
   await renderRules();
-  return info;
+  return /** @type {any} */ (info);
 }
 
 async function renderRules() {
@@ -1989,11 +2038,11 @@ $('rules-new').onclick = async () => {
   const name = $('rules-new-name').value.trim();
   if (!name) return $('rules-new-name').focus();
   const info = await window.va.cliJson(['template', $('rules-new-from').value, '--copy', name]);
-  $('rules-status').textContent = info.error ? `没有新建：${info.error}` : `已新建「${name}」，在总结页上选它就按它写。`;
-  if (info.error) return;
+  $('rules-status').textContent = failed(info) ? `没有新建：${info.error}` : `已新建「${name}」，在总结页上选它就按它写。`;
+  if (failed(info)) return;
   $('rules-new-name').value = '';
   await renderRules();
-  window.va.open(info.path);
+  window.va.open(/** @type {import('../cli-types').Template} */ (info).path);
 };
 $('skill-view').onclick = async () => {
   $('skill-text').innerHTML = DOMPurify.sanitize(marked.parse(await window.va.readSkill()));
@@ -2025,7 +2074,7 @@ $('pick-workspace').onclick = async () => {
 
 $('set-provider').onchange = async () => {
   const config = await window.va.cliJson(['config', '--json', '--provider', $('set-provider').value]);
-  if (!config.error) {
+  if (!failed(config)) {
     $('set-model').value = config.model || '';
     $('set-base-url').value = config.base_url || '';
     $('api-info').textContent = `API key：${config.key || '还没有'}`;
@@ -2192,7 +2241,7 @@ window.va.onTrayAddVideos(async () => addLocalVideos(await window.va.pickVideos(
 async function init() {
   state.settings = await window.va.settings();
   state.env = await window.va.env();
-  for (const button of document.querySelectorAll('#skill-targets button[data-skill]:not([data-skill=folder])')) {
+  for (const button of $$('#skill-targets button[data-skill]:not([data-skill=folder])')) {
     button.title = `复制到 ${state.env.agents[button.dataset.skill].skills}`;
   }
   renderUpdate(await window.va.updateState());
@@ -2209,7 +2258,7 @@ async function init() {
   renderAbout();
   await loadCollections();
   window.va.cliJson(['tools', '--json']).then((found) => {
-    state.tools = found.error ? null : found;
+    state.tools = failed(found) ? null : found;
     state.cliMismatch = cliMismatch(found);
     renderList();
     if (state.view === 'video') renderVideo();

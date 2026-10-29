@@ -11,8 +11,10 @@
 
 const { EventEmitter } = require('node:events');
 const { Readable } = require('node:stream');
+// electron-updater's own modules, patched below: their types say private and read-only, so they are not checked.
+/** @type {any} */
 const plan = require('electron-updater/out/differentialDownloader/downloadPlanBuilder');
-const { DifferentialDownloader } = require('electron-updater/out/differentialDownloader/DifferentialDownloader');
+const { DifferentialDownloader } = /** @type {any} */ (require('electron-updater/out/differentialDownloader/DifferentialDownloader'));
 
 const MERGE_GAP = 1024 * 1024;
 const AT_ONCE = 4;
@@ -75,7 +77,7 @@ async function fetchAll(downloader, tasks) {
 function fromMemory(executor, parts) {
   return Object.assign(Object.create(executor), {
     createRequest(options, callback) {
-      const request = new EventEmitter();
+      const request = /** @type {any} */ (new EventEmitter()); // the parts of a ClientRequest the downloader uses
       request.followRedirect = () => {};
       request.abort = () => {};
       request.end = () => {

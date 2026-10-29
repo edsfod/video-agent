@@ -36,6 +36,7 @@ let logs;
 let updater;
 let quitting = false;
 // What the tray shows, kept for the end-to-end tests, which read it through app.evaluate.
+/** @type {{ tooltip: string, menu: Electron.Menu | null }} */
 const trayState = { tooltip: '', menu: null };
 global.vaTray = {
   tooltip: () => trayState.tooltip,
@@ -284,16 +285,23 @@ function launch(command, args) {
   return { file: quote(found || command), args: args.map(quote), shell: true };
 }
 
+/**
+ * @param {string} id
+ * @param {string} command
+ * @param {string[]} args
+ * @param {{ cwd?: string, stdin?: string, env?: Record<string, string>, title?: string, prompt?: string, onClose?: () => void }} [options]
+ */
 function startJob(id, command, args, { cwd, stdin, env, title = id, prompt, onClose } = {}) {
   const run = launch(command, args);
   const log = logs.job(id, { title, command: [command, ...args], cwd, ...(prompt ? { prompt } : {}) });
-  const child = spawn(run.file, run.args, {
+  // stdin is a pipe only when there is something to send (checked below).
+  const child = /** @type {import('node:child_process').ChildProcessWithoutNullStreams} */ (spawn(run.file, run.args, {
     cwd,
     shell: run.shell,
     windowsHide: true,
     env: childEnv(env),
     stdio: [stdin === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'],
-  });
+  }));
   jobs.set(id, { child, title });
   if (stdin !== undefined) child.stdin.end(stdin);
   const relay = (stream) => (chunk) => {
@@ -582,6 +590,7 @@ function runToEnd(command, args, stdin) {
 // idempotent, so the button also repairs or refreshes an earlier install.
 async function installPlugin(agent) {
   const root = pluginRoot();
+  /** @type {[string, string[]][]} */
   const steps = agent === 'claude'
     ? [['claude', ['plugin', 'marketplace', 'add', root]], ['claude', ['plugin', 'marketplace', 'update', 'video-agent']],
        ['claude', ['plugin', 'install', 'video-agent@video-agent']]]
@@ -888,7 +897,7 @@ function createWindow() {
   const option = (name) => process.argv.find((arg) => arg.startsWith(`--${name}=`))?.split('=').slice(1).join('=');
   const target = option('screenshot');
   if (target) {
-    if (option('theme')) nativeTheme.themeSource = option('theme'); // light or dark
+    if (option('theme')) nativeTheme.themeSource = /** @type {'light' | 'dark'} */ (option('theme')); // light or dark
     win.webContents.once('did-finish-load', async () => {
       await win.webContents.executeJavaScript(
         `window.__screenshot && window.__screenshot(${JSON.stringify({ select: option('select'), tab: option('tab') })})`,

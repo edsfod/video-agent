@@ -105,6 +105,8 @@ jobs:
       - run: Add-Content $env:GITHUB_PATH "$env:USERPROFILE\.local\bin"
       - run: npm ci
         working-directory: gui
+      - run: npm run typecheck
+        working-directory: gui
       - run: npm test
         working-directory: gui
 

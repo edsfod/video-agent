@@ -32,6 +32,7 @@ function workKey(spec) {
 }
 
 // The queued tasks that may start now, given those already running.
+/** @param {any[]} tasks @param {Record<string, number>} [limits] */
 function startable(tasks, limits = DEFAULT_LIMITS) {
   const counts = {};
   const busy = new Set();
@@ -58,8 +59,21 @@ const newId = () => `task-${Date.now().toString(36)}-${(++counter).toString(36)}
 // stop(task): stops a running job. changed(): the list or a status changed.
 // followUp(task): tasks to add after a task succeeds (a download's compression and "then process").
 class TaskQueue {
+  /**
+   * @param {object} hooks
+   * @param {(task: any) => void} hooks.start starts a task's process
+   * @param {(task: any) => void} hooks.stop stops it
+   * @param {() => void} [hooks.changed] after any change
+   * @param {() => Record<string, number>} [hooks.limits] how many of each kind may run at once
+   * @param {(task: any) => object[]} [hooks.followUp] the tasks that follow one that ended well
+   */
   constructor({ start, stop, changed = () => {}, limits = () => DEFAULT_LIMITS, followUp = () => [] }) {
-    Object.assign(this, { start, stop, changed, limits, followUp });
+    this.start = start;
+    this.stop = stop;
+    this.changed = changed;
+    this.limits = limits;
+    this.followUp = followUp;
+    /** @type {any[]} */
     this.tasks = [];
   }
 

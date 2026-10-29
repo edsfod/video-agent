@@ -50,6 +50,7 @@ Agents and shells           other agents follow it        commands
 | `src/main.js` | Main process: settings, IPC handlers, building CLI and Agent command lines, plugin and skill installs, tray, windows. |
 | `src/tasks.js` | The task queue and which tasks may run together; free of Electron. |
 | `src/cli-types.d.ts` | The CLI's JSON types for the app, written from `contract.py` by `scripts/cli_types.py`. |
+| `src/va.d.ts` | The types of `window.va`, which `preload.js` is checked against and the page uses. |
 | `src/accounts.js` | Site logins and their cookies for downloads. |
 | `src/models.js` | The models and thinking levels each summary route offers. |
 | `src/updater.js`, `update-plan.js`, `update-signature.js` | Updates: sources, differential downloads, the signature on `latest.yml`. |
@@ -108,7 +109,7 @@ The folder and file names, Chinese ones included, are read by the app, the skill
 
 ## Build, release, update
 
-- **Tests**: `tests/` (pytest and mypy; real FFmpeg on generated clips, BCut against a local server) and `gui/test/` (`node --test`; the queue rules, the updater, and Playwright end-to-end tests on the real window). The pre-push hook runs those a change touches; GitHub runs them by changed path (`.github/scripts/changed-jobs.sh`), Windows only.
+- **Tests**: `tests/` (pytest and mypy; real FFmpeg on generated clips, BCut against a local server) and `gui/test/` (`node --test`; the queue rules, the updater, and Playwright end-to-end tests on the real window), after `npm run typecheck` (TypeScript checks the JavaScript through its JSDoc, without compiling it). The pre-push hook runs those a change touches; GitHub runs them by changed path (`.github/scripts/changed-jobs.sh`), Windows only.
 - **Installer**: `packaging/build_cli.py` freezes the CLI with PyInstaller, yt-dlp and an LGPL FFmpeg built by `packaging/ffmpeg/build.sh`; electron-builder makes an unsigned NSIS installer that shows `PRIVACY.md` first and puts the CLI on the user's `PATH`.
 - **Release**: a `v<version>` tag makes `.github/workflows/release.yml` build, test the packaged app, sign `latest.yml` with Ed25519 and create a draft with the FFmpeg sources; it is published by hand after checking.
 - **Update**: the app reads `latest.yml` from github.com, the GitHub API or mirrors, accepts it only with a valid signature, downloads the changed blocks and reinstalls silently.
@@ -120,4 +121,4 @@ The folder and file names, Chinese ones included, are read by the app, the skill
 - Code signing postponed (user decision, 2026-10-27): the SignPath application form at signpath.org/apply did not work for the user. Preparation notes are in `notes/` (local); the update signature on `latest.yml` does not depend on it.
 - Representative frames can include black frames (fade-ins); detecting them needs image analysis.
 - Site accounts: the cookie export, a cookies.txt import, ordering and hiding are tested (end-to-end test); a real login, Google's in particular, and a download with it need the user's account.
-- Steps 2 to 4 of [Front-end types](docs/decisions/front-end-types.md): type checking in the app, splitting `app.js`, then deciding on TypeScript.
+- Steps 3 and 4 of [Front-end types](docs/decisions/front-end-types.md): splitting `app.js` (and checking it for null), then deciding on TypeScript.

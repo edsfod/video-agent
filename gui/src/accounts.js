@@ -65,7 +65,7 @@ function siteOf(url) {
 
 async function cookie(key, name) {
   const site = SITES[key];
-  const found = (await store(key).cookies.get({ name })).find((item) => site.cookies.test(item.domain.replace(/^\./, '')));
+  const found = (await store(key).cookies.get({ name })).find((item) => site.cookies.test((item.domain || '').replace(/^\./, '')));
   return found && (!found.expirationDate || found.expirationDate * 1000 > Date.now()) ? found : null;
 }
 
@@ -79,7 +79,7 @@ async function status(key) {
   if (key !== 'bilibili' || !loggedIn) return { ...base, ready, loggedIn };
   try {
     const response = await store(key).fetch(NAV_URL, { headers: { 'User-Agent': plainAgent(key) } });
-    const body = await response.json();
+    const body = /** @type {{ code?: number, data?: { uname?: string } }} */ (await response.json());
     if (body.code === -101) return { ...base, ready: false, loggedIn: false }; // the server no longer accepts the cookie
     return { ...base, ready, loggedIn, user: body.data?.uname };
   } catch {
@@ -162,9 +162,9 @@ async function importCookies(key, file) {
 async function writeCookies(key, file) {
   const site = SITES[key];
   if (!(await cookie(key, site.ready))) return null;
-  const cookies = (await store(key).cookies.get({})).filter((item) => site.cookies.test(item.domain.replace(/^\./, '')));
+  const cookies = (await store(key).cookies.get({})).filter((item) => site.cookies.test((item.domain || '').replace(/^\./, '')));
   const lines = cookies.map((item) => {
-    const domain = item.hostOnly || item.domain.startsWith('.') ? item.domain : `.${item.domain}`;
+    const domain = item.hostOnly || item.domain?.startsWith('.') ? item.domain : `.${item.domain}`;
     return [
       (item.httpOnly ? '#HttpOnly_' : '') + domain,
       item.hostOnly ? 'FALSE' : 'TRUE',

@@ -39,7 +39,7 @@ class Logs {
       file,
       write: (text) => out.write(text),
       close: (code) => {
-        const seconds = Math.round((Date.now() - started) / 100) / 10;
+        const seconds = Math.round((Date.now() - started.getTime()) / 100) / 10;
         out.end(`\n# ${JSON.stringify({ exit: code, seconds })}\n`);
         this.line(code === 0 ? 'info' : 'warn', `job ${id} ended with exit ${code} after ${seconds}s: ${meta.title}`);
       },
