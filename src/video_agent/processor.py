@@ -474,9 +474,11 @@ def _process_locked(
     # AutoSlides Extractor, when installed, finds the screen pages (user decision, 2026-10-29): tuned on many lecture
     # recordings, it keeps slides turned within seconds that our page rules dropped as passing states. The steps of one
     # slide that it keeps are merged here; pages it keeps too many are left to whoever writes the summary to drop.
-    # Without it, or when it fails, our own page search runs.
+    # Without it, or when it fails, our own page search runs. Not by default on a screen filmed by a camera: on the
+    # projection in 线性代数 it kept one slide in 100 minutes, the camera's noise and the speaker never letting a page
+    # count as stable.
     use_extractor = extract_slides or (
-      extract_slides is None and bool(region) and _extractor_found(slide_extractor_path)
+      extract_slides is None and bool(region) and found.kind != 'projected' and _extractor_found(slide_extractor_path)
     )
     if use_extractor:
       try:
@@ -508,6 +510,11 @@ def _process_locked(
     if (region and not slide_result) or found.kind == 'camera':
       status(f'{video.name}: looking for screen pages' if region else f'{video.name}: looking for still pictures')
       page_candidates, shown_s = media.screen_pages(video, temporary / 'pages', region or 'null', duration_s=length)
+      if found.kind == 'projected' and len(page_candidates) < 2 and not screen_region:
+        # The bright block was no screen after all: the pictures held still on the whole frame, as for a camera.
+        status(f'{video.name}: no pages in the filmed screen; looking for still pictures on the whole frame')
+        found = layout.Layout('camera', width, height, [0, 0, width, height], None, found.activity)
+        page_candidates, shown_s = media.screen_pages(video, temporary / 'pages2', 'null', duration_s=length)
       pages_found = len(page_candidates)
       if pages_found > MAX_PAGES:
         status(f'{video.name}: {pages_found} screen pages; keeping {MAX_PAGES} spread over the video')
