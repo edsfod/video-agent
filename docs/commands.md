@@ -92,7 +92,7 @@ video-agent process VIDEO... [OPTIONS]
 
 When a recording of five minutes or more with a camera gives fewer than two screen pages, `process` says the layout may have been read wrong, names `layout.jpg` (the screen region outlined in green) and suggests `--screen-region`; `summary-context.md` carries the same note as a "Layout check" line.
 
-In a video read as a camera picture only, the pictures held still on the whole frame for 2 seconds or more (a chart or a screenshot between stock footage) are its screen pages.
+The layout is one of `screen` (the whole frame), `split` (a screen beside a camera picture, also when the speaker hides part of the border), `inset` (a camera picture inside the screen, with or without a border, blacked out when looking for pages), `projected` (a camera filming a projection or a monitor: pages are looked for in that screen, by this program's own search) and `camera`. In a video read as a camera picture only, the pictures held still on the whole frame for 2 seconds or more (a chart or a screenshot between stock footage) are its screen pages; so are they when a filmed screen gives fewer than two pages.
 
 #### Subtitle and upload behavior
 
