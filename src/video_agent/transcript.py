@@ -146,7 +146,7 @@ def acquire(video, streams, output_dir, *, asr='none', allow_remote_asr=False, s
     return [], 'no-audio-or-subtitles'
   if asr == 'none':
     raise MediaError(
-      f'No sidecar or embedded subtitles found for {Path(video).name}. BCut, Bilibili\'s speech recognition, can '
+      f"No sidecar or embedded subtitles found for {Path(video).name}. BCut, Bilibili's speech recognition, can "
       'transcribe it, but the extracted audio is sent to Bilibili: ask the user first, and only with their agreement '
       'process again with --asr bcut --allow-remote-asr.'
     )
