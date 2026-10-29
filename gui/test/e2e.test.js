@@ -509,6 +509,9 @@ test('ticked tasks stop together, and 全部停止 stops the rest', async () => 
   await page.check('#set-agents input[data-agent=custom]');
   await page.fill('#set-agents input[data-agent-command=custom]', `"${process.execPath}" "${waiting}"`);
   await page.click('#save-settings');
+  await page.waitForSelector('#settings[open]', { state: 'hidden' });
+  // Saved once the agent shows as a route; tasks queued before that would not find it.
+  await page.waitForFunction(async () => (await window.va.settings()).agents?.some((agent) => agent.key === 'custom' && /waiting-agent/.test(agent.command)));
   // Summaries of three videos by an agent that only waits: two run (the default limit), the third is queued.
   const videos = ['甲', '乙', '丙'].map((name) => path.join(ROOT, `${name}.mp4`));
   await page.evaluate((all) => Promise.all(all.map((video, i) => window.va.addTask({
