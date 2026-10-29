@@ -30,7 +30,8 @@ jobs:
         run: |
           version="${GITHUB_REF_NAME#v}"
           test "$(node -p "require('./gui/package.json').version")" = "$version"
-          grep -q "^version = \"$version\"" pyproject.toml
+          python=$(uv run --no-project python -c "import sys; sys.path[:0] = ['scripts']; import bump_version; print(bump_version.python('$version'))")
+          grep -q "^version = \"$python\"" pyproject.toml
           test -f "docs/releases/$GITHUB_REF_NAME.md"
       - run: npm ci
         working-directory: gui
@@ -43,7 +44,7 @@ jobs:
       - run: uv build --wheel
       - run: cp build/ffmpeg/BUILD.txt build/ffmpeg/FFmpeg-BUILD.txt # the name the notes and THIRD-PARTY-NOTICES use
       - run: >
-          gh release create "$GITHUB_REF_NAME" --draft --verify-tag
+          gh release create "$GITHUB_REF_NAME" --draft --verify-tag $([[ "$GITHUB_REF_NAME" == *-* ]] && echo --prerelease)
           --title "Video Agent ${GITHUB_REF_NAME#v}" --notes-file "docs/releases/$GITHUB_REF_NAME.md"
           gui/dist/Video-Agent-Setup-*.exe gui/dist/Video-Agent-Setup-*.exe.blockmap
           gui/dist/latest.yml gui/dist/latest.yml.sig dist/*.whl

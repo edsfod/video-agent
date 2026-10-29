@@ -1,9 +1,14 @@
-"""Set the version everywhere it is written: `uv run scripts/bump_version.py 0.8.3`.
+"""Set the version everywhere it is written: `uv run scripts/bump_version.py 0.8.3` (or `0.9.2-beta`, `0.9.2-beta.2`).
 
 The CLI, the plugin manifests, the window's package files, uv.lock and the wheel links in README.md and the skill carry
 the version; tests/test_cli.py::test_versions_match checks they agree. Each file must hold the old version where
 expected, or nothing is written. The release notes, docs/releases/v<version>.md, are written by hand; the script says
 when they are missing.
+
+A pre-release (user request, 2026-10-29: 0.9.2-beta before 0.9.2) is written the semantic-versioning way everywhere
+but in Python's packaging, which spells it its own way (PEP 440: 0.9.2b0), so pyproject.toml, uv.lock and the wheel's
+file name carry that; the tag and the release folder keep the first. README.md keeps the links of the last full
+release during a pre-release, so people reading it install that one.
 """
 
 import json
@@ -12,7 +17,21 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-VERSION = re.compile(r'\d+\.\d+\.\d+')
+VERSION = re.compile(r'\d+\.\d+\.\d+(-(alpha|beta|rc)(\.\d+)?)?')
+PEP440 = {'alpha': 'a', 'beta': 'b', 'rc': 'rc'}
+
+
+def python(version):
+  """The version as Python's packaging writes it: 0.9.2-beta -> 0.9.2b0, 0.9.2-rc.1 -> 0.9.2rc1, 0.9.2 -> 0.9.2."""
+  core, _, pre = version.partition('-')
+  if not pre:
+    return core
+  kind, _, number = pre.partition('.')
+  return f'{core}{PEP440[kind]}{number or 0}'
+
+
+def prerelease(version):
+  return '-' in version
 
 
 def current(root=ROOT):
@@ -46,30 +65,53 @@ def _replace(pattern, count):
 
 
 def _uv_lock(text, old, new):
-  own = f'[[package]]\nname = "video-agent"\nversion = "{old}"\n'
+  own = f'[[package]]\nname = "video-agent"\nversion = "{python(old)}"\n'
   if own not in text:
-    raise ValueError(f'no video-agent {old} package entry')
-  return text.replace(own, own.replace(old, new))
+    raise ValueError(f'no video-agent {python(old)} package entry')
+  return text.replace(own, own.replace(python(old), python(new)))
 
 
-WHEEL = 'releases/download/v{0}/video_agent-{0}-py3-none-any.whl'
+def wheel(version):
+  return f'releases/download/v{version}/video_agent-{python(version)}-py3-none-any.whl'
+
+
+def _wheels(count):
+  def change(text, old, new):
+    found = text.count(wheel(old))
+    if found != count:
+      raise ValueError(f'{wheel(old)!r} found {found} times, expected {count}')
+    return text.replace(wheel(old), wheel(new))
+
+  return change
+
+
+def _readme(text, old, new):
+  """The one wheel link, of the last full release: left during a pre-release, and replaced by the next full one."""
+  links = re.findall(r'releases/download/v[^/\s]+/video_agent-[^-\s]+-py3-none-any\.whl', text)
+  if len(links) != 1 or prerelease(links[0].split('/')[2][1:]):
+    raise ValueError(f'expected one wheel link of a full release, found {links}')
+  if not prerelease(old) and links[0] != wheel(old):
+    raise ValueError(f'{wheel(old)!r} not found')
+  return text if prerelease(new) else text.replace(links[0], wheel(new))
+
+
 CHANGES = {
   'src/video_agent/__init__.py': _replace("__version__ = '{}'", 1),
-  'pyproject.toml': _replace('\nversion = "{}"\n', 1),
+  'pyproject.toml': lambda text, old, new: _replace('\nversion = "{}"\n', 1)(text, python(old), python(new)),
   'plugin.json': lambda text, old, new: _json(text, old, new, [('version',)]),
   '.claude-plugin/plugin.json': lambda text, old, new: _json(text, old, new, [('version',)]),
   'gui/package.json': lambda text, old, new: _json(text, old, new, [('version',)]),
   'gui/package-lock.json': lambda text, old, new: _json(text, old, new, [('version',), ('packages', '', 'version')]),
   'uv.lock': _uv_lock,
-  'README.md': _replace(WHEEL, 1),
-  'skills/video-agent/SKILL.md': _replace(WHEEL, 2),
+  'README.md': _readme,
+  'skills/video-agent/SKILL.md': _wheels(2),
 }
 
 
 def bump(new, root=ROOT):
   """Changes every file from the current version to `new`; returns the old version and the files changed."""
   if not VERSION.fullmatch(new):
-    raise ValueError(f'{new} is not a version like 0.8.3')
+    raise ValueError(f'{new} is not a version like 0.8.3 or 0.9.2-beta')
   old = current(root)
   if new == old:
     raise ValueError(f'the version is already {old}')

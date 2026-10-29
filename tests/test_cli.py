@@ -439,34 +439,59 @@ def test_no_scene_changes_is_not_an_error(tmp_path, monkeypatch, bundled):
   assert [item['time_s'] for item in scenes] == [0.0]  # frame 0 only, which keeps the output from being empty
 
 
-def test_versions_match():
-  from video_agent import __version__
-
-  root = Path(__file__).resolve().parents[1]
-  for name in ('plugin.json', '.claude-plugin/plugin.json', 'gui/package.json'):
-    assert json.loads((root / name).read_text(encoding='utf-8'))['version'] == __version__, name
-  lock = json.loads((root / 'gui/package-lock.json').read_text(encoding='utf-8'))
-  assert lock['version'] == lock['packages']['']['version'] == __version__
-  assert f'name = "video-agent"\nversion = "{__version__}"\n' in (root / 'uv.lock').read_text(encoding='utf-8')
-  assert f'\nversion = "{__version__}"\n' in (root / 'pyproject.toml').read_text(encoding='utf-8')
-  wheel = f'releases/download/v{__version__}/video_agent-{__version__}-py3-none-any.whl'
-  assert (root / 'skills/video-agent/SKILL.md').read_text(encoding='utf-8').count(wheel) == 2
-  assert wheel in (root / 'README.md').read_text(encoding='utf-8')
-
-
-def test_bump_version_changes_every_file_or_none(tmp_path):
+def _bump_script():
   import importlib.util
-  import shutil
 
   root = Path(__file__).resolve().parents[1]
   spec = importlib.util.spec_from_file_location('bump_version', root / 'scripts' / 'bump_version.py')
   script = importlib.util.module_from_spec(spec)
   spec.loader.exec_module(script)
+  return script
+
+
+def test_versions_match():
+  from video_agent import __version__
+
+  script = _bump_script()
+  python = script.python(__version__)
+  root = Path(__file__).resolve().parents[1]
+  for name in ('plugin.json', '.claude-plugin/plugin.json', 'gui/package.json'):
+    assert json.loads((root / name).read_text(encoding='utf-8'))['version'] == __version__, name
+  lock = json.loads((root / 'gui/package-lock.json').read_text(encoding='utf-8'))
+  assert lock['version'] == lock['packages']['']['version'] == __version__
+  assert f'name = "video-agent"\nversion = "{python}"\n' in (root / 'uv.lock').read_text(encoding='utf-8')
+  assert f'\nversion = "{python}"\n' in (root / 'pyproject.toml').read_text(encoding='utf-8')
+  wheel = script.wheel(__version__)
+  assert (root / 'skills/video-agent/SKILL.md').read_text(encoding='utf-8').count(wheel) == 2
+  # During a pre-release README.md keeps the last full release's link.
+  assert (wheel in (root / 'README.md').read_text(encoding='utf-8')) != script.prerelease(__version__)
+
+
+def test_prerelease_versions_are_spelled_for_each_ecosystem():
+  script = _bump_script()
+  assert [script.python(v) for v in ('0.9.2', '0.9.2-beta', '0.9.2-beta.2', '1.0.0-rc.1', '1.0.0-alpha')] == [
+    '0.9.2',
+    '0.9.2b0',
+    '0.9.2b2',
+    '1.0.0rc1',
+    '1.0.0a0',
+  ]
+  assert script.wheel('0.9.2-beta') == 'releases/download/v0.9.2-beta/video_agent-0.9.2b0-py3-none-any.whl'
+
+
+def test_bump_version_changes_every_file_or_none(tmp_path):
+  import shutil
+
+  root = Path(__file__).resolve().parents[1]
+  script = _bump_script()
   for name in script.CHANGES:
     (tmp_path / name).parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(root / name, tmp_path / name)
+  if script.prerelease(script.current(tmp_path)):  # start from a full release, as a beta leaves README.md alone
+    script.bump('9.9.8', tmp_path)
   old = script.current(tmp_path)
-  readme = (tmp_path / 'README.md').read_text(encoding='utf-8')
+  start = {name: (tmp_path / name).read_text(encoding='utf-8') for name in script.CHANGES}
+  readme = start['README.md']
   (tmp_path / 'README.md').write_text(readme.replace(f'v{old}/', 'v0.0.1/'), encoding='utf-8', newline='\n')
   with pytest.raises(ValueError, match='README.md'):
     script.bump('9.9.9', tmp_path)
@@ -474,10 +499,22 @@ def test_bump_version_changes_every_file_or_none(tmp_path):
   (tmp_path / 'README.md').write_text(readme, encoding='utf-8', newline='\n')
   assert script.bump('9.9.9', tmp_path) == (old, list(script.CHANGES))
   for name in script.CHANGES:
-    before, after = (root / name).read_text(encoding='utf-8'), (tmp_path / name).read_text(encoding='utf-8')
-    assert after.replace('9.9.9', old) == before, name
+    assert (tmp_path / name).read_text(encoding='utf-8').replace('9.9.9', old) == start[name], name
   with pytest.raises(ValueError, match='not a version'):
     script.bump('1.0', tmp_path)
+  # A pre-release, then its full release: Python's spelling in its files, README.md left until the full one.
+  text = lambda name: (tmp_path / name).read_text(encoding='utf-8')
+  readme = text('README.md')
+  script.bump('9.9.10-beta', tmp_path)
+  assert script.current(tmp_path) == '9.9.10-beta'
+  assert '\nversion = "9.9.10b0"\n' in text('pyproject.toml')
+  assert 'name = "video-agent"\nversion = "9.9.10b0"\n' in text('uv.lock')
+  assert text('skills/video-agent/SKILL.md').count('v9.9.10-beta/video_agent-9.9.10b0-py3-none-any.whl') == 2
+  assert json.loads(text('gui/package.json'))['version'] == '9.9.10-beta'
+  assert text('README.md') == readme
+  script.bump('9.9.10', tmp_path)
+  assert 'v9.9.10/video_agent-9.9.10-py3-none-any.whl' in text('README.md')
+  assert '\nversion = "9.9.10"\n' in text('pyproject.toml')
 
 
 def test_video_lock_is_released_when_its_process_is_killed(tmp_path):

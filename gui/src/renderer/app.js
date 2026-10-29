@@ -1848,9 +1848,22 @@ const RELEASES_PAGE = 'https://github.com/edsfod/video-agent/releases';
 const megabytes = (bytes) => (bytes / 1048576).toFixed(1);
 
 // 1, 0 or -1 as version a is newer than, the same as or older than b (plain x.y.z numbers).
+// Semantic versions: 0.9.2-beta < 0.9.2-beta.2 < 0.9.2 (a pre-release comes before its full release).
 function newer(a, b) {
-  const [x, y] = [a, b].map((version) => version.split('.').map(Number));
+  const parse = (version) => {
+    const [core, pre] = version.split(/-(.*)/s);
+    return [core.split('.').map(Number), pre ? pre.split('.') : null];
+  };
+  const [[x, xp], [y, yp]] = [parse(a), parse(b)];
   for (let i = 0; i < 3; i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0) ? 1 : -1;
+  if (!xp || !yp) return xp === yp ? 0 : xp ? -1 : 1;
+  for (let i = 0; i < Math.max(xp.length, yp.length); i++) {
+    if (xp[i] === yp[i]) continue;
+    if (xp[i] === undefined || yp[i] === undefined) return xp[i] === undefined ? -1 : 1;
+    const [m, n] = [Number(xp[i]), Number(yp[i])];
+    if (!Number.isNaN(m) && !Number.isNaN(n)) return m > n ? 1 : -1;
+    return xp[i] > yp[i] ? 1 : -1;
+  }
   return 0;
 }
 
