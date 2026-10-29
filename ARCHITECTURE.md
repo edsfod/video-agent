@@ -59,6 +59,8 @@ Agents and shells           other agents follow it        commands
 | `src/settings.js` | The window's settings. |
 | `src/programs.js` | Finding and running programs: the CLI, Claude Code, Codex and the other agents, shells, the plugin and licence files. |
 | `src/jobs.js` | Running the queue's tasks: each kind's command line, Agent routes, cookies for downloads, follow-ups. |
+| `src/chat-rounds.js` | The DeepSeek route: rounds of `pack --folder`, DeepSeek, `summarize --import`, until no more pictures are asked for. |
+| `src/deepseek.js` | DeepSeek's web chat in a window of its own: attach files, type, send, read the answer's code block. |
 | `src/plugins.js` | Installing the Agent plugin and copying the skill. |
 | `src/ipc.js` | Every handler the page can call. |
 | `src/window.js` | The window and the tray. |

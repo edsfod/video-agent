@@ -17,7 +17,7 @@ This file is shared by the Agent skill and the `summarize` command, so every rou
   - Take the reading that someone who knows the subject would take in context, and among such readings the one the speaker most likely meant. Do not change what was said to make it true.
   - When a statement has several such readings and they would make materially different propositions, list them as options that exclude each other and together cover every case, say which you take and why, and add it to 需确认 when the context does not decide. When it has no such reading (the transcript is garbled and no frame helps), give the nearest guess and add it to 需确认.
   - Where words easily blur the structure (nested conditions, the order of quantifiers, a necessary against a sufficient condition, a definition against a claim about the thing defined), add a formal version (logic, sets or a formula) followed by one sentence in plain language. Elsewhere write naturally.
-- **Use the pictures where they carry information.** Screen pages and frames show text, tables, charts and objects that the speech refers to or leaves out. Work what they add into the propositions where it matters and link the picture shown at that point of the video; there is no need to mention every one.
+- **The pictures are material, not illustrations.** Screen pages and frames show text, tables, charts, documents, formulas, code and objects that the speech refers to or leaves out. Read them and work what they add into the propositions: the figures in a table, what a chart shows and its key values, the wording of a document or a policy, a formula, above all what the speaker does not read out. Link a picture only where it shows the proposition beside it, not because it was on screen at that time: stock footage, a background, the speaker or a blank screen is not linked. The link text says what the picture shows, as `[<kind>：<what it shows>](frames/…)`; a picture whose content you cannot name in a few words that fit the point is not linked. There is no need to link every picture.
 - **Keep what the video says apart from what you add.** Every proposition from the video comes from the transcript, a frame or a slide and carries its timestamp; link frames that support it. You may add what helps the reader beyond the video (background, how something works, a known correction), but start each addition with `补充：` and tag each premise you supply `补全`, so neither is taken for the speaker's words; never put words or pictures into the video that it does not have. Mark anything doubtful in the video `需确认` with its timestamp instead of guessing.
 - **Claims belong to the speaker.** Write figures, news and opinions as what the video says ("视频称……", "作者认为……"), not as established fact, and keep the speaker's hedges and strength: what the speaker advises against stays advised against, not forbidden. Check them against other sources at length only when the user asks, in a separate section.
 - **Clean the transcript of recurring mishearings; keep the original.** Speech recognition turns names and terms into homophones. Take the right form from the screen pages and frames (titles, slides, burned-in subtitles) or from context. A form that is wrong every time it occurs goes into the cleaned transcript (`video-agent fix`, which keeps `transcript.srt` as it was and writes `transcript.clean.*`, used from then on); a one-off mistake, or a form that is also a real word, is corrected only in the summary. When the right form is uncertain, mark it `需确认`.
@@ -82,7 +82,7 @@ This file is shared by the Agent skill and the `summarize` command, so every rou
 | 时间 | 内容 | 出处 |
 | --- | --- | --- |
 | `00:00:00` | 一句话说清这一段讲什么、为什么值得回看 | |
-| `00:01:10` | 展示的图表或画面上的关键信息 | [画面](frames/extra/frame-00-01-10.jpg) |
+| `00:01:10` | 展示的图表或画面上的关键信息 | [<图表、截图……>：<图上是什么>](frames/extra/frame-00-01-10.jpg) |
 
 ## 详细内容
 
@@ -90,7 +90,7 @@ This file is shared by the Agent skill and the `summarize` command, so every rou
 
 ### <段落标题> `00:12:30`–`00:25:10`
 
-- **P1** `事实` `00:12:40` 规整后的命题。[画面](frames/...)
+- **P1** `事实` `00:12:40` 规整后的命题。[<图表、截图……>：<图上是什么>](frames/...)
 - **P2** `引用`（<来源>；讲者认同）`00:13:05` 规整后的命题。
 - **P3** `推断` ← P1, P2 `00:14:10` 规整后的命题。
   - 形式：∀x (A(x) → B(x))。凡是 A 的都是 B，反过来不一定。

@@ -12,13 +12,15 @@ const ROUTE_NOTES = {
   claude: '在后台运行 Claude Code，按 video-agent skill 写总结，会按需补截画面。使用你的 Claude 订阅。',
   codex: '在后台运行 Codex，按同一份 skill 写总结。使用你的 Codex 订阅。',
   api: '用设置里的模型 API 写总结（字幕和画面会发给该服务商）。支持工具调用的模型会按需补截画面。',
+  deepseek: '在 DeepSeek 网页版里写总结：程序打开 DeepSeek 窗口（第一次要在里面登录），发去提示词和画面，开着深度思考和智能搜索，写完自动导入。DeepSeek 要补画面时，程序截好候选再发下一轮，直到它不再要。每一轮都能在窗口里看到。',
   copy: '把规则、模板和字幕材料复制到剪贴板，贴进任何聊天 AI。要连画面一起给，用「导出 zip」；不收 zip、文件数有上限的（如 DeepSeek 网页版最多 50 个），用「导出文件夹」，屏幕页会拼成总图凑进上限。写好后用「导入总结」存回来，画面链接照样能点开。',
 };
 
 // Each other agent the settings show is a route of its own, keyed as in the settings (pi, hermes, dsh, custom).
 const otherRoute = (route) => state.env.others.find((agent) => agent.key === route);
 // The route's name in task titles; another agent goes by the name the settings give it.
-export const routeName = (route) => ({ api: '模型 API', claude: 'Claude Code', codex: 'Codex' })[route] || otherRoute(route)?.name;
+export const routeName = (route) =>
+  ({ api: '模型 API', claude: 'Claude Code', codex: 'Codex', deepseek: 'DeepSeek 网页' })[route] || otherRoute(route)?.name;
 export const routeMissing = (route) =>
   (route === 'claude' && !state.env.claude) || (route === 'codex' && !state.env.codex) || otherRoute(route)?.found === false;
 const routeNote = (route) =>
@@ -240,7 +242,8 @@ $('run-summary').onclick = async () => {
     kind: 'summary',
     title: `总结（${name}）：${baseName(video.path)}`,
     route: state.route,
-    agent: state.route === 'api' ? undefined : state.route,
+    agent: ['api', 'deepseek'].includes(state.route) ? undefined : state.route,
+    maxFiles: state.route === 'deepseek' ? state.settings.webFiles || 50 : undefined,
     video: video.path,
     folder: info.folder,
     request,

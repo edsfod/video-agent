@@ -5,7 +5,7 @@ This file is shared by the Agent skill and the `summarize` command, so every rou
 ## Rules
 
 - **Cover the content, not only its outline.** 详细内容 is the body of the summary: go through the video part by part and keep what a viewer would want to note down, such as claims and the reasons given for them, figures, examples, steps, and what is shown on screen when it adds to what is said. Its length follows how much the video says, not a fixed size; leave out repetition, filler and small talk, and shorten only when the user asks. Write notes a reader can scan, not the talk retold sentence by sentence in its order. Judge for each part which form its content suits, such as a few sentences, a list, a table or numbered steps, rather than giving every part the same shape. Write in the language of the user's request, or of the video when there is no request.
-- **The pictures are material, not illustrations.** Screen pages and frames show text, tables, charts, documents, formulas, code and objects that the speech refers to or leaves out. Read them and write what they add into the summary: the figures in a table, what a chart shows and its key values, the wording of a document or a policy, a formula, the steps of a demonstration, above all what the speaker does not read out. Link a picture only where it shows the point beside it, not because it was on screen at that time: stock footage, a background, the speaker or a blank screen is not linked. There is no need to link every picture.
+- **The pictures are material, not illustrations.** Screen pages and frames show text, tables, charts, documents, formulas, code and objects that the speech refers to or leaves out. Read them and write what they add into the summary: the figures in a table, what a chart shows and its key values, the wording of a document or a policy, a formula, the steps of a demonstration, above all what the speaker does not read out. Link a picture only where it shows the point beside it, not because it was on screen at that time: stock footage, a background, the speaker or a blank screen is not linked. The link text says what the picture shows, as `[<kind>：<what it shows>](frames/…)`; a picture whose content you cannot name in a few words that fit the point is not linked. There is no need to link every picture.
 - **Keep what the video says apart from what you add.** Every point from the video comes from the transcript, a frame or a slide and carries its timestamp; link frames that support a point. You may add what helps the reader beyond the video (background, how something works, a definition, a known correction), but start each addition with `补充：` so it is never taken for the speaker's words, and never put words or pictures into the video that it does not have. Mark anything doubtful in the video `需确认` with its timestamp instead of guessing.
 - **Claims belong to the speaker.** Write figures, news and opinions as what the video says ("视频称……", "作者认为……"), not as established fact, and keep the speaker's hedges and strength: what the speaker advises against stays advised against, not forbidden. Check them against other sources at length only when the user asks, in a separate section.
 - **Clean the transcript of recurring mishearings; keep the original.** Speech recognition turns names and terms into homophones. Take the right form from the screen pages and frames (titles, slides, burned-in subtitles) or from context. A form that is wrong every time it occurs goes into the cleaned transcript (`video-agent fix`, which keeps `transcript.srt` as it was and writes `transcript.clean.*`, used from then on); a one-off mistake, or a form that is also a real word, is corrected only in the summary. When the right form is uncertain, mark it `需确认`.
@@ -34,14 +34,14 @@ This file is shared by the Agent skill and the `summarize` command, so every rou
 
 ## 要点
 
-- 一句话一个要点，按重要性排，附 `00:01:10` 和需要时的 [画面](frames/...)
+- 一句话一个要点，按重要性排，附 `00:01:10` 和需要时的 [<图表、截图……>：<图上是什么>](frames/...)
 
 ## 时间线
 
 | 时间 | 内容 | 出处 |
 | --- | --- | --- |
 | `00:00:00` | 一句话说清这一段讲什么、为什么值得回看 | |
-| `00:01:10` | 展示的图表或画面上的关键信息 | [画面](frames/extra/frame-00-01-10.jpg) |
+| `00:01:10` | 展示的图表或画面上的关键信息 | [<图表、截图……>：<图上是什么>](frames/extra/frame-00-01-10.jpg) |
 
 ## 详细内容
 

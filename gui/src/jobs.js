@@ -8,6 +8,7 @@ const fs = require('node:fs');
 const shared = require('./shared');
 const { send } = shared;
 const accounts = require('./accounts');
+const chatRounds = require('./chat-rounds');
 const models = require('./models');
 const { TaskQueue, DEFAULT_LIMITS } = require('./tasks');
 const { cookiesDir, loadSettings } = require('./settings');
@@ -126,6 +127,7 @@ function removeLeftovers(video) {
 }
 
 function startTask(task) {
+  if (task.kind === 'summary' && task.route === 'deepseek') return chatRounds.startDeepSeek(task);
   if (['summary', 'collection'].includes(task.kind) && task.route !== 'api') return startAgent(task);
   const [command, ...prefix] = cliCommand();
   const args = [...prefix, ...cliArgs(task)];
@@ -275,7 +277,7 @@ function followUp(task) {
 function createQueue() {
   shared.queue = new TaskQueue({
     start: startTask,
-    stop: (task) => stopJob(task.id),
+    stop: (task) => (task.route === 'deepseek' ? chatRounds.stop() : stopJob(task.id)),
     changed: () => {
       updateTray();
       send('tasks:changed', shared.queue.list());

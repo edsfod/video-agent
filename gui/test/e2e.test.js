@@ -20,7 +20,17 @@ const VIDEO = path.join(ROOT, 'media', 'sample clip [e2e].mp4');
 const VENV = path.resolve(GUI, '..', '.venv', 'Scripts');
 const PATH_KEY = Object.keys(process.env).find((key) => key.toUpperCase() === 'PATH') || 'PATH';
 const SEARCH = fs.existsSync(VENV) && !process.env.VA_E2E_EXE ? `${VENV};${process.env[PATH_KEY]}` : process.env[PATH_KEY];
-const ENV = { ...process.env, [PATH_KEY]: SEARCH, VA_E2E_BACKGROUND: '1', APPDATA, NO_PROXY: '127.0.0.1,localhost', no_proxy: '127.0.0.1,localhost' };
+// DeepSeek's web chat is a local page with the parts deepseek.js uses (written in test.before).
+const DEEPSEEK_PAGE = path.join(ROOT, 'deepseek.html');
+const ENV = {
+  ...process.env,
+  [PATH_KEY]: SEARCH,
+  VA_E2E_BACKGROUND: '1',
+  VA_DEEPSEEK_URL: require('node:url').pathToFileURL(DEEPSEEK_PAGE).href,
+  APPDATA,
+  NO_PROXY: '127.0.0.1,localhost',
+  no_proxy: '127.0.0.1,localhost',
+};
 const SUMMARY = '# 测试视频\n\n## 概要\n\n一段测试视频。[画面](frames/extra/frame-00-00-03.jpg)\n';
 
 function cli(args) {
@@ -80,12 +90,62 @@ async function saved(check, timeout = 15_000) {
     if (Date.now() > end) assert.fail(`the settings were not saved as expected: ${JSON.stringify(settings).slice(0, 500)}`);
   }
 }
-// Every confirm() is accepted unless a test asks for the other answer.
-let refuse = false;
+// The parts of chat.deepseek.com that deepseek.js drives. The first answer asks for pictures in a 画面调整 section,
+// the next round's (its prompt starts with the candidates taken) asks for none. What it was sent is in window.sent.
+const FAKE_DEEPSEEK = `<!doctype html><meta charset="utf-8"><title>DeepSeek</title>
+<div id="chat"></div>
+<div><div><div><div><div><div>
+  <textarea></textarea>
+  <div class="ds-toggle-button">DeepThink</div><div class="ds-toggle-button ds-toggle-button--selected">Search</div>
+  <input type="file" multiple hidden>
+  <div id="send" role="button" class="ds-button ds-button--primary ds-button--circle ds-button--disabled"><svg><path d="M8 1"/></svg></div>
+</div></div></div></div></div></div>
+<script>
+  const box = document.querySelector('textarea');
+  const send = document.getElementById('send');
+  const icon = send.querySelector('path');
+  let files = [];
+  window.sent = [];
+  document.querySelector('input').onchange = (event) => (files = [...event.target.files].map((file) => file.name));
+  for (const button of document.querySelectorAll('.ds-toggle-button')) button.onclick = () => button.classList.toggle('ds-toggle-button--selected');
+  setInterval(() => send.classList.toggle('ds-button--disabled', !box.value), 50);
+  send.onclick = () => {
+    if (!box.value) return;
+    const text = box.value;
+    const toggles = [...document.querySelectorAll('.ds-toggle-button--selected')].map((button) => button.textContent);
+    window.sent.push({ text, files, toggles });
+    box.value = '';
+    files = [];
+    icon.setAttribute('d', 'M2 4'); // the stop square while writing
+    setTimeout(() => {
+      const next = text.startsWith('我照你上一稿');
+      const answer = document.createElement('div');
+      answer.className = 'ds-markdown';
+      const code = document.createElement('pre');
+      code.textContent = '# 测试视频\\n\\n视频：x · 时长：0:08\\n\\n## 概要\\n\\n' +
+        (next ? '第二轮写的测试总结，用上了补截的候选。\\n' : '第一轮写的测试总结，讲了彩条和测试图案。\\n\\n## 画面调整\\n\\n- 补截：00:00:01–00:00:06 彩条\\n');
+      answer.append(code);
+      document.getElementById('chat').append(answer);
+      icon.setAttribute('d', 'M8 1');
+    }, 2500);
+  };
+</script>`;
+
+// Every confirm() is accepted unless a test asks for the other answer (refuse). They are answered inside the page:
+// Electron shows confirm() and alert() as native message boxes, which Windows brings onto the screen even for a window
+// placed off it (user report, 2026-10-29: two showed on the desktop during a test run).
+const answerDialogs = () =>
+  page.evaluate(() => {
+    window.vaRefuse = false;
+    window.confirm = () => !window.vaRefuse;
+    window.alert = () => {};
+  });
+const refuse = (value) => page.evaluate((answer) => (window.vaRefuse = answer), value);
 let model;
 
 test.before(async () => {
   makeVideo();
+  fs.writeFileSync(DEEPSEEK_PAGE, FAKE_DEEPSEEK);
   model = await fakeModel();
   cli(['config', '--provider', 'openai', '--model', 'fake-model', '--base-url', `http://127.0.0.1:${model.server.address().port}/v1`]);
   const userData = path.join(ROOT, 'gui-data');
@@ -100,7 +160,8 @@ test.before(async () => {
     env: ENV,
   });
   page = await app.firstWindow();
-  page.on('dialog', (dialog) => (refuse ? dialog.dismiss() : dialog.accept()));
+  page.on('dialog', (dialog) => dialog.accept()); // only if one gets past answerDialogs
+  await answerDialogs();
   await page.waitForSelector('#video-list .video-item .badge:text("未处理")');
   // Nothing is open at start; the tests work on the one video.
   assert.equal(await page.isVisible('#empty-pick'), true);
@@ -110,7 +171,7 @@ test.before(async () => {
 
 // A test that fails halfway can leave a dialog open or a stub in place, which would fail every test after it.
 test.afterEach(async () => {
-  refuse = false;
+  await refuse(false).catch(() => {});
   await app?.evaluate(() => {
     globalThis.vaRestoreDialogs?.();
     delete globalThis.vaRestoreDialogs;
@@ -208,6 +269,33 @@ test('summary through the model API, with one frame tool round', async () => {
   await page.click('#summary a');
   await page.waitForSelector('#lightbox[open]');
   await page.click('#lightbox');
+});
+
+devTest('summary through DeepSeek\'s web chat, in rounds until it asks for no more pictures', async () => {
+  await page.click('.tabs button[data-tab=summary]');
+  await page.check('input[name=route][value=deepseek]');
+  await page.click('#run-summary');
+  const done = async () => {
+    for (const end = Date.now() + 120_000; ; await new Promise((resolve) => setTimeout(resolve, 500))) {
+      const task = (await page.evaluate(() => window.va.tasks())).find((item) => item.title.startsWith('总结（DeepSeek 网页'));
+      if (task && !['queued', 'running'].includes(task.status)) return task;
+      if (Date.now() > end) assert.fail('the DeepSeek task did not end');
+    }
+  };
+  const task = await done();
+  const output = await page.evaluate((id) => window.va.taskOutput(id), task.id);
+  assert.equal(task.status, 'done', JSON.stringify(output).slice(-1500));
+  const sent = await app.evaluate(({ BrowserWindow }) =>
+    BrowserWindow.getAllWindows().find((win) => win.getTitle() === 'DeepSeek').webContents.executeJavaScript('window.sent'));
+  assert.equal(sent.length, 2, 'a second round for the pictures asked for, then none');
+  assert.match(sent[0].text, /# Writing a video summary/);
+  assert.deepEqual(sent[0].toggles, ['DeepThink', 'Search'], 'DeepThink and Search on');
+  assert.ok(sent[0].files.length > 0 && sent[0].files.every((name) => name.endsWith('.jpg')));
+  assert.match(sent[1].text, /^我照你上一稿/);
+  assert.ok(sent[1].files.length >= 1 && sent[1].files.every((name) => name.includes('补截')));
+  // A summary was there already (the model API's), so both rounds are kept as versions beside it.
+  const versions = JSON.parse(cli(['versions', VIDEO, '-o', WORKSPACE, '--json'])).versions.filter((item) => item.source === 'DeepSeek 网页');
+  assert.deepEqual(versions.map((item) => item.note).sort(), ['第 1 轮', '第 2 轮']);
 });
 
 devTest('copy material puts the rules and transcript on the clipboard', async () => {
@@ -340,10 +428,10 @@ devTest('a collection lists its videos and copies the material for its overview'
   await page.waitForFunction(() => document.querySelector('#collection-state').textContent === '');
   assert.equal(JSON.parse(cli(['collection', 'show', '测试合集', '-o', WORKSPACE])).source.auto, true);
   // 压缩各集 asks before replacing files that are not this program's downloads; dismissed, it compresses none.
-  refuse = true;
+  await refuse(true);
   await page.click('#collection-compress-all');
   await page.waitForFunction(() => document.querySelector('#collection-state').textContent === '没有要压缩的。');
-  refuse = false;
+  await refuse(false);
   await page.click('#collection-unfollow');
   await page.waitForSelector('#collection-follow-form:not([hidden])');
   // A video in a collection is not under 视频 and not spread out in the sidebar: it opens from the collection's page,
@@ -495,7 +583,8 @@ test('closing the window keeps the app in the tray', async () => {
   const labels = await app.evaluate(() => global.vaTray.labels());
   for (const label of ['显示窗口', '添加本地视频…', '打开日志文件夹', '退出']) assert.ok(labels.includes(label), label);
   assert.equal(await app.evaluate(() => global.vaTray.tooltip()), 'Video Agent');
-  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].close());
+  // The main window, not DeepSeek's, which an earlier test opened.
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find((win) => win.getTitle() !== 'DeepSeek').close());
   assert.equal(await app.evaluate(() => global.vaTray.windowVisible()), false);
   await app.evaluate(() => global.vaTray.click('显示窗口'));
   assert.equal(await app.evaluate(() => global.vaTray.windowVisible()), true);
