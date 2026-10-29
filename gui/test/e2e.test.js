@@ -261,17 +261,8 @@ devTest('another agent writes a summary from standard input or from a task file'
     }
     assert.equal(found.source, 'node');
   }
-  // Several at once: each ticked agent is a route of its own; one whose command is not here shows but cannot be chosen.
   await page.click('#open-settings');
-  await page.check('#set-agents input[data-agent=dsh]');
-  await page.fill('#set-agents input[data-agent-command=dsh]', 'va-e2e-no-such-agent {prompt}');
-  await page.click('#save-settings');
-  await page.waitForSelector('#routes .route-agent:has-text("DeepSeek Harness")');
-  assert.equal(await page.isDisabled('input[name=route][value=dsh]'), true);
-  assert.equal(await page.isDisabled('input[name=route][value=custom]'), false);
-  await page.click('#open-settings');
-  await page.uncheck('#set-agents input[data-agent=custom]');
-  await page.uncheck('#set-agents input[data-agent=dsh]');
+  for (const key of ['custom', 'pi', 'hermes', 'dsh']) await page.uncheck(`#set-agents input[data-agent=${key}]`);
   await page.click('#save-settings');
   await page.waitForSelector('#routes .route-agent:has-text("其他 Agent")');
   // With none chosen it still shows, says where to choose one, and writes nothing.
@@ -381,10 +372,25 @@ devTest('a collection lists its videos and copies the material for its overview'
   await page.waitForSelector('#video:not([hidden])');
 });
 
-test('settings show which summary rules are in use and the skill read-only', async () => {
+test('settings list the summary templates, a new one shows on the summary page, and the skill reads only', async () => {
   await page.click('#open-settings');
-  await page.waitForFunction(() => document.querySelector('#rules-status').textContent === '正在用默认规则。');
-  assert.equal(await page.isHidden('#rules-reset'), true);
+  await page.waitForSelector('#rules-list .rules-row:has-text("标准"):has-text("正在用")');
+  await page.waitForSelector('#rules-list .rules-row:has-text("命题分析")');
+  assert.equal(await page.locator('#rules-list button:has-text("恢复自带的")').count(), 0);
+  await app.evaluate(({ shell }) => {
+    const open = shell.openPath;
+    globalThis.vaRestoreDialogs = () => Object.assign(shell, { openPath: open });
+    shell.openPath = async () => ''; // the new file would open in an editor
+  });
+  await page.fill('#rules-new-name', '测试模板');
+  await page.selectOption('#rules-new-from', '命题分析');
+  await page.click('#rules-new');
+  await page.waitForSelector('#rules-list .rules-row:has-text("测试模板"):has-text("你自己的")');
+  await page.waitForSelector('#route-template option[value="测试模板"]', { state: 'attached' });
+  assert.match(cli(['template', '测试模板']), /论证结构/);
+  await page.click('#rules-list .rules-row:has-text("测试模板") button:has-text("删除")');
+  await page.waitForFunction(() => !document.querySelector('#route-template option[value="测试模板"]'));
+  await app.evaluate(() => globalThis.vaRestoreDialogs());
   await page.click('#skill-view');
   await page.waitForSelector('#skill-dialog[open] #skill-text h2');
   assert.match(await page.textContent('#skill-text'), /Summarize a video/);

@@ -145,6 +145,10 @@
                 <label><input type="radio" name="route" value="api" /> 模型 API</label>
               </div>
               <p id="route-note" class="muted"></p>
+              <div class="route-model" title="合集页的合集总结和学习提纲也用这里选的模板">
+                <label>模板<select id="route-template"></select></label>
+                <span id="route-template-note" class="muted small-text"></span>
+              </div>
               <div id="route-model-label" class="route-model" hidden title="合集页用同一种方式时也用这里选的">
                 <label>模型<select id="route-model"></select></label>
                 <input id="route-model-custom" type="text" spellcheck="false" placeholder="模型名" hidden />
@@ -327,16 +331,16 @@
         <h3>其他 Agent</h3>
         <p class="muted small-text">除了 Claude Code 和 Codex，也可以让别的命令行 Agent 在后台写总结：勾上的每一个都会出现在总结的方式里，命令可以改，也可以填你自己的。它们读同一份 skill 照着做。注意：这些 Agent 不像 Codex 那样只能动工作区，它们以你的身份运行命令。命令里写 <code>{prompt}</code> 的，任务放在这个位置；不写的，任务从标准输入传进去。</p>
         <div id="set-agents" class="agent-rows"></div>
-        <h3>总结规则和模板</h3>
-        <p class="muted small-text">几种总结方式和「复制材料」都按这份规则写。可以改成你自己的写法，比如更长、更短、固定要哪几节；更新程序不会覆盖你的版本。</p>
-        <p id="rules-status" class="muted small-text"></p>
+        <h3>总结模板</h3>
+        <p class="muted small-text">模板是总结的规则和格式。几种总结方式和「复制材料」都按总结页上选的模板写。自带「标准」和「命题分析」两份：可以直接改，更新程序不会覆盖你改过的；也可以照着一份新建，起个名字，改成你自己的写法。</p>
+        <div id="rules-list" class="rules-list"></div>
         <span class="row">
-          <button id="rules-edit" type="button">编辑…</button>
-          <button id="rules-compare" type="button" hidden>打开新版默认对比</button>
-          <button id="rules-accept" type="button" hidden>已合并，不再提示</button>
-          <button id="rules-reset" type="button" class="ghost" hidden>恢复默认</button>
+          <input id="rules-new-name" type="text" spellcheck="false" placeholder="新模板的名字" />
+          <label>照着<select id="rules-new-from"></select></label>
+          <button id="rules-new" type="button">新建并编辑…</button>
           <button id="skill-view" type="button" class="ghost">查看 skill</button>
         </span>
+        <p id="rules-status" class="muted small-text"></p>
         <h3>更新</h3>
         <p id="update-status" class="muted small-text"></p>
         <span class="row">

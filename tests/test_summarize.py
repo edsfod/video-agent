@@ -15,9 +15,9 @@ from video_agent.summarize import (
   evidence_images,
   list_models,
   summarize_video,
-  template,
   video_line,
 )
+from video_agent.templates import text as template
 
 SUMMARY = '# 测试视频\n\n## 概要\n\n一段测试视频，`00:00:03` 展示图表。[画面](frames/extra/frame-00-00-03.jpg)\n'
 
@@ -351,8 +351,8 @@ def test_screen_pages_go_on_contact_sheets_when_they_exceed_the_budget(tmp_path)
   )
 
 
-def test_the_users_copy_of_the_rules_is_used_and_knows_when_the_default_changed(capsys):
-  from video_agent import cli, summarize
+def test_the_users_copy_of_a_template_is_used_and_knows_when_the_built_in_one_changed(capsys):
+  from video_agent import cli, templates
 
   assert cli.main(['template', '--info']) == 0
   assert json.loads(capsys.readouterr().out)['customized'] is False
@@ -365,18 +365,63 @@ def test_the_users_copy_of_the_rules_is_used_and_knows_when_the_default_changed(
   assert cli.main(['template']) == 0
   assert capsys.readouterr().out.endswith('- 全部用英文写。\n')
 
-  original = summarize.default_template
-  summarize.default_template = lambda: original() + '\n新规则\n'
+  original = templates.built_in
+  templates.built_in = lambda name: original(name) + '\n新规则\n'
   try:
-    assert summarize.template_info()['outdated'] is True
+    assert templates.info()['outdated'] is True
     assert cli.main(['template']) == 0
-    assert 'older default' in capsys.readouterr().err
-    assert summarize.accept_template()['outdated'] is False
+    assert 'older version' in capsys.readouterr().err
+    assert templates.accept()['outdated'] is False
     assert template().endswith('- 全部用英文写。\n'), 'accepting keeps the copy as it is'
   finally:
-    summarize.default_template = original
-  assert summarize.reset_template()['customized'] is False
-  assert template() == summarize.default_template()
+    templates.built_in = original
+  assert templates.reset()['customized'] is False
+  assert template() == templates.built_in(templates.STANDARD)
+
+
+def test_several_templates_one_chosen_and_one_named_per_summary(processed, capsys):
+  from video_agent import cli, templates
+
+  assert cli.main(['template', '--list']) == 0
+  listed = json.loads(capsys.readouterr().out)
+  assert [entry['name'] for entry in listed] == ['标准', '命题分析']
+  assert [entry['current'] for entry in listed] == [True, False]
+  assert '论证结构' in templates.text('命题分析') and '论证结构' not in template()
+
+  assert cli.main(['template', '命题分析', '--copy', '我的']) == 0
+  assert json.loads(capsys.readouterr().out)['builtin'] is False
+  with pytest.raises(templates.TemplateError):
+    templates.copy('标准', '我的')
+  with pytest.raises(templates.TemplateError):
+    templates.copy('标准', 'a/b')
+  assert cli.main(['template', '我的', '--use']) == 0
+  capsys.readouterr()
+  assert template() == templates.text('命题分析')
+
+  video, workspace = processed
+  assert cli.main(['pack', str(video), '-o', str(workspace)]) == 0
+  assert '论证结构' in capsys.readouterr().out
+  assert cli.main(['pack', str(video), '-o', str(workspace), '--template', '标准']) == 0
+  assert '论证结构' not in capsys.readouterr().out
+  with pytest.raises(SystemExit):
+    cli.main(['pack', str(video), '-o', str(workspace), '--template', '没有这个'])
+  assert 'template --list' in capsys.readouterr().err
+
+  assert templates.reset('我的') == {'name': '我的', 'deleted': True}
+  assert templates.current() == '标准'
+
+
+def test_the_one_copy_from_before_moves_into_the_templates(capsys):
+  from video_agent import settings, templates
+
+  old = settings.settings_path().parent / 'summary.md'
+  old.parent.mkdir(parents=True, exist_ok=True)
+  old.write_text('<!-- video-agent default: 0123456789ab -->\r\n' + templates.built_in('命题分析'), encoding='utf-8')
+  assert templates.current() == '命题分析' and not old.exists(), 'a copy that is a built-in word for word chooses it'
+
+  old.write_text('<!-- video-agent default: 0123456789ab -->\n# 我自己的规则\n', encoding='utf-8')
+  assert templates.text('标准') == '# 我自己的规则\n', 'any other copy becomes the copy of the standard one'
+  assert not old.exists() and templates.info('标准')['outdated'] is True
 
 
 def test_imported_windows_line_endings_stay_single(processed):

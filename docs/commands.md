@@ -189,7 +189,19 @@ video-agent config --delete-key
 
 ### `template`
 
-Print the summary rules and Markdown template shared by the Agent skill and `summarize`.
+```powershell
+video-agent template [NAME] [--list | --use | --default | --edit | --copy NEW | --reset | --accept | --info]
+```
+
+Print the summary rules and Markdown template that the Agent skill, `summarize` and `pack` follow: the chosen template, or the one named. Several exist side by side: the built-in `标准` and `命题分析` (claims as numbered propositions tagged 事实, 观点, 推断 or 引用, with the video's line of argument), and any of the user's own in `%APPDATA%\video-agent\templates`. `summarize` and `pack` take `--template NAME` for one summary.
+
+- `--list`: every template as JSON, the chosen one marked `current`.
+- `--use`: choose the named template for every summary from now on.
+- `--default`: print a built-in template as it ships, not the user's copy of it.
+- `--edit`: make the user's copy of a built-in template (once) and print its path as JSON; updates never change it.
+- `--copy NEW`: make a template of the user's own named `NEW` from the named one.
+- `--reset`: delete the user's copy of a built-in template, or a template of the user's own.
+- `--accept`, `--info`: mark a copy as up to date with the built-in's changes; print where it is and whether it is outdated.
 
 ## Output layout
 

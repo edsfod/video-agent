@@ -21,6 +21,7 @@ const state = {
   tools: null, // `video-agent tools`: where FFmpeg, yt-dlp and AutoSlides Extractor were found (null: not found)
   term: null,
   accounts: [], // accounts.js status() of each site: { key, name, why, urls, ready, loggedIn, user? }
+  templates: [], // `video-agent template --list`: each summary template, the chosen one marked current
 };
 let ptyCounter = 0;
 
@@ -73,10 +74,13 @@ function logAppend(text) {
 
 // Adds a task, or shows the same one already in the queue. Resolves to true when a new task was added.
 async function addTask(spec) {
-  // A summary runs with the model chosen on the summary page for its route, if any.
-  if (['summary', 'collection'].includes(spec.kind) && spec.route && modelTakes(spec.route)) {
-    const chosen = [modelFor(spec.route), effortFor(spec.route)].filter(Boolean);
-    spec = { ...spec, model: modelFor(spec.route) || undefined, effort: effortFor(spec.route) || undefined };
+  // A summary runs with the template chosen on the summary page, and the model chosen there for its route, if any.
+  if (['summary', 'collection'].includes(spec.kind) && spec.route) {
+    const model = modelTakes(spec.route) ? modelFor(spec.route) : '';
+    const effort = modelTakes(spec.route) ? effortFor(spec.route) : '';
+    const template = chosenTemplate();
+    spec = { ...spec, model: model || undefined, effort: effort || undefined, template };
+    const chosen = [model, effort, template === STANDARD_TEMPLATE ? '' : template].filter(Boolean);
     if (chosen.length) spec.title = spec.title.replace(/^(总结|合集总结|学习提纲)（([^）]+)）/, `$1（$2 · ${chosen.join(' · ')}）`);
   }
   const result = await window.va.addTask(spec);
@@ -978,7 +982,9 @@ function codexLine(line) {
 }
 
 // The prompt comes from the CLI (`pack`), the same text the zip holds.
-const packArgs = (video) => ['pack', video.path, '-o', state.settings.workspace, '--request', $('summary-request').value.trim()];
+const packArgs = (video) => [
+  'pack', video.path, '-o', state.settings.workspace, '--request', $('summary-request').value.trim(), '--template', chosenTemplate(),
+];
 
 function summaryState(text) {
   $('summary-state').textContent = text;
@@ -1409,7 +1415,7 @@ async function writeCollectionFile(guide) {
   const request = $('collection-request').value.trim();
   const file = guide ? '学习提纲' : '合集总结';
   if (route === 'copy') {
-    const args = ['pack', '--collection', item.name, '-o', state.settings.workspace, '--request', request];
+    const args = ['pack', '--collection', item.name, '-o', state.settings.workspace, '--request', request, '--template', chosenTemplate()];
     if (guide) args.push('--guide');
     const result = await window.va.cliText(args);
     if (result.code !== 0) return ($('collection-state').textContent = `没有复制：${(result.err || result.out).trim()}`);
@@ -1899,39 +1905,81 @@ function renderWorkspaceLock() {
   $('workspace-lock').hidden = active === 0;
 }
 
-// ---------- summary rules ----------
-// The rules every summary route follows; the CLI keeps the user's copy (video-agent template --edit).
+// ---------- summary templates ----------
+// Several summary templates exist side by side (user request, 2026-10-29). The one chosen on the summary page is the
+// CLI's chosen template, so an Agent run from a terminal follows it too; each task keeps the one it was added with.
 
-async function renderRules() {
-  const info = await window.va.cliJson(['template', '--info']);
-  if (info.error) return ($('rules-status').textContent = `读取不到：${info.error}`);
-  $('rules-status').textContent = !info.customized
-    ? '正在用默认规则。'
-    : info.outdated
-      ? '正在用你改过的版本。新版的默认规则有改动：打开对比，把需要的改动合并进你的版本，再点「已合并」。'
-      : '正在用你改过的版本。';
-  $('rules-reset').hidden = !info.customized;
-  $('rules-compare').hidden = $('rules-accept').hidden = !info.outdated;
+const STANDARD_TEMPLATE = '标准';
+const chosenTemplate = () => state.templates.find((entry) => entry.current)?.name || STANDARD_TEMPLATE;
+const templateLabel = (entry) => (!entry.builtin ? `${entry.name}（自己的）` : entry.customized ? `${entry.name}（改过）` : entry.name);
+
+async function loadTemplates() {
+  const list = await window.va.cliJson(['template', '--list']);
+  $('route-template-note').textContent = list.error ? `读取不到模板：${list.error}` : '';
+  if (list.error) return;
+  state.templates = list;
+  $('route-template').replaceChildren(...list.map((entry) => element('option', { value: entry.name, textContent: templateLabel(entry) })));
+  $('route-template').value = chosenTemplate();
 }
 
-async function rulesAction(flag) {
-  const info = await window.va.cliJson(['template', flag]);
+$('route-template').onchange = async () => {
+  const result = await window.va.cliJson(['template', $('route-template').value, '--use']);
+  if (result.error) alert(`没有换成：${result.error}`);
+  await loadTemplates();
+};
+
+async function templateAction(name, flag) {
+  const info = await window.va.cliJson(['template', name, flag]);
   if (info.error) alert(`没有成功：${info.error}`);
   await renderRules();
   return info;
 }
 
-$('rules-edit').onclick = async () => {
-  const info = await rulesAction('--edit');
-  if (info.path) window.va.open(info.path);
+async function renderRules() {
+  await loadTemplates();
+  const button = (text, onclick, className = '') => element('button', { type: 'button', textContent: text, onclick, className });
+  const status = (entry) =>
+    (!entry.builtin ? '你自己的' : !entry.customized ? '自带' : entry.outdated ? '你改过；新版自带的这份有改动：打开对比，把要的改动合并进你的，再点「已合并」' : '你改过') +
+    (entry.current ? ' · 正在用' : '');
+  $('rules-list').replaceChildren(
+    ...state.templates.map((entry) =>
+      element('div', { className: 'rules-row' }, [
+        element('strong', { textContent: entry.name }),
+        element('span', { className: 'muted small-text', textContent: status(entry) }),
+        button('编辑…', async () => {
+          const info = await templateAction(entry.name, '--edit');
+          if (info.path) window.va.open(info.path);
+        }),
+        ...(entry.outdated
+          ? [
+              button('打开新版对比', () => (window.va.open(entry.default), window.va.open(entry.path))),
+              button('已合并', () => templateAction(entry.name, '--accept')),
+            ]
+          : []),
+        ...(entry.customized
+          ? [button('恢复自带的', () => confirm(`删掉你改过的「${entry.name}」，回到自带的吗？`) && templateAction(entry.name, '--reset'), 'ghost')]
+          : []),
+        ...(!entry.builtin
+          ? [button('删除', () => confirm(`删除模板「${entry.name}」吗？`) && templateAction(entry.name, '--reset'), 'ghost')]
+          : []),
+      ]),
+    ),
+  );
+  const from = $('rules-new-from').value;
+  $('rules-new-from').replaceChildren(...state.templates.map((entry) => element('option', { value: entry.name, textContent: entry.name })));
+  $('rules-new-from').value = state.templates.some((entry) => entry.name === from) ? from : chosenTemplate();
+}
+
+$('rules-new').onclick = async () => {
+  const name = $('rules-new-name').value.trim();
+  if (!name) return $('rules-new-name').focus();
+  const info = await window.va.cliJson(['template', $('rules-new-from').value, '--copy', name]);
+  $('rules-status').textContent = info.error ? `没有新建：${info.error}` : `已新建「${name}」，在总结页上选它就按它写。`;
+  if (info.error) return;
+  $('rules-new-name').value = '';
+  await renderRules();
+  window.va.open(info.path);
 };
-$('rules-compare').onclick = async () => {
-  const info = await rulesAction('--info');
-  if (info.default) window.va.open(info.default);
-  if (info.path) window.va.open(info.path);
-};
-$('rules-accept').onclick = () => rulesAction('--accept');
-$('rules-reset').onclick = () => confirm('删除你改过的版本，回到默认规则吗？') && rulesAction('--reset');
 $('skill-view').onclick = async () => {
   $('skill-text').innerHTML = DOMPurify.sanitize(marked.parse(await window.va.readSkill()));
   $('skill-dialog').showModal();
@@ -2124,6 +2172,7 @@ async function init() {
   // Nothing is opened at start (user request, 2026-10-29: the first collection was). The list waits for the
   // collections, which hide their videos from 视频; drawn before, it showed every video for a moment.
   renderVideo();
+  loadTemplates();
   await loadCollections();
   window.va.cliJson(['tools', '--json']).then((found) => {
     state.tools = found.error ? null : found;

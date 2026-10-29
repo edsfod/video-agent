@@ -6,14 +6,12 @@ for more frames: the `frame` tool saves one into `frames/extra/` and sends the i
 """
 
 import base64
-import hashlib
 import json
 import math
 import re
 import shutil
 import tempfile
 import zipfile
-from importlib import resources
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
@@ -21,7 +19,7 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util import Retry
 
-from . import files, media, processor, settings, versions
+from . import files, media, processor, templates, versions
 from .processor import asset_folder
 
 SUMMARY_NAME = '总结.md'
@@ -42,70 +40,6 @@ EXTRA_NAME = re.compile(r'frame-(\d{2})-(\d{2})-(\d{2})\.jpg$')
 
 class SummaryError(RuntimeError):
   pass
-
-
-def default_template():
-  return resources.files('video_agent').joinpath('prompts/summary.md').read_text(encoding='utf-8')
-
-
-# The user's own copy of the rules and template, used by every route instead of the default. Its first line records
-# which default it was copied from, so an update that changes the default can say so; updates never touch the copy.
-BASE_MARK = re.compile(r'<!-- video-agent default: (\w+) -->\n?')
-
-
-def template_path():
-  return settings.settings_path().parent / 'summary.md'
-
-
-def _fingerprint(text):
-  return hashlib.sha256(text.encode('utf-8')).hexdigest()[:12]
-
-
-def template():
-  """The rules and template every route follows: the user's copy when there is one, otherwise the default."""
-  path = template_path()
-  if path.is_file():
-    return BASE_MARK.sub('', path.read_text(encoding='utf-8-sig'), count=1)
-  return default_template()
-
-
-def template_info():
-  """Where the user's copy is, whether there is one, and whether the default changed since it was copied. With a copy,
-  the current default is written beside it (summary.default.md) for comparing."""
-  path = template_path()
-  info = {'path': str(path), 'customized': path.is_file(), 'outdated': False, 'default': None}
-  if info['customized']:
-    found = BASE_MARK.match(path.read_text(encoding='utf-8-sig'))
-    info['outdated'] = not found or found.group(1) != _fingerprint(default_template())
-    default = path.with_name('summary.default.md')
-    files.write_text(default, default_template())
-    info['default'] = str(default)
-  return info
-
-
-def edit_template():
-  """Creates the user's copy from the default when there is none; returns template_info()."""
-  path = template_path()
-  if not path.is_file():
-    default = default_template()
-    files.write_text(path, f'<!-- video-agent default: {_fingerprint(default)} -->\n{default}')
-  return template_info()
-
-
-def accept_template():
-  """Marks the user's copy as up to date with the current default (after merging its changes by hand)."""
-  path = template_path()
-  if path.is_file():
-    body = BASE_MARK.sub('', path.read_text(encoding='utf-8-sig'), count=1)
-    files.write_text(path, f'<!-- video-agent default: {_fingerprint(default_template())} -->\n{body}')
-  return template_info()
-
-
-def reset_template():
-  """Removes the user's copy, so every route follows the default again."""
-  template_path().unlink(missing_ok=True)
-  template_path().with_name('summary.default.md').unlink(missing_ok=True)
-  return template_info()
 
 
 def _session():
@@ -400,6 +334,7 @@ def summarize_video(
   use_tools=True,
   overwrite=False,
   status=print,
+  template=None,
 ):
   video, info = media.probe(video)
   asset = asset_folder(workspace, video)
@@ -408,15 +343,16 @@ def summarize_video(
     raise SummaryError(f'{video.name} has not been processed in {workspace}; run process with the same --output first')
   if config['provider'] == 'anthropic' and not key:
     raise SummaryError('No API key for anthropic; run: video-agent config --provider anthropic --set-key')
+  rules = templates.text(template)
   processor.update_context(asset)
   with files.video_lock(asset, 'summarize'):
     return _summarize_locked(
-      video, info, asset, config, key, request, max_images, max_extra_frames, use_tools, overwrite, status
+      video, info, asset, config, key, request, max_images, max_extra_frames, use_tools, overwrite, status, rules
     )
 
 
 def _summarize_locked(
-  video, info, asset, config, key, request, max_images, max_extra_frames, use_tools, overwrite, status
+  video, info, asset, config, key, request, max_images, max_extra_frames, use_tools, overwrite, status, rules
 ):
   manifest_path, context_path = asset / 'manifest.json', asset / 'summary-context.md'
   target = asset / SUMMARY_NAME
@@ -429,14 +365,16 @@ def _summarize_locked(
         f'{video.name}: {dropped} screen pages do not fit in {max_images} images even on sheets; pass --max-images'
       )
     text = _ask(
-      video, info, asset, config, key, request, images, max_extra_frames, use_tools, context_path, target, status
+      video, info, asset, config, key, request, images, max_extra_frames, use_tools, context_path, target, status, rules
     )
   # An existing summary stays current unless the new one is asked to replace it; either way neither is lost.
   path, _ = versions.save(target, text, source=f'模型 API · {config["model"]}', note=request, make_current=overwrite)
   return path
 
 
-def _ask(video, info, asset, config, key, request, images, max_extra_frames, use_tools, context_path, target, status):
+def _ask(
+  video, info, asset, config, key, request, images, max_extra_frames, use_tools, context_path, target, status, rules
+):
   tools = _Tools(video, asset, media.duration(info), max_extra_frames, status) if use_tools else None
   intro = '\n\n'.join(
     part
@@ -459,7 +397,7 @@ def _ask(video, info, asset, config, key, request, images, max_extra_frames, use
     + ('' if use_tools else ' (no tool calling)')
   )
   call = _anthropic if config['provider'] == 'anthropic' else _openai
-  text = _clean(call(_session(), config, key, template(), intro, images, tools))
+  text = _clean(call(_session(), config, key, rules, intro, images, tools))
   if len(text.strip()) < 40:
     raise SummaryError('The model returned no usable summary')
   return text
@@ -631,7 +569,7 @@ def _numbered_pictures(asset, manifest, budget, work_dir):
   return entries, note + '\n\n' + '\n'.join(lines)
 
 
-def material(video, workspace, *, request='', max_images=40, work_dir=None, max_files=None):
+def material(video, workspace, *, request='', max_images=40, work_dir=None, max_files=None, template=None):
   """The prompt for a chat AI: rules, template and the evidence. With `work_dir`, also the files that go along as
   (path in the zip, file): every screen page and up to `max_images` other frames, at their paths in the video's folder
   (so links written from the evidence still work once the summary is imported there), and 2x2 contact sheets of the
@@ -674,7 +612,7 @@ def material(video, workspace, *, request='', max_images=40, work_dir=None, max_
       f'我的要求：{request}' if request else '',
       *notes,
       f'「视频」那一行的开头照抄：{video_line(video, media.duration(info))}',
-      template(),
+      templates.text(template),
       CORRECTIONS_SECTION,
       '---',
       (asset / 'summary-context.md').read_text(encoding='utf-8'),
@@ -686,7 +624,7 @@ def material(video, workspace, *, request='', max_images=40, work_dir=None, max_
   return text, entries
 
 
-def pack(video, workspace, target, *, request='', max_images=40):
+def pack(video, workspace, target, *, request='', max_images=40, template=None):
   """Writes a zip with 提示词.md, the screen pages, frames and contact sheets, for chat AIs that take files. Returns
   the zip and the number of pictures in it."""
   target = Path(target)
@@ -694,7 +632,9 @@ def pack(video, workspace, target, *, request='', max_images=40):
   temporary = files.temporary_beside(target)
   try:
     with tempfile.TemporaryDirectory(prefix='video-agent-') as work_dir:
-      text, entries = material(video, workspace, request=request, max_images=max_images, work_dir=work_dir)
+      text, entries = material(
+        video, workspace, request=request, max_images=max_images, work_dir=work_dir, template=template
+      )
       with zipfile.ZipFile(temporary, 'w') as archive:
         archive.writestr(PROMPT_NAME, text, compress_type=zipfile.ZIP_DEFLATED)
         for name, path in entries:
@@ -705,7 +645,7 @@ def pack(video, workspace, target, *, request='', max_images=40):
   return target, len(entries)
 
 
-def pack_folder(video, workspace, parent, *, request='', max_files=50):
+def pack_folder(video, workspace, parent, *, request='', max_files=50, template=None):
   """Writes a new folder in `parent` with 提示词.md and numbered pictures, `max_files` files in all, for chat AIs that
   take files one by one up to a limit and no zip. Returns the folder and the number of pictures in it."""
   if max_files < 2:
@@ -718,7 +658,9 @@ def pack_folder(video, workspace, parent, *, request='', max_files=50):
     target = parent / f'{name} ({number})'
     number += 1
   with tempfile.TemporaryDirectory(prefix='video-agent-') as work_dir:
-    text, entries = material(video, workspace, request=request, work_dir=work_dir, max_files=max_files)
+    text, entries = material(
+      video, workspace, request=request, work_dir=work_dir, max_files=max_files, template=template
+    )
     temporary = files.temporary_beside(target)
     try:
       temporary.mkdir(parents=True)
@@ -763,7 +705,7 @@ def _collection_target(workspace, name, guide):
   return collection.folder(workspace, name) / (collection.GUIDE if guide else collection.OVERVIEW)
 
 
-def collection_material(workspace, name, *, guide=False, request=''):
+def collection_material(workspace, name, *, guide=False, request='', template=None):
   """The prompt for a chat AI to write the collection overview or study guide."""
   target = _collection_target(workspace, name, guide)
   _, evidence, missing = _collection_evidence(workspace, name)
@@ -778,7 +720,7 @@ def collection_material(workspace, name, *, guide=False, request=''):
       f'请按下面的规则和模板，为合集「{name}」写 {target.name}（Markdown）。{OUTPUT_FENCE}',
       f'我的要求：{request}' if request else '',
       *notes,
-      template(),
+      templates.text(template),
       '---',
       f'合集「{name}」各集的总结，按顺序：',
       evidence,
@@ -787,13 +729,16 @@ def collection_material(workspace, name, *, guide=False, request=''):
   )
 
 
-def summarize_collection(workspace, name, config, key, *, guide=False, request='', overwrite=False, status=print):
+def summarize_collection(
+  workspace, name, config, key, *, guide=False, request='', overwrite=False, status=print, template=None
+):
   """Writes 合集总结.md or 学习提纲.md with a model API from the members' summaries."""
   from . import collection
 
   if config['provider'] == 'anthropic' and not key:
     raise SummaryError('No API key for anthropic; run: video-agent config --provider anthropic --set-key')
   target = _collection_target(workspace, name, guide)
+  rules = templates.text(template)
   with collection.lock(workspace, name, 'summarize the collection'):
     _, evidence, missing = _collection_evidence(workspace, name)
     if missing:
@@ -817,7 +762,7 @@ def summarize_collection(workspace, name, config, key, *, guide=False, request='
     )
     status(f'{name}: asking {config["provider"]} model {config["model"]} for {target.name}')
     call = _anthropic if config['provider'] == 'anthropic' else _openai
-    text = _clean(call(_session(), config, key, template(), intro, [], None))
+    text = _clean(call(_session(), config, key, rules, intro, [], None))
     if len(text.strip()) < 40:
       raise SummaryError('The model returned no usable text')
     path, _ = versions.save(target, text, source=f'模型 API · {config["model"]}', note=request, make_current=overwrite)

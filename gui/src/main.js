@@ -341,6 +341,7 @@ function cliArgs(task) {
       const args = ['summarize', '--collection', task.collection, ...out];
       if (task.model) args.push('--model', task.model);
       if (task.effort) args.push('--effort', task.effort);
+      if (task.template) args.push('--template', task.template);
       if (task.guide) args.push('--guide');
       if (task.request) args.push('--request', task.request);
       if (task.overwrite) args.push('--overwrite');
@@ -350,6 +351,7 @@ function cliArgs(task) {
       const args = ['summarize', task.video, ...out];
       if (task.model) args.push('--model', task.model);
       if (task.effort) args.push('--effort', task.effort);
+      if (task.template) args.push('--template', task.template);
       if (task.request) args.push('--request', task.request);
       if (task.overwrite) args.push('--overwrite');
       return args;
@@ -427,7 +429,10 @@ function startAgent(task) {
         `工作区是 ${workspace}，这个视频已经用 process 处理过，处理结果在 ${folder}。直接用这个文件夹，不要再运行 process，也不要上传音频。`,
         save('总结.md', `"${video}"`),
       ]
-  ).concat(request ? [`用户的要求：${request}`] : []).filter(Boolean).join('\n');
+  ).concat(
+    task.template ? [`按 video-agent template "${task.template}" 打印的规则和模板写，不用别的模板。`] : [],
+    request ? [`用户的要求：${request}`] : [],
+  ).filter(Boolean).join('\n');
   if (agent === 'claude') {
     const prompt = `用 video-agent skill 完成下面的任务。\n${text}`;
     startJob(task.id, 'claude', [

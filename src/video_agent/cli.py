@@ -6,13 +6,13 @@ import json
 import sys
 from pathlib import Path
 
-from . import collection, corrections, files, processor, settings, transcript, versions
+from . import collection, corrections, files, processor, settings, templates, transcript, versions
 from . import compress as compression
 from . import summarize as summaries
 from .download import DownloadError, download_urls
 from .media import MediaError, duration, parse_clock, probe, save_frame
 from .processor import asset_folder, process_video
-from .summarize import EFFORTS, import_summary, list_models, material, pack, pack_folder, summarize_video, template
+from .summarize import EFFORTS, import_summary, list_models, material, pack, pack_folder, summarize_video
 from .transcript import format_clock as transcript_clock
 
 # Where the window saves downloads in a workspace, and so where a followed list's new videos go by default.
@@ -232,6 +232,9 @@ def build_parser():
     metavar='FILE',
     help='save a summary written elsewhere (a file, or - for stdin) instead of calling a model',
   )
+  summarize.add_argument(
+    '--template', metavar='NAME', help='the summary template to follow (default: the chosen one; see template --list)'
+  )
   summarize.add_argument('--note', default='', help='with --import: a note kept with this version, such as the model')
   summarize.add_argument(
     '--source', default='', help='with --import: what wrote it, such as 网页 AI or Claude Code (default: 导入)'
@@ -273,6 +276,9 @@ def build_parser():
     help='the workspace passed to process (default: video-agent-output)',
   )
   packing.add_argument('--request', default='', help="the user's wishes for this summary")
+  packing.add_argument(
+    '--template', metavar='NAME', help='the summary template to follow (default: the chosen one; see template --list)'
+  )
   packing.add_argument('--zip', type=Path, help='write 提示词.md and the frames into this zip file')
   packing.add_argument(
     '--folder',
@@ -399,14 +405,19 @@ def build_parser():
   )
 
   rules = commands.add_parser(
-    'template', help='print the summary rules and template every route follows (your copy, if you made one)'
+    'template',
+    help='print the summary rules and template to follow: the chosen one, or the one named; several can exist',
   )
+  rules.add_argument('name', nargs='?', help='a template (default: the chosen one); --list lists them')
   choice = rules.add_mutually_exclusive_group()
-  choice.add_argument('--default', action='store_true', help='print the built-in default instead of your copy')
-  choice.add_argument('--edit', action='store_true', help='make your own copy (once) and print its path as JSON')
-  choice.add_argument('--reset', action='store_true', help='delete your copy and go back to the default')
-  choice.add_argument('--accept', action='store_true', help="mark your copy as up to date with the default's changes")
-  choice.add_argument('--info', action='store_true', help='print as JSON where your copy is and whether it is outdated')
+  choice.add_argument('--list', action='store_true', help='list the templates as JSON, the chosen one marked current')
+  choice.add_argument('--use', action='store_true', help='choose the named template for every summary from now on')
+  choice.add_argument('--default', action='store_true', help='print the built-in template as it ships, not your copy')
+  choice.add_argument('--edit', action='store_true', help='make your copy of a built-in (once); print its path as JSON')
+  choice.add_argument('--copy', metavar='NEW', help='make a template of your own named NEW from the named one')
+  choice.add_argument('--reset', action='store_true', help='delete your copy of a built-in, or a template of your own')
+  choice.add_argument('--accept', action='store_true', help="mark your copy as up to date with the built-in's changes")
+  choice.add_argument('--info', action='store_true', help='print as JSON where it is and whether it is outdated')
   return parser
 
 
@@ -786,17 +797,30 @@ def run(args):
     return _show(args)
 
   if args.command == 'template':
-    action = {'edit': summaries.edit_template, 'reset': summaries.reset_template}
-    action |= {'accept': summaries.accept_template, 'info': summaries.template_info}
-    chosen = next((name for name in action if getattr(args, name)), None)
-    if chosen:
-      _emit(action[chosen]())
+    if args.list:
+      _emit(templates.listing())
+    elif args.copy is not None:
+      _emit(templates.copy(args.name, args.copy))
+    elif args.use and not args.name:
+      raise ValueError('template --use needs the name of a template')
     else:
-      sys.stdout.write(summaries.default_template() if args.default else template())
-      if not args.default and summaries.template_info()['outdated']:
-        print(
-          'Note: your summary rules were copied from an older default; compare with template --default', file=sys.stderr
-        )
+      action = {'use': templates.use, 'edit': templates.edit, 'reset': templates.reset}
+      action |= {'accept': templates.accept, 'info': templates.info}
+      chosen = next((name for name in action if getattr(args, name)), None)
+      if chosen:
+        _emit(action[chosen](args.name))
+      elif args.default:
+        name = args.name or templates.current()
+        if name not in templates.BUILT_IN:
+          raise ValueError(f'{name!r} is a template of your own; only a built-in one has a version as it ships')
+        sys.stdout.write(templates.built_in(name))
+      else:
+        sys.stdout.write(templates.text(args.name))
+        if templates.info(args.name)['outdated']:
+          print(
+            'Note: your copy was made from an older version of this template; compare with template --default',
+            file=sys.stderr,
+          )
     return 0
 
   if args.command == 'config':
@@ -835,7 +859,9 @@ def run(args):
 
   if args.command == 'pack' and args.collection:
     sys.stdout.write(
-      summaries.collection_material(args.output, args.collection, guide=args.guide, request=args.request)
+      summaries.collection_material(
+        args.output, args.collection, guide=args.guide, request=args.request, template=args.template
+      )
     )
     return 0
 
@@ -855,19 +881,24 @@ def run(args):
       guide=args.guide,
       request=args.request,
       overwrite=args.overwrite,
+      template=args.template,
     )
     _written(path, args)
     return 0
 
   if args.command == 'pack':
     if args.folder:
-      target, count = pack_folder(args.video, args.output, args.folder, request=args.request, max_files=args.max_files)
+      target, count = pack_folder(
+        args.video, args.output, args.folder, request=args.request, max_files=args.max_files, template=args.template
+      )
       print(f'{target} ({count} pictures)')
     elif args.zip:
-      target, count = pack(args.video, args.output, args.zip, request=args.request, max_images=args.max_images)
+      target, count = pack(
+        args.video, args.output, args.zip, request=args.request, max_images=args.max_images, template=args.template
+      )
       print(f'{target} ({count} pictures)')
     else:
-      sys.stdout.write(material(args.video, args.output, request=args.request)[0])
+      sys.stdout.write(material(args.video, args.output, request=args.request, template=args.template)[0])
     return 0
 
   if args.command == 'summarize':
@@ -882,6 +913,7 @@ def run(args):
       max_extra_frames=args.max_extra_frames,
       use_tools=not args.no_tools,
       overwrite=args.overwrite,
+      template=args.template,
     )
     _written(path, args)
     return 0
