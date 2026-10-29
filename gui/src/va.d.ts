@@ -116,6 +116,8 @@ export interface Va {
   downloadUpdate(): Answer<Updater['download']>;
   installUpdate(force?: boolean): Answer<Updater['install']>;
   onUpdateState: Listener<ReturnType<Updater['state']>>;
+  downloadExtractor(): Promise<{ path: string; version: string }>;
+  onExtractorProgress: Listener<{ source: string; received: number; total: number }>;
   pickVideos(): Promise<string[]>;
   pickFolder(title: string): Promise<string | null>;
   pickFile(title: string, filters: { name: string; extensions: string[] }[]): Promise<string | null>;

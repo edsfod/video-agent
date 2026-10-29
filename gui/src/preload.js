@@ -30,6 +30,8 @@ const va = {
   downloadUpdate: () => ipcRenderer.invoke('update:download'),
   installUpdate: (force) => ipcRenderer.invoke('update:install', force),
   onUpdateState: listen('update:state'),
+  downloadExtractor: () => ipcRenderer.invoke('extractor:download'),
+  onExtractorProgress: listen('extractor:progress'),
   pickVideos: () => ipcRenderer.invoke('dialog:videos'),
   pickFolder: (title) => ipcRenderer.invoke('dialog:folder', title),
   pickFile: (title, filters) => ipcRenderer.invoke('dialog:file', { title, filters }),

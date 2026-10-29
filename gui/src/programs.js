@@ -51,7 +51,11 @@ function cliCommand() {
 
 // Child processes and terminals see the app's own CLI as `video-agent`, so agents and shells can run it too.
 function childEnv(extra = {}) {
+  /** @type {Record<string, string | undefined>} */
   const env = { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1', ...extra };
+  // AutoSlides Extractor downloaded from the settings, unless the user's own AUTOSLIDES_EXTRACTOR says otherwise.
+  const extractor = !env.AUTOSLIDES_EXTRACTOR && require('./extractor').downloaded();
+  if (extractor) env.AUTOSLIDES_EXTRACTOR = extractor;
   const own = bundledCli() || sourceCli();
   if (own) {
     // The copy is a plain object with Windows' own spelling (usually `Path`); adding `PATH` beside it would give the

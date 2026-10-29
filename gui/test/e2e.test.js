@@ -498,6 +498,41 @@ test('settings list the summary templates, a new one shows on the summary page, 
   await page.click('#settings button[value=cancel]');
 });
 
+devTest('the settings download AutoSlides Extractor\'s portable build into the data folder', async () => {
+  // A release as GitHub's API gives it, with a zip holding the program in a folder, served from here.
+  const files = path.join(ROOT, 'extractor-release');
+  fs.mkdirSync(path.join(files, 'pack', 'AutoSlides Extractor'), { recursive: true });
+  fs.writeFileSync(path.join(files, 'pack', 'AutoSlides Extractor', 'AutoSlidesExtractor.exe'), 'not a real program');
+  const zip = path.join(files, 'AutoSlides.Extractor-9.9.9-Windows-x64-Portable.zip');
+  execFileSync(path.join(process.env.SystemRoot, 'System32', 'tar.exe'), ['-a', '-cf', zip, '-C', path.join(files, 'pack'), 'AutoSlides Extractor'], { windowsHide: true });
+  const bytes = fs.readFileSync(zip);
+  const server = http.createServer((request, response) => {
+    if (request.url === '/release') {
+      const asset = {
+        name: path.basename(zip),
+        size: bytes.length,
+        digest: 'sha256:' + require('node:crypto').createHash('sha256').update(bytes).digest('hex'),
+        browser_download_url: `http://127.0.0.1:${server.address().port}/zip`,
+      };
+      response.end(JSON.stringify({ tag_name: 'v9.9.9', assets: [asset] }));
+    } else response.end(bytes);
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  try {
+    await app.evaluate((_, url) => (process.env.VA_EXTRACTOR_RELEASE = url), `http://127.0.0.1:${server.address().port}/release`);
+    await page.click('#open-settings');
+    await page.waitForSelector('#settings[open]');
+    await page.click('#download-extractor');
+    await page.waitForFunction(() => /已下载 v9\.9\.9|没有下载成功/.test(document.querySelector('#extractor-info').textContent));
+    assert.match(await page.textContent('#extractor-info'), /已下载 v9\.9\.9/);
+    const program = path.join(ROOT, 'gui-data', 'tools', 'AutoSlides Extractor', 'AutoSlides Extractor', 'AutoSlidesExtractor.exe');
+    assert.equal(fs.readFileSync(program, 'utf8'), 'not a real program');
+    await page.click('#close-settings');
+  } finally {
+    server.close();
+  }
+});
+
 test('settings show the version, the licence and PRIVACY.md', async () => {
   await page.click('#open-settings');
   await page.waitForSelector('#settings[open]');

@@ -104,6 +104,7 @@ function registerIpc() {
   ipcMain.handle('update:state', () => shared.updater.state());
   ipcMain.handle('update:check', () => shared.updater.check());
   ipcMain.handle('update:download', () => shared.updater.download());
+  ipcMain.handle('extractor:download', () => require('./extractor').download((progress) => send('extractor:progress', progress)));
   ipcMain.handle('update:install', (_, force) => shared.updater.install(force));
 
   ipcMain.handle('dialog:videos', async () => {

@@ -25,6 +25,7 @@ $('open-settings').onclick = async () => {
   $('env-info').textContent =
     `正在用的命令：${cli} · Claude Code：${state.env.claude ? '已找到' : '没有找到'} · Codex：${state.env.codex ? '已找到' : '没有找到'}` +
     state.env.others.map((agent) => ` · ${agent.name}：${agent.found ? '已找到' : '没有找到'}`).join('');
+  renderExtractor();
   $('install-claude').disabled = !state.env.claude;
   $('install-codex').disabled = !state.env.codex;
   $('plugin-output').hidden = true;
@@ -50,6 +51,34 @@ const SETTINGS_FIELDS = [
 ];
 const settingsValues = () =>
   JSON.stringify([SETTINGS_FIELDS.map((id) => ($(id).type === 'checkbox' ? $(id).checked : $(id).value)), agentRowsValue()]);
+// AutoSlides Extractor: where the CLI finds it, and the portable build downloaded on request (extractor.js).
+function renderExtractor() {
+  const found = state.tools?.slide_extractor;
+  $('extractor-info').textContent = found ? `正在用：${found}` : '没有找到，屏幕页用本程序自己的规则。';
+  $('download-extractor').textContent = found ? '下载最新的免安装版' : '下载免安装版';
+}
+
+$('download-extractor').onclick = async () => {
+  const button = /** @type {HTMLButtonElement} */ ($('download-extractor'));
+  button.disabled = true;
+  $('extractor-info').textContent = '正在查最新版本…';
+  const off = window.va.onExtractorProgress(({ source, received, total }) => {
+    $('extractor-info').textContent = `从 ${source} 下载：${(received / 1048576).toFixed(1)} / ${(total / 1048576).toFixed(0)} MB`;
+  });
+  try {
+    const { version } = await window.va.downloadExtractor();
+    const found = await window.va.cliJson(['tools', '--json']);
+    if (!failed(found)) state.tools = found;
+    renderExtractor();
+    $('extractor-info').textContent = `已下载 ${version}。${$('extractor-info').textContent}`;
+  } catch (error) {
+    $('extractor-info').textContent = `没有下载成功：${String(error.message).replace(/^Error invoking remote method '[^']+': (Error: )?/, '')}`;
+  } finally {
+    off();
+    button.disabled = false;
+  }
+};
+
 function closeSettings() {
   if (settingsValues() === settingsShown) return $('settings').close('cancel');
   $('settings-unsaved').hidden = false;

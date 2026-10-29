@@ -12,7 +12,7 @@ Rules for working on this project. Why each exists, and when it was decided, is 
 - Screen pages come from AutoSlides Extractor where it is installed (the screen region cropped for it, the steps of one slide merged after it), otherwise from this program's own page rules; `--no-extract-slides` or `AUTOSLIDES_EXTRACTOR=none` turns it off. Explicit settings, behind a replaceable adapter.
 - Never modify or move source videos, except `compress` replacing one with its checked smaller copy: this program's downloads by default, the user's own files only with their consent. Artifacts go to the workspace.
 - The GUI and any other front end call the CLI; no media or summary logic of their own.
-- yt-dlp and FFmpeg are Python dependencies; the installer bundles yt-dlp and its own LGPL FFmpeg (with its source on each release). Copies on `PATH` come first. Do not install other tools; say which is missing and how to point to it.
+- yt-dlp and FFmpeg are Python dependencies; the installer bundles yt-dlp and its own LGPL FFmpeg (with its source on each release). Copies on `PATH` come first. Do not install other tools; say which is missing and how to point to it. The one exception: the settings download AutoSlides Extractor's portable build from its author's releases when the user clicks for it.
 
 ## Working
 

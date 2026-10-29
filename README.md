@@ -38,7 +38,7 @@ Video Agent 由三部分组成，按需取用：
 - **任何来源的视频**：直接选本地文件；也可以粘贴链接，用 [yt-dlp](https://github.com/yt-dlp/yt-dlp) 下载。桌面程序默认下载或添加后自动处理（左上角可以关掉）；命令行里下载和处理是两步。
 - **字幕优先**：先用视频自带的字幕或同名的 `.srt`、`.vtt` 文件（包括下载时一起存下的 `视频名.zh-CN.srt` 这类字幕），名字不同的字幕文件可以手动导入；都没有时，可以用必剪（B 站的语音识别）转录。桌面程序对下载的视频默认用必剪（可以关），本地添加的视频会先问你。
 - **屏幕页和代表画面**：自动识别画面布局，摄像头和屏幕拼在一起时只看屏幕那块，用原始分辨率截下每一页幻灯片、代码和文档（多少页就留多少页）；同一页逐行出现的几步合成一页，留最完整的那张；另外按时间间隔和场景变化抽取整幅画面。写总结时还可以按时间补截，网页 AI 写的「补截」链接在导入时自动截图。
-- **课件**：可以导入一个放着课件图片的文件夹，有时间表的按时间表、没有的按画面对上时间，之后用它代替截下的屏幕页；[AutoSlides](https://github.com/bit-admin/Yanhekt-AutoSlides) 下载的屏幕录像（`screen_….mp4`）会自动用上它旁边的 `slides_…` 文件夹。也可以另外调用 [AutoSlides Extractor](https://github.com/bit-admin/AutoSlides-Extractor) 提取（可选，默认关闭，需自己安装）。
+- **课件**：可以导入一个放着课件图片的文件夹，有时间表的按时间表、没有的按画面对上时间，之后用它代替截下的屏幕页；[AutoSlides](https://github.com/bit-admin/Yanhekt-AutoSlides) 下载的屏幕录像（`screen_….mp4`）会自动用上它旁边的 `slides_…` 文件夹。装了 [AutoSlides Extractor](https://github.com/bit-admin/AutoSlides-Extractor) 时，屏幕页默认由它来找，讲者翻得快的页也不会漏；桌面程序的设置里可以一键下载它的免安装版。
 - **压缩**：用 AV1 重新编码，分辨率不变、看不出画质差别，屏幕录像大约剩五分之一。默认只压缩本程序下载的视频；本地添加的视频要你在设置里同意后才压缩，因为会替换原文件。
 - **三种总结方式**，都按总结页上选的模板写：自带「标准」和「命题分析」（把视频里的说法拆成编号的命题，标出事实、观点、推断、引用，画出论证的主线），也可以照着一份做你自己的：
   - Claude Code 或 Codex 按插件里的 skill 写，会自己补截画面；也可以在设置里换成 pi、Hermes Agent、DeepSeek Harness 或你自己填的命令行 Agent；
@@ -78,7 +78,7 @@ FFmpeg 和 yt-dlp 会作为依赖一起装上，不需要 git。电脑上已经�
 
 - pi、Hermes Agent、DeepSeek Harness：在设置里点“复制到 pi”等按钮，把 skill 文件夹复制到它们读 skill 的地方（pi 是 `~/.agents/skills`，Hermes Agent 是 `~/.hermes/skills/media`，DeepSeek Harness 是 `~/.dsh/skills`）。别的 Agent 点“复制到其他文件夹…”，选它读 skill 的文件夹；没装桌面程序时，把 `skills/video-agent/` 复制过去。
 
-插件找不到 `video-agent` 命令时，会用 uv 临时拉取同一版本。用 AutoSlides Extractor 提取幻灯片要另外安装它。
+插件找不到 `video-agent` 命令时，会用 uv 临时拉取同一版本。AutoSlides Extractor 要另外安装，或在桌面程序的设置里下载免安装版。
 
 ## 桌面程序
 
@@ -86,7 +86,7 @@ FFmpeg 和 yt-dlp 会作为依赖一起装上，不需要 git。电脑上已经�
   <img src="docs/images/process-split.webp" width="90%" alt="处理页：抽帧间隔、是否用必剪转录、是否另外用 AutoSlides Extractor 提取幻灯片；左边浅色，右边深色" />
 </p>
 
-添加本地视频（也可以拖进窗口），或在左上角粘贴链接下载。下载 B 站视频前，先在「设置 → 账号」里登录一次哔哩哔哩，字幕（包括 AI 字幕）会一起下载，处理时直接用，不必转录；抖音要在那里打开一次网页（不用登录）；YouTube 一般不用登录，遇到年龄限制或“确认你不是机器人”时再登录，登不上就从浏览器导出 cookies.txt 导入。在「处理」页开始处理：屏幕页每次都会截取，不需要另装软件；必剪转录和 AutoSlides Extractor 都是默认关闭的选项（没装 AutoSlides Extractor 时这一项是灰的），勾选必剪只对这一次处理生效。
+添加本地视频（也可以拖进窗口），或在左上角粘贴链接下载。下载 B 站视频前，先在「设置 → 账号」里登录一次哔哩哔哩，字幕（包括 AI 字幕）会一起下载，处理时直接用，不必转录；抖音要在那里打开一次网页（不用登录）；YouTube 一般不用登录，遇到年龄限制或“确认你不是机器人”时再登录，登不上就从浏览器导出 cookies.txt 导入。在「处理」页开始处理：屏幕页每次都会截取，不需要另装软件；装了 AutoSlides Extractor 时默认用它找屏幕页（没装时这一项是灰的，可以在「设置」里下载免安装版）。
 
 <p align="center">
   <img src="docs/images/frames-split.webp" width="90%" alt="画面页：代表画面和补截的画面；左边浅色，右边深色" />
