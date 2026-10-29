@@ -8,8 +8,9 @@ import shutil
 import pytest
 
 from video_agent import cli, collection
+from video_agent.collection_summary import summarize_collection
+from video_agent.model_api import SummaryError
 from video_agent.processor import asset_folder
-from video_agent.summarize import SummaryError, summarize_collection
 
 OVERVIEW = (
   '# 测试合集\n\n## 各集一览\n\n| # | 视频 | 时长 | 总结 | 需留意 | 一句话 |\n| --- | --- | --- | --- | --- | --- |\n'

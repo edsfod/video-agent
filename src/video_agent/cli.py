@@ -8,11 +8,15 @@ from pathlib import Path
 
 from . import collection, contract, corrections, files, processor, settings, templates, transcript, versions
 from . import compress as compression
-from . import summarize as summaries
+from .collection_summary import collection_material, summarize_collection
 from .download import DownloadError, clean_url, download_urls
+from .evidence import SUMMARY_NAME
+from .importer import draft_path, import_collection, import_summary
 from .media import MediaError, duration, parse_clock, probe, save_frame
+from .model_api import EFFORTS, list_models
+from .packing import material, pack, pack_folder
 from .processor import asset_folder, process_video
-from .summarize import EFFORTS, import_summary, list_models, material, pack, pack_folder, summarize_video
+from .summarize import summarize_video
 from .transcript import format_clock as transcript_clock
 
 # Where the window saves downloads in a workspace, and so where a followed list's new videos go by default.
@@ -427,6 +431,27 @@ def build_parser():
   choice.add_argument('--reset', action='store_true', help='delete your copy of a built-in, or a template of your own')
   choice.add_argument('--accept', action='store_true', help="mark your copy as up to date with the built-in's changes")
   choice.add_argument('--info', action='store_true', help='print as JSON where it is and whether it is outdated')
+
+  # What runs each command.
+  handlers = {
+    download: _download,
+    tools: _tools_command,
+    inspect: _inspect,
+    process: _process,
+    shrink: _compress,
+    frame: _frame,
+    summarize: _summarize,
+    history: _versions_command,
+    packing: _pack,
+    models: _models,
+    config: _config,
+    grouping: _collection,
+    fixing: _fix,
+    show: _show,
+    rules: _template,
+  }
+  for command, handler in handlers.items():
+    command.set_defaults(handler=handler)
   return parser
 
 
@@ -595,7 +620,7 @@ def _tools() -> contract.Tools:
 def _written(path, args):
   """Prints where a new text went; one kept beside an existing text says how to make it current."""
   print(path)
-  if Path(path).name not in (summaries.SUMMARY_NAME, collection.OVERVIEW, collection.GUIDE):
+  if Path(path).name not in (SUMMARY_NAME, collection.OVERVIEW, collection.GUIDE):
     where = (
       f'--collection "{args.collection}"' + (' --guide' if args.guide else '') if args.collection else f'"{args.video}"'
     )
@@ -611,11 +636,11 @@ def _versions(args):
     print('versions: give a video or --collection NAME')
     return 2
   if args.collection:
-    target = summaries._collection_target(args.output, args.collection, args.guide)
+    target = collection.text_path(args.output, args.collection, args.guide)
     lock = collection.lock(args.output, args.collection, 'change versions')
   else:
     video, _ = probe(args.video)
-    target = asset_folder(args.output, video) / summaries.SUMMARY_NAME
+    target = asset_folder(args.output, video) / SUMMARY_NAME
     lock = files.video_lock(target.parent, 'change versions')
   with lock:
     if args.keep:
@@ -720,187 +745,173 @@ def _fix(args) -> int:
   return 0
 
 
-def run(args):
-  if args.command == 'download':
-    args.urls = [clean_url(url) for url in args.urls]
-    following = args.follow and args.collection and args.playlist and len(args.urls) == 1
-    if args.follow and not following:
-      print('download: --follow needs --playlist, --collection and exactly one URL')
-      return 2
-    if following:
-      # Made first, so the download archive has its folder and records this first download.
-      if not (collection.folder(args.workspace, args.collection) / collection.DATA).is_file():
-        collection.create(args.workspace, args.collection)
-      collection.follow(args.workspace, args.collection, args.urls[0], args.output, auto=args.auto)
-    before = _files_in(args.output)
-    try:
-      paths, failures = download_urls(
-        args.urls,
-        args.output,
-        format_selector=args.format_selector,
-        playlist=args.playlist,
-        subtitles=not args.no_subs,
-        executable_path=args.yt_dlp,
-        config_path=args.yt_dlp_config,
-        cookies_path=args.cookies,
-        status=_progress(args),
-        found_list=(lambda found: _emit({'playlist': found}, contract.PlaylistFound)) if args.json else None,
-        archive_path=collection.archive(args.workspace, args.collection) if following else None,
-      )
-    except DownloadError as error:
-      print(f'download: ERROR: {error}')
-      return 1
-    for path in paths:
-      if args.json:
-        # A video yt-dlp found already saved is listed too; `new` tells the window not to process it again.
-        _emit({'path': str(path), 'new': path not in before}, contract.Saved)
-      else:
-        print(f'Next: process this local file separately: {path}')
-    if following:
-      collection.checked(args.workspace, args.collection, paths)
-      print(f'added {len(paths)} videos to collection {args.collection}, which follows the list', file=sys.stderr)
-    elif args.collection and paths:
-      if not (collection.folder(args.workspace, args.collection) / collection.DATA).is_file():
-        collection.create(args.workspace, args.collection)
-      collection.add(args.workspace, args.collection, paths)
-      print(f'added {len(paths)} videos to collection {args.collection}', file=sys.stderr)
-    return 1 if failures else 0
-
-  if args.command == 'tools':
-    found = _tools()
-    if args.json:
-      _emit(found, contract.Tools)
-    else:
-      for name, where in found.items():
-        if name == 'json_version':
-          continue
-        print(f'{name}: {where or "not found"}')
-    return 0
-
-  if args.command == 'inspect':
-    video, info = probe(args.video)
-    _emit(
-      {'path': str(video), 'duration_s': duration(info), 'streams': info.get('streams', [])},
-      contract.Inspected,
-      indent=2,
-    )
-    return 0
-
-  if args.command == 'fix':
-    return _fix(args)
-
-  if args.command == 'compress':
-    failures = 0
-    for video in args.videos:
-      try:
-        if args.check:
-          result = {'video': str(video), 'state': compression.check(video)}
-          if not args.json:
-            print(f'{video}: {result["state"] or "worth compressing"}')
-        else:
-          result = compression.compress(video, status=_progress(args))
-      except (OSError, MediaError, compression.CompressError) as error:
-        result, failures = {'video': str(video), 'error': str(error)}, failures + 1
-        if not args.json:
-          print(f'{video}: ERROR: {error}')
-      if args.json:
-        _emit(result, contract.Compressed | contract.Checked | contract.Failed)
-    return 1 if failures else 0
-
-  if args.command == 'show':
-    return _show(args)
-
-  if args.command == 'template':
-    if args.list:
-      _emit(templates.listing(), list[contract.Template])
-    elif args.copy is not None:
-      _emit(templates.copy(args.name, args.copy), contract.Template)
-    elif args.use and not args.name:
-      raise ValueError('template --use needs the name of a template')
-    else:
-      action = {'use': templates.use, 'edit': templates.edit, 'reset': templates.reset}
-      action |= {'accept': templates.accept, 'info': templates.info}
-      chosen = next((name for name in action if getattr(args, name)), None)
-      if chosen:
-        _emit(action[chosen](args.name), contract.Template | contract.TemplateDeleted)
-      elif args.default:
-        name = args.name or templates.current()
-        if name not in templates.BUILT_IN:
-          raise ValueError(f'{name!r} is a template of your own; only a built-in one has a version as it ships')
-        sys.stdout.write(templates.built_in(name))
-      else:
-        sys.stdout.write(templates.text(args.name))
-        if templates.info(args.name)['outdated']:
-          print(
-            'Note: your copy was made from an older version of this template; compare with template --default',
-            file=sys.stderr,
-          )
-    return 0
-
-  if args.command == 'config':
-    return _config(args)
-
-  if args.command == 'collection':
-    return _collection(args)
-
-  if args.command == 'versions':
-    try:
-      return _versions(args)
-    except versions.VersionError as error:
-      print(f'versions: {error}')
-      return 1
-
-  if args.command in ('summarize', 'pack') and not args.video and not args.collection:
-    print(f'{args.command}: give a video or --collection NAME')
+def _download(args):
+  args.urls = [clean_url(url) for url in args.urls]
+  following = args.follow and args.collection and args.playlist and len(args.urls) == 1
+  if args.follow and not following:
+    print('download: --follow needs --playlist, --collection and exactly one URL')
     return 2
-
-  if args.command == 'summarize' and args.import_from:
-    # Bytes, not text: the GUI sends UTF-8, whatever code page a frozen build would decode stdin with.
-    draft = None
-    if args.import_from is True:
-      where = {'collection': args.collection, 'guide': args.guide}
-      draft = summaries.draft_path(args.output, args.video, **where)
-      if not draft.is_file():
-        raise ValueError(f'no draft at {draft}; write the text there first, or give --import a file')
-      source = draft.read_bytes()
-    else:
-      source = sys.stdin.buffer.read() if args.import_from == '-' else Path(args.import_from).read_bytes()
-    text = source.decode('utf-8-sig')
-    written = {'overwrite': args.overwrite, 'source': args.source, 'note': args.note}
-    if args.collection:
-      target = summaries.import_collection(args.output, args.collection, text, guide=args.guide, **written)
-    else:
-      target, pairs = import_summary(
-        args.video, args.output, text, **written, status=lambda message: print(message, file=sys.stderr)
-      )
-      if pairs:
-        listed = '、'.join(f'{wrong}→{right}' for wrong, right in pairs)
-        print(f'applied {len(pairs)} transcript corrections from the summary: {listed}', file=sys.stderr)
-    if draft:
-      draft.unlink(missing_ok=True)
-    _written(target, args)
-    return 0
-
-  if args.command == 'pack' and args.collection:
-    sys.stdout.write(
-      summaries.collection_material(
-        args.output, args.collection, guide=args.guide, request=args.request, template=args.template
-      )
+  if following:
+    # Made first, so the download archive has its folder and records this first download.
+    if not (collection.folder(args.workspace, args.collection) / collection.DATA).is_file():
+      collection.create(args.workspace, args.collection)
+    collection.follow(args.workspace, args.collection, args.urls[0], args.output, auto=args.auto)
+  before = _files_in(args.output)
+  try:
+    paths, failures = download_urls(
+      args.urls,
+      args.output,
+      format_selector=args.format_selector,
+      playlist=args.playlist,
+      subtitles=not args.no_subs,
+      executable_path=args.yt_dlp,
+      config_path=args.yt_dlp_config,
+      cookies_path=args.cookies,
+      status=_progress(args),
+      found_list=(lambda found: _emit({'playlist': found}, contract.PlaylistFound)) if args.json else None,
+      archive_path=collection.archive(args.workspace, args.collection) if following else None,
     )
-    return 0
-
-  if args.command == 'models':
-    where = settings.endpoint(args.provider, args.base_url)
-    found = list_models(where, settings.get_key(where['provider']))
+  except DownloadError as error:
+    print(f'download: ERROR: {error}')
+    return 1
+  for path in paths:
     if args.json:
-      _emit(found, list[str])
+      # A video yt-dlp found already saved is listed too; `new` tells the window not to process it again.
+      _emit({'path': str(path), 'new': path not in before}, contract.Saved)
     else:
-      print('\n'.join(found))
-    return 0
+      print(f'Next: process this local file separately: {path}')
+  if following:
+    collection.checked(args.workspace, args.collection, paths)
+    print(f'added {len(paths)} videos to collection {args.collection}, which follows the list', file=sys.stderr)
+  elif args.collection and paths:
+    if not (collection.folder(args.workspace, args.collection) / collection.DATA).is_file():
+      collection.create(args.workspace, args.collection)
+    collection.add(args.workspace, args.collection, paths)
+    print(f'added {len(paths)} videos to collection {args.collection}', file=sys.stderr)
+  return 1 if failures else 0
 
-  if args.command == 'summarize' and args.collection:
-    chosen = settings.resolve(args.provider, args.model, args.base_url) | {'effort': args.effort}
-    path = summaries.summarize_collection(
+
+def _tools_command(args):
+  found = _tools()
+  if args.json:
+    _emit(found, contract.Tools)
+  else:
+    for name, where in found.items():
+      if name == 'json_version':
+        continue
+      print(f'{name}: {where or "not found"}')
+  return 0
+
+
+def _inspect(args):
+  video, info = probe(args.video)
+  _emit(
+    {'path': str(video), 'duration_s': duration(info), 'streams': info.get('streams', [])},
+    contract.Inspected,
+    indent=2,
+  )
+  return 0
+
+
+def _compress(args):
+  failures = 0
+  for video in args.videos:
+    try:
+      if args.check:
+        result = {'video': str(video), 'state': compression.check(video)}
+        if not args.json:
+          print(f'{video}: {result["state"] or "worth compressing"}')
+      else:
+        result = compression.compress(video, status=_progress(args))
+    except (OSError, MediaError, compression.CompressError) as error:
+      result, failures = {'video': str(video), 'error': str(error)}, failures + 1
+      if not args.json:
+        print(f'{video}: ERROR: {error}')
+    if args.json:
+      _emit(result, contract.Compressed | contract.Checked | contract.Failed)
+  return 1 if failures else 0
+
+
+def _template(args):
+  if args.list:
+    _emit(templates.listing(), list[contract.Template])
+  elif args.copy is not None:
+    _emit(templates.copy(args.name, args.copy), contract.Template)
+  elif args.use and not args.name:
+    raise ValueError('template --use needs the name of a template')
+  else:
+    action = {'use': templates.use, 'edit': templates.edit, 'reset': templates.reset}
+    action |= {'accept': templates.accept, 'info': templates.info}
+    chosen = next((name for name in action if getattr(args, name)), None)
+    if chosen:
+      _emit(action[chosen](args.name), contract.Template | contract.TemplateDeleted)
+    elif args.default:
+      name = args.name or templates.current()
+      if name not in templates.BUILT_IN:
+        raise ValueError(f'{name!r} is a template of your own; only a built-in one has a version as it ships')
+      sys.stdout.write(templates.built_in(name))
+    else:
+      sys.stdout.write(templates.text(args.name))
+      if templates.info(args.name)['outdated']:
+        print(
+          'Note: your copy was made from an older version of this template; compare with template --default',
+          file=sys.stderr,
+        )
+  return 0
+
+
+def _versions_command(args):
+  try:
+    return _versions(args)
+  except versions.VersionError as error:
+    print(f'versions: {error}')
+    return 1
+
+
+def _video_or_collection(args):
+  if args.video or args.collection:
+    return True
+  print(f'{args.command}: give a video or --collection NAME')
+  return False
+
+
+def _import(args):
+  """summarize --import: a text written elsewhere, saved as a summary, overview or study guide."""
+  # Bytes, not text: the GUI sends UTF-8, whatever code page a frozen build would decode stdin with.
+  draft = None
+  if args.import_from is True:
+    where = {'collection': args.collection, 'guide': args.guide}
+    draft = draft_path(args.output, args.video, **where)
+    if not draft.is_file():
+      raise ValueError(f'no draft at {draft}; write the text there first, or give --import a file')
+    source = draft.read_bytes()
+  else:
+    source = sys.stdin.buffer.read() if args.import_from == '-' else Path(args.import_from).read_bytes()
+  text = source.decode('utf-8-sig')
+  written = {'overwrite': args.overwrite, 'source': args.source, 'note': args.note}
+  if args.collection:
+    target = import_collection(args.output, args.collection, text, guide=args.guide, **written)
+  else:
+    target, pairs = import_summary(
+      args.video, args.output, text, **written, status=lambda message: print(message, file=sys.stderr)
+    )
+    if pairs:
+      listed = '、'.join(f'{wrong}→{right}' for wrong, right in pairs)
+      print(f'applied {len(pairs)} transcript corrections from the summary: {listed}', file=sys.stderr)
+  if draft:
+    draft.unlink(missing_ok=True)
+  _written(target, args)
+  return 0
+
+
+def _summarize(args):
+  if not _video_or_collection(args):
+    return 2
+  if args.import_from:
+    return _import(args)
+  chosen = settings.resolve(args.provider, args.model, args.base_url) | {'effort': args.effort}
+  if args.collection:
+    path = summarize_collection(
       args.output,
       args.collection,
       chosen,
@@ -912,52 +923,70 @@ def run(args):
     )
     _written(path, args)
     return 0
+  path = summarize_video(
+    args.video,
+    args.output,
+    chosen,
+    settings.get_key(chosen['provider']),
+    request=args.request,
+    max_images=args.max_images,
+    max_extra_frames=args.max_extra_frames,
+    use_tools=not args.no_tools,
+    overwrite=args.overwrite,
+    template=args.template,
+  )
+  _written(path, args)
+  return 0
 
-  if args.command == 'pack':
-    if args.folder:
-      target, count = pack_folder(
-        args.video, args.output, args.folder, request=args.request, max_files=args.max_files, template=args.template
-      )
-      print(f'{target} ({count} pictures)')
-    elif args.zip:
-      target, count = pack(
-        args.video, args.output, args.zip, request=args.request, max_images=args.max_images, template=args.template
-      )
-      print(f'{target} ({count} pictures)')
-    else:
-      sys.stdout.write(material(args.video, args.output, request=args.request, template=args.template)[0])
-    return 0
 
-  if args.command == 'summarize':
-    chosen = settings.resolve(args.provider, args.model, args.base_url) | {'effort': args.effort}
-    path = summarize_video(
-      args.video,
-      args.output,
-      chosen,
-      settings.get_key(chosen['provider']),
-      request=args.request,
-      max_images=args.max_images,
-      max_extra_frames=args.max_extra_frames,
-      use_tools=not args.no_tools,
-      overwrite=args.overwrite,
-      template=args.template,
+def _pack(args):
+  if not _video_or_collection(args):
+    return 2
+  if args.collection:
+    sys.stdout.write(
+      collection_material(args.output, args.collection, guide=args.guide, request=args.request, template=args.template)
     )
-    _written(path, args)
     return 0
+  if args.folder:
+    target, count = pack_folder(
+      args.video, args.output, args.folder, request=args.request, max_files=args.max_files, template=args.template
+    )
+    print(f'{target} ({count} pictures)')
+  elif args.zip:
+    target, count = pack(
+      args.video, args.output, args.zip, request=args.request, max_images=args.max_images, template=args.template
+    )
+    print(f'{target} ({count} pictures)')
+  else:
+    sys.stdout.write(material(args.video, args.output, request=args.request, template=args.template)[0])
+  return 0
 
-  if args.command == 'frame':
-    video, info = probe(args.video)
-    length = duration(info)
-    asset = asset_folder(args.output, video)
-    failures = 0
-    for second in args.times:
-      try:
-        print(save_frame(video, asset, second, length))
-      except MediaError as error:
-        print(f'{second:g}s: ERROR: {error}')
-        failures += 1
-    return 1 if failures else 0
 
+def _models(args):
+  where = settings.endpoint(args.provider, args.base_url)
+  found = list_models(where, settings.get_key(where['provider']))
+  if args.json:
+    _emit(found, list[str])
+  else:
+    print('\n'.join(found))
+  return 0
+
+
+def _frame(args):
+  video, info = probe(args.video)
+  length = duration(info)
+  asset = asset_folder(args.output, video)
+  failures = 0
+  for second in args.times:
+    try:
+      print(save_frame(video, asset, second, length))
+    except MediaError as error:
+      print(f'{second:g}s: ERROR: {error}')
+      failures += 1
+  return 1 if failures else 0
+
+
+def _process(args):
   if args.allow_remote_asr and args.asr != 'bcut':
     raise ValueError('--allow-remote-asr requires --asr bcut')
   if (args.subtitles or args.slides) and len(args.videos) != 1:
@@ -1003,6 +1032,10 @@ def run(args):
     if result['slide_error']:
       print(f'{video}: slides incomplete: {result["slide_error"]}')
   return 1 if failures else 0
+
+
+def run(args):
+  return args.handler(args)
 
 
 def _utf8_output():

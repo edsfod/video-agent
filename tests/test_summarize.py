@@ -8,15 +8,11 @@ from pathlib import Path
 
 import pytest
 
+from video_agent.evidence import evidence_images, video_line
+from video_agent.model_api import SummaryError, list_models
+from video_agent.packing import numbered_pictures
 from video_agent.processor import asset_folder, process_video
-from video_agent.summarize import (
-  SummaryError,
-  _numbered_pictures,
-  evidence_images,
-  list_models,
-  summarize_video,
-  video_line,
-)
+from video_agent.summarize import summarize_video
 from video_agent.templates import text as template
 
 SUMMARY = '# 测试视频\n\n## 概要\n\n一段测试视频，`00:00:03` 展示图表。[画面](frames/extra/frame-00-00-03.jpg)\n'
@@ -226,7 +222,7 @@ def test_imports_never_lose_a_summary_and_versions_can_be_chosen(processed, monk
 
 def test_import_repairs_rewritten_links_the_video_line_and_takes_corrections(processed):
   from video_agent import corrections
-  from video_agent.summarize import import_summary
+  from video_agent.importer import import_summary
 
   video, workspace = processed
   asset = asset_folder(workspace, video.resolve())
@@ -343,7 +339,7 @@ def test_screen_pages_go_on_contact_sheets_when_they_exceed_the_budget(tmp_path)
   assert len(squeezed) == 3 and dropped == 3 and '3 per row' in squeezed[0][0]
 
   # The same choice with numbered names, for a chat AI that takes few files
-  entries, note = _numbered_pictures(tmp_path, manifest, 12, tmp_path / 'd')
+  entries, note = numbered_pictures(tmp_path, manifest, 12, tmp_path / 'd')
   assert [name for name, _ in entries][:2] == ['001-屏幕页总图-00-00-00.jpg', '002-屏幕页总图-00-00-40.jpg']
   assert len(entries) == 8 and '30 张屏幕页（幻灯片、代码、文档），拼在 8 张总图里（每张 2×2 页' in note
   assert (
@@ -425,7 +421,7 @@ def test_the_one_copy_from_before_moves_into_the_templates(capsys):
 
 
 def test_imported_windows_line_endings_stay_single(processed):
-  from video_agent.summarize import import_summary
+  from video_agent.importer import import_summary
 
   video, workspace = processed
   text = '# 标题\r\n\r\n## 概要\r\n\r\n```\r\n  [Intent]\r\n     |\r\n  [Spec]\r\n```\r\n' + '内容' * 30 + '\r\n'
@@ -451,12 +447,12 @@ def test_a_draft_beside_the_summary_is_imported_and_removed(processed, capsys):
 
 
 def test_the_code_block_a_chat_ai_puts_the_summary_in_is_taken_off():
-  from video_agent.summarize import _clean
+  from video_agent.importer import clean
 
   inner = '# 标题\n\n```python\nprint(1)\n```\n'
-  assert _clean(f'````markdown\n{inner}````') == inner  # four backticks, as the material asks (user, 2026-10-28)
-  assert _clean('```md\n# 标题\n```') == '# 标题\n'
-  assert _clean(inner) == inner  # a summary that starts and ends otherwise is left as it is
+  assert clean(f'````markdown\n{inner}````') == inner  # four backticks, as the material asks (user, 2026-10-28)
+  assert clean('```md\n# 标题\n```') == '# 标题\n'
+  assert clean(inner) == inner  # a summary that starts and ends otherwise is left as it is
 
 
 def test_an_old_context_gets_the_picture_marks_without_processing_again(processed, capsys):
@@ -473,7 +469,7 @@ def test_an_old_context_gets_the_picture_marks_without_processing_again(processe
 
 
 def test_frames_a_chat_ai_asks_for_are_taken_on_import(processed):
-  from video_agent.summarize import import_summary
+  from video_agent.importer import import_summary
 
   video, workspace = processed
   asset = asset_folder(workspace, video.resolve())

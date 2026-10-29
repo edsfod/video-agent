@@ -49,6 +49,11 @@ def folder(workspace, name):
   return Path(workspace) / FOLDER / _safe(name)
 
 
+def text_path(workspace, name, guide=False):
+  """The collection's overview, or with `guide` its study guide."""
+  return folder(workspace, name) / (GUIDE if guide else OVERVIEW)
+
+
 def names(workspace):
   root = Path(workspace) / FOLDER
   return sorted(path.parent.name for path in root.glob(f'*/{DATA}')) if root.is_dir() else []

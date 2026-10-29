@@ -36,3 +36,7 @@ The order:
 - The page is now checked for null too: `pageVideo()` and `pageCollection()` give the open video or collection for the buttons on its page, which can be clicked only while it is shown, and the other places check.
 - With it, two user requests (2026-10-29): clicking the open video or collection in the sidebar again goes back to the start page (a collection's row, while one of its videos is open, still opens the collection's page), and the 终端 tab no longer starts a shell when opened; its button reads 启动终端 until one runs, then 新建终端, and choosing another shell replaces only a running one.
 
+## Step 4: staying with JavaScript (user decision, 2026-10-29)
+
+The app is not moved to `.ts`. Every file is small and `tsc` already checks all of it through JSDoc, null included; `.ts` would add a compile step to packaging and the tests for a shorter way of writing the same types.
+

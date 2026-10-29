@@ -25,7 +25,7 @@ Agents and shells           other agents follow it        commands
 
 | Module | Does |
 | --- | --- |
-| `cli.py` | The commands and their options; prints text, or JSON with `--json`. |
+| `cli.py` | The commands and their options, each bound to a function that runs it; prints text, or JSON with `--json`. |
 | `download.py` | Runs yt-dlp: finds it, cleans share links, saves site subtitles, playlists. |
 | `media.py` | Runs FFmpeg and ffprobe: probing, audio, frame sampling, screen pages and their thinning, contact sheets. |
 | `layout.py` | Finds the screen and camera regions of a video. |
@@ -34,7 +34,12 @@ Agents and shells           other agents follow it        commands
 | `corrections.py` | The cleaned transcript (`fix`). |
 | `processor.py` | `process`: builds a video's folder, its manifest and `summary-context.md`. |
 | `slide_extractor.py` | AutoSlides Extractor, and slides made already. |
-| `summarize.py` | `summarize` with a model API (Anthropic or OpenAI-compatible), `pack` for chat AIs, imports, collection summaries. |
+| `model_api.py` | The model APIs: a `Provider` each for Anthropic and OpenAI-compatible endpoints (model list, key, one exchange with the frame tool). |
+| `evidence.py` | A processed video's folder and manifest, its 视频 line, and which pictures fit a number of images. |
+| `summarize.py` | `summarize` for one video with a model API. |
+| `packing.py` | `pack`: the prompt for chat AIs, alone, in a zip, or in a folder of numbered pictures. |
+| `importer.py` | `summarize --import`: a text written elsewhere saved as a summary or collection text, with its links and corrections repaired. |
+| `collection_summary.py` | A collection's overview and study guide, from its videos' summaries. |
 | `templates.py`, `prompts/` | Summary templates: the built-in ones and the user's. |
 | `versions.py` | Earlier versions of a summary. |
 | `collection.py` | Collections, and following a list for new videos. |
@@ -121,4 +126,3 @@ The folder and file names, Chinese ones included, are read by the app, the skill
 - Code signing postponed (user decision, 2026-10-27): the SignPath application form at signpath.org/apply did not work for the user. Preparation notes are in `notes/` (local); the update signature on `latest.yml` does not depend on it.
 - Representative frames can include black frames (fade-ins); detecting them needs image analysis.
 - Site accounts: the cookie export, a cookies.txt import, ordering and hiding are tested (end-to-end test); a real login, Google's in particular, and a download with it need the user's account.
-- Step 4 of [Front-end types](docs/decisions/front-end-types.md): deciding on TypeScript.
