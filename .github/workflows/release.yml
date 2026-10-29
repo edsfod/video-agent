@@ -37,6 +37,14 @@ jobs:
         working-directory: gui
       - run: npm run dist
         working-directory: gui
+      # The packaged app's smoke tests (the e2e tests that reach what packaging changes, and the update tests; about 30
+      # seconds), since branch CI runs the installer job only for changes to packaging (changed-jobs.sh).
+      - run: |
+          Add-Content $env:GITHUB_PATH "$env:GITHUB_WORKSPACE\build\ffmpeg\bin"
+          Add-Content $env:GITHUB_PATH "$env:GITHUB_WORKSPACE\build\cli\video-agent"
+        shell: pwsh
+      - run: npm run test:dist
+        working-directory: gui
       - run: node scripts/sign-update.js dist "../docs/releases/$GITHUB_REF_NAME.md"
         working-directory: gui
         env:

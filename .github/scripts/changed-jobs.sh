@@ -3,9 +3,12 @@
 # $GITHUB_OUTPUT, or to stdout when run by hand: bash .github/scripts/changed-jobs.sh [base].
 #
 # The jobs follow how the parts depend on each other: the window drives the real CLI (it must not duplicate its
-# logic), and the installer bundles the CLI, the window and the skill. So the CLI's code runs every job, the window's
-# code runs gui and installer, packaging runs installer, and documentation runs none. A file no rule knows runs every
-# job, so a missing rule costs time, never a test.
+# logic), and the installer bundles the CLI, the window and the skill. The CLI's code runs cli and gui, the window's
+# code gui, and documentation none. The installer job, the slowest (about 5 minutes: building, installing, updating),
+# runs only for what changes the package or the install: dependencies, the packaging and installer scripts, the icons
+# and the updater (user request, 2026-10-29: every change waited five minutes). The release workflow builds and
+# smoke-tests the packaged app anyway, so a change that broke only packaging still stops a release. A file no rule
+# knows runs every job, so a missing rule costs time, never a test.
 #
 # The base is what the branch adds to main (all its commits, also those of runs a later push cancelled), what a push
 # to main added, or a pull request's base. Without a base every job runs.
@@ -40,15 +43,18 @@ else
   while IFS= read -r file; do
     [ -n "$file" ] || continue
     case "$file" in
-      src/* | pyproject.toml | uv.lock | skills/* | .claude-plugin/* | .agents/* | plugin.json)
-        why='CLI or skill: all'; cli=true gui=true installer=true ;;
+      pyproject.toml | uv.lock) why='CLI dependencies: all'; cli=true gui=true installer=true ;;
+      src/* | skills/* | .claude-plugin/* | .agents/* | plugin.json) why='CLI or skill: cli, gui'; cli=true gui=true ;;
       tests/* | scripts/*) why='CLI tests or maintenance scripts: cli'; cli=true ;;
       gui/test/installer-path.test.js | gui/test/update-install.test.js)
         why='installer: installer'; installer=true ;;
-      gui/*) why='window: gui, installer'; gui=true installer=true ;;
+      gui/package.json | gui/package-lock.json | gui/installer/* | gui/assets/* | gui/scripts/* | gui/src/updater.js | \
+        gui/src/update-plan.js | gui/src/update-signature.js | gui/dev-app-update.yml)
+        why='package, install or update: gui, installer'; gui=true installer=true ;;
+      gui/*) why='window: gui'; gui=true ;;
       packaging/* | .github/actions/ffmpeg/*) why='packaging: installer'; installer=true ;;
       .github/workflows/release.yml) why='release only: none' ;;
-      .github/scripts/changed-jobs.sh) why='job choice, run by the changes job itself: none' ;;
+      .github/scripts/*) why='job choice, run by the changes job itself: none' ;;
       docs/* | notes/* | LICENSE | *.md) why='documentation: none' ;;
       *) why='unknown: all'; cli=true gui=true installer=true ;;
     esac

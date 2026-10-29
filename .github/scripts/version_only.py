@@ -2,7 +2,8 @@
 release notes; else no. Used by changed-jobs.sh: python3 .github/scripts/version_only.py BASE.
 
 Every changed line outside docs/releases/ must name the old or the new version, in either spelling (semantic, or
-Python's), and every changed file must be one bump_version.py writes or a release note.
+Python's), or be README.md's wheel link (which keeps the last full release's during a pre-release), and every changed
+file must be one bump_version.py writes or a release note.
 """
 
 import re
@@ -34,7 +35,8 @@ def version_only(base):
     for line in git('diff', '-U0', base, 'HEAD', '--', *code).splitlines()
     if line.startswith(('+', '-')) and not line.startswith(('+++', '---'))
   ]
-  return all(any(spelling in line for spelling in spelled) for line in lines)
+  wheel = re.compile(r'releases/download/v[^/\s]+/video_agent-[^-\s]+-py3-none-any\.whl')
+  return all(any(spelling in line for spelling in spelled) or wheel.search(line) for line in lines)
 
 
 if __name__ == '__main__':
