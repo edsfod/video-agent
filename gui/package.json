@@ -67,6 +67,10 @@
         "to": "LICENSE.txt"
       },
       {
+        "from": "../PRIVACY.md",
+        "to": "PRIVACY.md"
+      },
+      {
         "from": "../build/cli/video-agent",
         "to": "cli"
       },
@@ -91,6 +95,7 @@
       "allowToChangeInstallationDirectory": true,
       "perMachine": false,
       "artifactName": "Video-Agent-Setup-${version}.exe",
+      "license": "../build/PRIVACY.txt",
       "include": "installer/installer.nsh"
     },
     "npmRebuild": false,
@@ -110,6 +115,10 @@
       {
         "from": "../build/cli/video-agent/THIRD-PARTY-NOTICES.txt",
         "to": "THIRD-PARTY-NOTICES.txt"
+      },
+      {
+        "from": "../build/PRIVACY.txt",
+        "to": "PRIVACY.txt"
       }
     ]
   }

@@ -1,6 +1,7 @@
 """Writes THIRD-PARTY-NOTICES.txt for the desktop installer: each third-party component frozen into the CLI or shipped
 beside it, with its version, licence and licence text (ARCHITECTURE.md, "Bundled FFmpeg"). build_cli.py calls it in
-the build environment, whose installed packages are the ones PyInstaller freezes."""
+the build environment, whose installed packages are the ones PyInstaller freezes. It also writes PRIVACY.txt, the
+installer's licence page."""
 
 import re
 import sys
@@ -119,4 +120,15 @@ def write(target, ffmpeg_dir):
     )
   )
   Path(target).write_text('\n'.join(sections), encoding='utf-8', newline='\n')
+  return target
+
+
+def privacy(target):
+  """PRIVACY.md as plain text, for the installer's licence page and the installation folder. NSIS shows a text file
+  as it is and reads it as UTF-8 only with a byte order mark."""
+  text = (ROOT / 'PRIVACY.md').read_text(encoding='utf-8')
+  text = re.sub(r'^## (.+)$', r'【\1】', text, flags=re.MULTILINE)
+  text = re.sub(r'^# ', '', text, flags=re.MULTILINE).replace('`', '')
+  text = re.sub(r'\[([^\]]+)\]\(([^)]+)\)', r'\1（\2）', text)
+  Path(target).write_text('\ufeff' + text, encoding='utf-8', newline='\r\n')
   return target

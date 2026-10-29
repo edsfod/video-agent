@@ -367,6 +367,14 @@
           <span class="row"><input id="set-key" type="password" placeholder="不修改就留空" autocomplete="off" /><button id="delete-key" type="button">删除已存的 key</button></span>
         </label>
         <div id="api-info" class="muted small-text"></div>
+        <h3>关于</h3>
+        <p id="about-text" class="muted small-text"></p>
+        <span class="row">
+          <button id="about-privacy" type="button">隐私和使用须知</button>
+          <button id="about-license" type="button" class="ghost">许可证</button>
+          <button id="about-notices" type="button" class="ghost">第三方组件</button>
+          <button id="about-source" type="button" class="ghost">源码</button>
+        </span>
         <div class="row end dialog-foot">
           <span id="settings-unsaved" class="unsaved" hidden>有改动还没保存</span>
           <button id="discard-settings" value="cancel" class="ghost">取消</button>
@@ -448,8 +456,19 @@
           <span class="spacer"></span>
           <button id="close-skill" class="ghost">关闭</button>
         </header>
-        <p class="muted small-text">这是 Agent 总结视频时照着做的流程，管着上传音频前先征得同意、命令怎么写等，改坏了会出问题，而且每次更新都会覆盖，所以只能查看。想改总结的写法，在设置里编辑「总结规则和模板」。</p>
+        <p class="muted small-text">这是 Agent 用 video-agent 时照着做的步骤和命令，每次更新都会覆盖，所以只能查看。想改总结的写法，在设置里编辑「总结模板」。</p>
         <article id="skill-text" class="markdown skill-text"></article>
+      </div>
+    </dialog>
+
+    <dialog id="privacy-dialog">
+      <div class="logs">
+        <header class="row">
+          <h2>隐私和使用须知</h2>
+          <span class="spacer"></span>
+          <button id="close-privacy" class="ghost">关闭</button>
+        </header>
+        <article id="privacy-text" class="markdown skill-text"></article>
       </div>
     </dialog>
 

@@ -242,6 +242,14 @@ The user asked for a check-and-update function like other desktop software, chos
 - **Releases.** A `v<version>` tag runs `.github/workflows/release.yml`: it checks the tag against the versions, builds, signs `latest.yml` with the notes from `docs/releases/v<version>.md`, builds the wheel and creates a draft release with the installer, its blockmap, `latest.yml`, `latest.yml.sig` and the wheel. The draft is published by hand after checking; the app sees only published releases. Users of 0.1.1 and earlier have no updater and install 0.2.0 by hand. The version is 0.2.0 rather than 0.1.2 because the updater is a new feature (Claude judgment, the user agreed).
 - **Code signing.** Not done; it needs the maintainer to apply. Azure Artifact Signing accepts individuals only in the USA and Canada (Microsoft Learn, 2026-10-27). SignPath Foundation signs qualifying open-source projects for free (Microsoft Learn); according to third-party summaries, SignPath Foundation, not the project, is shown as the publisher (signpath.org could not be opened from the development machine). Certum sells certificates for open-source developers (seen only in search results). Since 2024 an EV certificate no longer skips SmartScreen's reputation check (Microsoft Learn).
 
+## Licence and privacy in the installer — user request (2026-10-29)
+
+Until 0.9.3 the installer put `resources\LICENSE.txt` and `THIRD-PARTY-NOTICES.txt` in the installation folder but showed neither, and the privacy notes and terms of use were only in the README. The user asked for all three of these:
+
+- **`PRIVACY.md`** holds the privacy notes and terms of use, moved from the README (which links to it), and a short licence summary that points to the full texts.
+- **Licence page.** The installer shows it first. `packaging/notices.py` writes it as plain text to `build/PRIVACY.txt`, with a byte order mark (NSIS reads a text file as UTF-8 only after one, otherwise in the system code page) and CRLF line ends, and the installer also leaves it in the installation folder. Updates and silent installs skip the page. It has electron-builder's 我同意 button (Claude judgment: the AGPL needs no acceptance, but the terms of use are agreed to there).
+- **设置 → 关于** shows the version and licence, opens PRIVACY.md in a dialog, and opens the licence and the third-party notices in the default editor.
+
 ## Status and open items
 
 Done and checked (2026-10-26 and 2026-10-27):

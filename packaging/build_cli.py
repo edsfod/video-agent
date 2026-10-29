@@ -91,7 +91,8 @@ if '"screen_pages"' not in manifest.read_text(encoding='utf-8'):
 shutil.rmtree(work)
 
 sys.path.insert(0, str(ROOT / 'packaging'))
-from notices import write
+from notices import privacy, write
 
 print(write(OUT / 'video-agent' / 'THIRD-PARTY-NOTICES.txt', FFMPEG))
+print(privacy(ROOT / 'build' / 'PRIVACY.txt'))
 print(EXE)

@@ -239,6 +239,22 @@ function pluginRoot() {
   return app.isPackaged ? path.join(process.resourcesPath, 'plugin') : path.resolve(__dirname, '..', '..');
 }
 
+// PRIVACY.md, the licence and the third-party notices: where the installer puts them, or in the source tree (where
+// the notices exist only after a CLI build).
+function aboutFiles() {
+  const root = path.resolve(__dirname, '..', '..');
+  const found = (file) => (fs.existsSync(file) ? file : null);
+  if (!app.isPackaged) {
+    const notices = path.join(root, 'build', 'cli', 'video-agent', 'THIRD-PARTY-NOTICES.txt');
+    return { privacy: path.join(root, 'PRIVACY.md'), license: found(path.join(root, 'LICENSE')), notices: found(notices) };
+  }
+  return {
+    privacy: path.join(process.resourcesPath, 'PRIVACY.md'),
+    license: found(path.join(process.resourcesPath, 'LICENSE.txt')),
+    notices: found(path.join(path.dirname(process.execPath), 'THIRD-PARTY-NOTICES.txt')),
+  };
+}
+
 function shells() {
   const found = [];
   const add = (id, label, file, args = []) => file && found.push({ id, label, file, args });
@@ -689,6 +705,10 @@ function registerIpc() {
     return picked.canceled ? null : installSkill(picked.filePaths[0]);
   });
   ipcMain.handle('skill:read', () => fs.readFileSync(path.join(pluginRoot(), 'skills', 'video-agent', 'SKILL.md'), 'utf8'));
+  ipcMain.handle('about:info', () => {
+    const files = aboutFiles();
+    return { version: VERSION, ...files, privacy: fs.readFileSync(files.privacy, 'utf8') };
+  });
 
   ipcMain.handle('accounts:list', () => accounts.list());
   ipcMain.handle('accounts:login', (_, key) => accounts.login(key));

@@ -15,6 +15,7 @@ contextBridge.exposeInMainWorld('va', {
   env: () => ipcRenderer.invoke('env:info'),
   installPlugin: (agent) => ipcRenderer.invoke('plugin:install', agent),
   readSkill: () => ipcRenderer.invoke('skill:read'),
+  about: () => ipcRenderer.invoke('about:info'),
   accounts: () => ipcRenderer.invoke('accounts:list'),
   accountLogin: (key) => ipcRenderer.invoke('accounts:login', key),
   accountLogout: (key) => ipcRenderer.invoke('accounts:logout', key),

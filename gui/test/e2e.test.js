@@ -63,8 +63,8 @@ function fakeModel() {
 }
 
 // The packaged build (VA_E2E_EXE, in CI's installer job) runs only the tests that reach what packaging changes: the
-// bundled CLI and FFmpeg, the plugin and skill files under resources, the terminal's native module, the tray icon and
-// cookie encryption. The rest, declared with devTest, run on the unpackaged app alone (user request, 2026-10-29: the
+// bundled CLI and FFmpeg, the plugin and skill files under resources, the licence and privacy files, the terminal's
+// native module, the tray icon and cookie encryption. The rest, declared with devTest, run on the unpackaged app alone (user request, 2026-10-29: the
 // whole suite ran twice).
 const devTest = (name, fn) => test(name, { skip: !!process.env.VA_E2E_EXE && 'runs on the unpackaged app' }, fn);
 
@@ -396,6 +396,28 @@ test('settings list the summary templates, a new one shows on the summary page, 
   assert.match(await page.textContent('#skill-text'), /A collection/);
   await page.click('#close-skill');
   await page.click('#settings button[value=cancel]');
+});
+
+test('settings show the version, the licence and PRIVACY.md', async () => {
+  await page.click('#open-settings');
+  await page.waitForSelector('#settings[open]');
+  await page.waitForFunction(() => /AGPL/.test(document.querySelector('#about-text').textContent));
+  assert.match(await page.textContent('#about-text'), /Video Agent \d+\.\d+\.\d+/);
+  assert.equal(await page.isVisible('#about-license'), true);
+  await page.click('#about-privacy');
+  await page.waitForSelector('#privacy-dialog[open] #privacy-text h2');
+  const text = await page.textContent('#privacy-text');
+  assert.match(text, /检查更新/);
+  assert.doesNotMatch(text, /隐私和使用须知/); // the title is the dialog's, not repeated
+  await page.click('#close-privacy');
+  await page.click('#settings button[value=cancel]');
+  if (!process.env.VA_E2E_EXE) return;
+  assert.equal(await page.isVisible('#about-notices'), true);
+  // The installer's licence page: NSIS reads it as UTF-8 only after a byte order mark, and wants CRLF line ends.
+  const licencePage = fs.readFileSync(path.join(path.dirname(process.env.VA_E2E_EXE), 'PRIVACY.txt'));
+  assert.deepEqual([...licencePage.subarray(0, 3)], [0xef, 0xbb, 0xbf]);
+  assert.doesNotMatch(licencePage.toString('utf8'), /[^\r]\n/);
+  assert.match(licencePage.toString('utf8'), /【隐私】/);
 });
 
 test('settings dialog saves the model through the CLI', async () => {

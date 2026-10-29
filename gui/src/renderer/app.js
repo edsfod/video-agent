@@ -1877,7 +1877,7 @@ $('settings').addEventListener('close', () => {
   $('discard-settings').textContent = '取消';
 });
 // Read-only windows close on a click outside too.
-for (const id of ['skill-dialog', 'logs']) $(id).addEventListener('click', (event) => event.target === $(id) && $(id).close());
+for (const id of ['skill-dialog', 'privacy-dialog', 'logs']) $(id).addEventListener('click', (event) => event.target === $(id) && $(id).close());
 
 for (const agent of ['claude', 'codex']) {
   $(`install-${agent}`).onclick = async () => {
@@ -1991,6 +1991,23 @@ $('skill-view').onclick = async () => {
 };
 $('close-skill').onclick = () => $('skill-dialog').close();
 
+// 关于: the version and licence, PRIVACY.md shown in a dialog, the licence and third-party notices opened as files.
+async function renderAbout() {
+  const about = await window.va.about();
+  $('about-text').textContent = `Video Agent ${about.version}。自由软件，以 GNU AGPL 3.0 或更高版本发布，不提供任何担保。`;
+  $('about-privacy').onclick = () => {
+    const text = about.privacy.replace(/^# .*\n+/, ''); // the dialog has the title
+    $('privacy-text').innerHTML = DOMPurify.sanitize(marked.parse(text));
+    $('privacy-dialog').showModal();
+  };
+  $('about-license').hidden = !about.license;
+  $('about-license').onclick = () => window.va.open(about.license);
+  $('about-notices').hidden = !about.notices;
+  $('about-notices').onclick = () => window.va.open(about.notices);
+  $('about-source').onclick = () => window.va.external(SOURCE_PAGE);
+}
+$('close-privacy').onclick = () => $('privacy-dialog').close();
+
 $('pick-workspace').onclick = async () => {
   const folder = await window.va.pickFolder('选择工作区');
   if (folder) $('set-workspace').value = folder;
@@ -2045,7 +2062,8 @@ $('settings').addEventListener('close', async () => {
 
 // ---------- updates ----------
 
-const RELEASES_PAGE = 'https://github.com/edsfod/video-agent/releases';
+const SOURCE_PAGE = 'https://github.com/edsfod/video-agent';
+const RELEASES_PAGE = `${SOURCE_PAGE}/releases`;
 const megabytes = (bytes) => (bytes / 1048576).toFixed(1);
 
 // 1, 0 or -1 as version a is newer than, the same as or older than b (plain x.y.z numbers).
@@ -2178,6 +2196,7 @@ async function init() {
   // collections, which hide their videos from 视频; drawn before, it showed every video for a moment.
   renderVideo();
   loadTemplates();
+  renderAbout();
   await loadCollections();
   window.va.cliJson(['tools', '--json']).then((found) => {
     state.tools = found.error ? null : found;
