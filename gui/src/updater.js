@@ -20,6 +20,13 @@ const RELEASES = `https://github.com/${REPO}/releases`;
 const MIRRORS = ['https://gh-proxy.com/', 'https://ghfast.top/'];
 const REQUEST_TIMEOUT = 15_000; // per metadata request; Electron's requests never time out on their own
 const STALL_TIMEOUT = 60_000; // a download with no progress for this long is cancelled and the next source tried
+// A download that is moving but slowly also moves on, to the next source that downloads only the changed blocks
+// (user request, 2026-10-29: 0.9.0 came from github.com at about 0.4 MB/s, where gh-proxy.com had given 2.5 MB/s).
+// After SLOW.after ms, a source averaging under SLOW.speed bytes/s with more than SLOW.left s still to go at that
+// speed is left. The last such source is kept however slow, and a slow source left behind is tried once more, without
+// this check, when every later one failed. Tests: VA_UPDATE_SLOW=<after ms>,<bytes/s>,<seconds left>.
+const [slowAfter, slowSpeed, slowLeft] = (process.env.VA_UPDATE_SLOW || '15000,300000,60').split(',').map(Number);
+const SLOW = { after: slowAfter, speed: slowSpeed, left: slowLeft };
 
 const publicKey = () => process.env.VA_UPDATE_PUBLIC_KEY || signature.PUBLIC_KEY; // a test key for the e2e tests
 
@@ -144,6 +151,7 @@ function createUpdater({ logs, send, settings, remember, running }) {
   let index = 0; // the source that answered the last check
   let token = null;
   let stall = null;
+  let attempt = null; // the running download: { started, slow (whether it may be left for being slow), why }
   const set = (changes) => {
     state = { ...state, ...changes };
     send('update:state', state);
@@ -153,11 +161,21 @@ function createUpdater({ logs, send, settings, remember, running }) {
     clearTimeout(stall);
     stall = setTimeout(() => token?.cancel(), STALL_TIMEOUT);
   };
+  // Before any progress the size is not known yet, so the time left counts as long.
+  const tooSlow = () => {
+    if (!attempt?.slow || !token || Date.now() - attempt.started < SLOW.after) return;
+    const speed = (state.transferred || 0) / ((Date.now() - attempt.started) / 1000);
+    const left = state.total ? (state.total - state.transferred) / Math.max(speed, 1) : Infinity;
+    if (speed >= SLOW.speed || left <= SLOW.left) return;
+    attempt.why = `太慢（约 ${Math.round(speed / 1000)} KB/s）`;
+    token.cancel();
+  };
 
   autoUpdater.on('error', () => {}); // failures are logged per source below; an unhandled 'error' event would throw
   autoUpdater.on('download-progress', (progress) => {
     watch();
     set({ percent: progress.percent, transferred: progress.transferred, total: progress.total, speed: progress.bytesPerSecond });
+    tooSlow();
   });
 
   function use(i) {
@@ -201,27 +219,45 @@ function createUpdater({ logs, send, settings, remember, running }) {
     if (state.status !== 'available') return state;
     const failures = [];
     const all = sources(settings().updateMirror);
-    for (let i = index; i < all.length; i++) {
+    // A source that downloads the whole installer (the API) is no way out of a slow one that downloads only the
+    // changed blocks.
+    const order = [...all.keys()].slice(index);
+    const left = new Set(); // sources left for being slow
+    while (order.length) {
+      const i = order.shift();
+      if (left.size && !left.has(i) && all[i].differential === false) continue;
       const source = use(i);
-      set({ status: 'downloading', percent: 0, transferred: 0, total: 0, source: source.name, message: '' });
+      const later = order.some((j) => !left.has(j) && all[j].differential !== false);
+      set({ status: 'downloading', percent: 0, transferred: 0, total: 0, source: source.name, message: failures.join('\n') });
       try {
         // Checking again binds the download to this source and refreshes its signed latest.yml.
         const result = await autoUpdater.checkForUpdates();
         if (!result?.isUpdateAvailable) throw new Error(`${source.name} 上没有比 ${app.getVersion()} 新的版本`);
         token = new CancellationToken();
+        attempt = { started: Date.now(), slow: later && !left.has(i) };
         watch();
-        await autoUpdater.downloadUpdate(token);
+        const check = setInterval(tooSlow, 1000); // also when no progress comes at all
+        try {
+          await autoUpdater.downloadUpdate(token);
+        } finally {
+          clearInterval(check);
+        }
         clearTimeout(stall);
         index = i;
         logs.line('info', `update ${result.updateInfo.version} downloaded via ${source.name}`);
-        return set({ status: 'downloaded', version: result.updateInfo.version, percent: 100 });
+        return set({ status: 'downloaded', version: result.updateInfo.version, percent: 100, message: '' });
       } catch (error) {
         clearTimeout(stall);
-        const message = token?.cancelled ? `${STALL_TIMEOUT / 1000} 秒没有进度` : reason(error);
-        failures.push(`${source.name}：${message}`);
+        const message = attempt?.why || (token?.cancelled ? `${STALL_TIMEOUT / 1000} 秒没有进度` : reason(error));
+        failures.push(`${source.name}：${message}${attempt?.why ? '，换下一个' : ''}`);
         logs.line('warn', `update download via ${source.name} failed: ${message}`);
+        if (attempt?.why) {
+          left.add(i);
+          order.push(i); // once more at the end, without the speed check
+        }
       } finally {
         token = null;
+        attempt = null;
       }
     }
     return set({ status: 'available', message: `下载没有成功：\n${failures.join('\n')}` });

@@ -1,6 +1,6 @@
 // End-to-end test of checking for and downloading an update, against a local fake release feed signed with a test
-// key: a tampered latest.yml is refused, a dead source is skipped, and a good update downloads and passes the sha512
-// check. Installing is covered by update-install.test.js on an installed build.
+// key: a tampered latest.yml is refused, a dead source is skipped, a source that serves the installer too slowly is
+// left for the next one, and a good update downloads and passes the sha512 check. Installing is covered by update-install.test.js on an installed build.
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -48,11 +48,20 @@ const server = http.createServer((request, response) => {
     [NAME]: INSTALLER,
   }[file];
   if (body === undefined) return (response.statusCode = 404), response.end();
-  response.end(body);
+  if (!(request.url.startsWith('/slow/') && file === NAME)) return response.end(body);
+  // Under /slow/ the installer comes at 8 KB/s, which would take half a minute.
+  response.setHeader('Content-Length', body.length);
+  let sent = 0;
+  const timer = setInterval(() => {
+    response.write(body.subarray(sent, (sent += 2048)));
+    if (sent >= body.length) clearInterval(timer), response.end();
+  }, 250);
+  response.on('close', () => clearInterval(timer));
 });
 
 let app;
 let page;
+const base = () => `http://127.0.0.1:${server.address().port}`;
 
 test.before(async () => {
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -70,9 +79,10 @@ test.before(async () => {
     cwd: GUI,
     env: {
       ...process.env,
-      VA_UPDATE_ROOT: `http://127.0.0.1:${deadPort}/releases,http://127.0.0.1:${server.address().port}/releases`,
+      VA_UPDATE_ROOT: [`http://127.0.0.1:${deadPort}/releases`, `${base()}/slow/releases`, `${base()}/releases`].join(','),
       VA_UPDATE_PUBLIC_KEY: PUBLIC,
       VA_UPDATE_DELAY_MS: '300',
+      VA_UPDATE_SLOW: '3000,50000,2', // after 3 s, under 50 KB/s with more than 2 s to go
       NO_PROXY: '127.0.0.1,localhost',
       no_proxy: '127.0.0.1,localhost',
     },
@@ -104,16 +114,19 @@ test('a signed update is offered with its notes, after skipping the dead source'
   await page.click('#update-check');
   await page.waitForFunction(() => /有新版本 9\.9\.9/.test(document.querySelector('#update-status').textContent), null, { timeout: 60_000 });
   assert.match(await page.textContent('#update-notes'), /测试更新/);
-  assert.ok(served.includes('/releases/latest/download/latest.yml'));
+  assert.ok(served.includes('/slow/releases/latest/download/latest.yml'), 'the check is answered by the first live source');
   assert.equal(await page.isVisible('#update-download'), true);
   assert.ok(await page.$eval('#open-settings', (button) => button.classList.contains('has-update')));
 });
 
-test('downloading fetches the installer from the versioned folder and checks its sha512', async () => {
+test('a slow download moves to the next source, which fetches the installer from the versioned folder and checks its sha512', async () => {
   await page.click('#update-download');
+  await page.waitForFunction(() => /测试源 2：太慢（约 \d+ KB\/s），换下一个/.test(document.querySelector('#update-status').textContent), null, { timeout: 30_000 });
   await page.waitForFunction(() => /已下载并通过校验/.test(document.querySelector('#update-status').textContent), null, { timeout: 120_000 });
+  assert.ok(served.includes(`/slow/releases/download/v${VERSION}/${NAME}`), served.join(' '));
   assert.ok(served.includes(`/releases/download/v${VERSION}/${NAME}`), served.join(' '));
   assert.equal(await page.isVisible('#update-install'), true);
   const log = fs.readFileSync(path.join(ROOT, 'gui-data', 'logs', 'main.log'), 'utf8');
-  assert.match(log, /update 9\.9\.9 downloaded via 测试源 2/);
+  assert.match(log, /update download via 测试源 2 failed: 太慢/);
+  assert.match(log, /update 9\.9\.9 downloaded via 测试源 3/);
 });
