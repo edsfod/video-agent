@@ -12,7 +12,7 @@
     "screenshot": "electron . --screenshot",
     "test": "node --test --test-concurrency=1 \"test/**/*.test.js\"",
     "dist": "npm run build:cli && electron-builder --win nsis --x64 --publish never",
-    "test:dist": "set \"VA_E2E_EXE=%CD%\\dist\\win-unpacked\\Video Agent.exe\" && node --test --test-concurrency=1 \"test/**/*.test.js\"",
+    "test:dist": "set \"VA_E2E_EXE=%CD%\\dist\\win-unpacked\\Video Agent.exe\" && node --test --test-concurrency=1 test/e2e.test.js test/update.test.js",
     "screenshots": "node scripts/screenshots.js",
     "build:cli": "cd .. && uv run --with pyinstaller --with pillow python packaging/build_cli.py"
   },

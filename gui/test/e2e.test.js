@@ -55,6 +55,12 @@ function fakeModel() {
   return new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve({ server, requests })));
 }
 
+// The packaged build (VA_E2E_EXE, in CI's installer job) runs only the tests that reach what packaging changes: the
+// bundled CLI and FFmpeg, the plugin and skill files under resources, the terminal's native module, the tray icon and
+// cookie encryption. The rest, declared with devTest, run on the unpackaged app alone (user request, 2026-10-29: the
+// whole suite ran twice).
+const devTest = (name, fn) => test(name, { skip: !!process.env.VA_E2E_EXE && 'runs on the unpackaged app' }, fn);
+
 let app;
 let page;
 
@@ -91,6 +97,16 @@ test.before(async () => {
   await page.waitForSelector('#video-list .video-item .badge:text("未处理")');
 });
 
+// A test that fails halfway can leave a dialog open or a stub in place, which would fail every test after it.
+test.afterEach(async () => {
+  refuse = false;
+  await app?.evaluate(() => {
+    globalThis.vaRestoreDialogs?.();
+    delete globalThis.vaRestoreDialogs;
+  }).catch(() => {});
+  await page?.evaluate(() => document.querySelectorAll('dialog[open]').forEach((dialog) => dialog.close())).catch(() => {});
+});
+
 test.after(async () => {
   await app?.close();
   model?.server.close();
@@ -108,7 +124,7 @@ test('process the video from the window', async () => {
   assert.match(await page.textContent('#log-text'), /完成/);
 });
 
-test('the same processing is queued once, and the queue empties when it ends', async () => {
+devTest('the same processing is queued once, and the queue empties when it ends', async () => {
   await Promise.all([page.click('#run-process'), page.click('#run-process')]);
   await page.waitForFunction(() => document.querySelector('#task-note').textContent.includes('已经在队列里'));
   assert.equal(await page.locator('.task-item', { hasText: '处理：' }).count(), 2); // the first run and this one
@@ -116,7 +132,7 @@ test('the same processing is queued once, and the queue empties when it ends', a
   await page.waitForSelector('#video-list .video-item .badge:text("已处理")');
 });
 
-test('transcript tab lists the lines', async () => {
+devTest('transcript tab lists the lines', async () => {
   await page.click('.tabs button[data-tab=transcript]');
   await page.waitForSelector('#transcript .line');
   assert.equal(await page.locator('#transcript .line').count(), 2);
@@ -124,7 +140,7 @@ test('transcript tab lists the lines', async () => {
   await page.waitForFunction(() => document.querySelectorAll('#transcript .line').length === 1);
 });
 
-test('a correction gives a cleaned transcript and keeps the original', async () => {
+devTest('a correction gives a cleaned transcript and keeps the original', async () => {
   await page.fill('#transcript-filter', '');
   await page.click('#corrections summary');
   await page.fill('#correction-wrong', '测试视频');
@@ -140,7 +156,7 @@ test('a correction gives a cleaned transcript and keeps the original', async () 
   await page.waitForFunction(() => document.querySelector('#transcript').textContent.includes('今天讲测试视频'));
 });
 
-test('frames tab takes an extra frame', async () => {
+devTest('frames tab takes an extra frame', async () => {
   await page.click('.tabs button[data-tab=frames]');
   await page.waitForSelector('.frame img');
   await page.fill('#frame-times', '0:05');
@@ -173,7 +189,7 @@ test('summary through the model API, with one frame tool round', async () => {
   await page.click('#lightbox');
 });
 
-test('copy material puts the rules and transcript on the clipboard', async () => {
+devTest('copy material puts the rules and transcript on the clipboard', async () => {
   await page.check('input[name=route][value=copy]');
   await page.click('#run-summary');
   await page.waitForFunction(() => document.querySelector('#summary-state').textContent.includes('已复制'));
@@ -198,7 +214,7 @@ execFileSync('video-agent', ['summarize', video, '-o', workspace, '--import', dr
 fs.rmSync(draft);
 `;
 
-test('another agent writes a summary from standard input or from a task file', async () => {
+devTest('another agent writes a summary from standard input or from a task file', async () => {
   const script = path.join(ROOT, 'fake-agent.js');
   fs.writeFileSync(script, FAKE_AGENT);
   const versions = () => JSON.parse(cli(['versions', VIDEO, '-o', WORKSPACE, '--json'])).versions;
@@ -244,7 +260,7 @@ test('another agent writes a summary from standard input or from a task file', a
   await page.check('input[name=route][value=api]');
 });
 
-test('a version note is edited in a dialog that starts from the note it has', async () => {
+devTest('a version note is edited in a dialog that starts from the note it has', async () => {
   const listed = () => JSON.parse(cli(['versions', VIDEO, '-o', WORKSPACE, '--json']));
   const [version] = listed().versions;
   await page.selectOption('#summary-version-pick', version.file);
@@ -267,7 +283,7 @@ test('a version note is edited in a dialog that starts from the note it has', as
   assert.equal(listed().current.note, before);
 });
 
-test('a folder for a chat AI holds the prompt and pictures within the file limit', async () => {
+devTest('a folder for a chat AI holds the prompt and pictures within the file limit', async () => {
   await page.check('input[name=route][value=copy]');
   await page.fill('#export-limit', '3');
   const parent = path.join(ROOT, 'exports');
@@ -286,7 +302,7 @@ test('a folder for a chat AI holds the prompt and pictures within the file limit
   assert.ok(fs.existsSync(path.join(parent, folder, '提示词.md')));
 });
 
-test('a collection lists its videos and copies the material for its overview', async () => {
+devTest('a collection lists its videos and copies the material for its overview', async () => {
   await page.click('#new-collection');
   await page.fill('#collection-dialog-name', '测试合集');
   await page.click('#collection-dialog button[value=save]');
@@ -366,7 +382,7 @@ test('settings dialog saves the model through the CLI', async () => {
   }
 });
 
-test('settings close at once without changes and ask first with them', async () => {
+devTest('settings close at once without changes and ask first with them', async () => {
   const shown = () => page.$eval('#settings', (dialog) => dialog.open);
   await page.click('#open-settings');
   await page.waitForSelector('#settings[open]');
@@ -388,7 +404,7 @@ test('settings close at once without changes and ask first with them', async () 
   await page.waitForFunction(() => !document.querySelector('#settings').open);
 });
 
-test('logs record every job and never the API key', async () => {
+devTest('logs record every job and never the API key', async () => {
   await page.click('#open-logs');
   await page.waitForSelector('#logs[open] .log-entry');
   const titles = await page.locator('.log-entry').allTextContents();
@@ -459,7 +475,7 @@ test('a site login is exported as a Netscape cookies file for yt-dlp', async () 
   assert.ok(!lines.some((line) => line.includes('elsewhere')));
 });
 
-test('accounts are listed in an order of one\'s own, can be hidden, and take an imported cookies.txt', async () => {
+devTest('accounts are listed in an order of one\'s own, can be hidden, and take an imported cookies.txt', async () => {
   const names = () => page.$$eval('#accounts .account-name', (all) => all.map((item) => item.textContent));
   await page.click('#open-settings');
   await page.waitForSelector('#settings[open] #accounts .account');
@@ -504,7 +520,7 @@ test('accounts are listed in an order of one\'s own, can be hidden, and take an 
   await page.fill('#download-url', '');
 });
 
-test('a subtitle file of another name replaces the transcript', async () => {
+devTest('a subtitle file of another name replaces the transcript', async () => {
   const file = path.join(ROOT, 'teacher.vtt');
   fs.writeFileSync(file, 'WEBVTT\n\n00:00:01.000 --> 00:00:02.000\n老师给的字幕\n');
   await app.evaluate(({ dialog }, chosen) => {
@@ -522,7 +538,7 @@ test('a subtitle file of another name replaces the transcript', async () => {
   assert.equal(JSON.parse(cli(['show', VIDEO, '-o', WORKSPACE])).manifest.transcript.source, 'file:teacher.vtt');
 });
 
-test('a folder of slide images is taken and placed by the screen pages', async () => {
+devTest('a folder of slide images is taken and placed by the screen pages', async () => {
   const folder = path.join(ROOT, '课件');
   fs.mkdirSync(folder);
   execFileSync('ffmpeg', ['-v', 'error', '-y', '-ss', '6', '-i', VIDEO, '-frames:v', '1', path.join(folder, 'page.png')]);
@@ -537,13 +553,13 @@ test('a folder of slide images is taken and placed by the screen pages', async (
   await app.evaluate(() => globalThis.vaRestoreDialogs());
 });
 
-test('remove the video from the list', async () => {
+devTest('remove the video from the list', async () => {
   await page.click('#remove-video');
   await page.waitForSelector('#empty:not([hidden])');
   assert.equal(await page.locator('#video-list .video-item').count(), 0);
 });
 
-test('added local videos are processed at once, and those without subtitles are asked about first', async () => {
+devTest('added local videos are processed at once, and those without subtitles are asked about first', async () => {
   const folder = path.join(ROOT, 'local');
   fs.mkdirSync(folder);
   const withSubs = path.join(folder, 'with subs.mp4');
@@ -565,7 +581,7 @@ test('added local videos are processed at once, and those without subtitles are 
   assert.match(await page.textContent('#video-list .video-item:has-text("bare")'), /未处理/);
 });
 
-test('ticked tasks stop together, and 全部停止 stops the rest', async () => {
+devTest('ticked tasks stop together, and 全部停止 stops the rest', async () => {
   const waiting = path.join(ROOT, 'waiting-agent.js');
   fs.writeFileSync(waiting, 'setTimeout(() => {}, 120_000);\n');
   await page.click('#open-settings');
@@ -614,6 +630,7 @@ test('the skill is copied into a picked folder, but never over another folder of
   fs.mkdirSync(path.join(other, 'video-agent'), { recursive: true });
   fs.writeFileSync(path.join(other, 'video-agent', 'pyproject.toml'), '');
   const pick = (folder) => app.evaluate(({ dialog }, chosen) => {
+    globalThis.vaRestoreDialogs?.(); // the real one, not the stub of the pick before
     const open = dialog.showOpenDialog;
     globalThis.vaRestoreDialogs = () => Object.assign(dialog, { showOpenDialog: open });
     dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [chosen] });
