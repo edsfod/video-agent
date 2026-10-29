@@ -49,7 +49,6 @@ Agents and shells           other agents follow it        commands
 | --- | --- |
 | `src/main.js` | Main process: settings, IPC handlers, building CLI and Agent command lines, plugin and skill installs, tray, windows. |
 | `src/tasks.js` | The task queue and which tasks may run together; free of Electron. |
-| `src/access.js` | Which CLI commands the page runs itself; free of Electron. |
 | `src/cli-types.d.ts` | The CLI's JSON types for the app, written from `contract.py` by `scripts/cli_types.py`. |
 | `src/accounts.js` | Site logins and their cookies for downloads. |
 | `src/models.js` | The models and thinking levels each summary route offers. |
@@ -102,7 +101,7 @@ The folder and file names, Chinese ones included, are read by the app, the skill
 
 ## Boundaries
 
-- **App and CLI.** The app runs the CLI as a child process (`cli:json` parses its `--json` output, `cli:text` returns its text; API keys go on stdin). What the JSON holds is `src/video_agent/contract.py`: mypy checks the code that builds it, the tests check every value the CLI prints against it, and the app's copy, `gui/src/cli-types.d.ts`, is written from it. `tools --json` gives `json_version`, and the window says when a CLI set in the settings prints another. The page runs only reading and editing commands itself (`gui/src/access.js`); downloads, processing, compression and model summaries go through the task queue.
+- **App and CLI.** The app runs the CLI as a child process (`cli:json` parses its `--json` output, `cli:text` returns its text; API keys go on stdin). What the JSON holds is `src/video_agent/contract.py`: mypy checks the code that builds it, the tests check every value the CLI prints against it, and the app's copy, `gui/src/cli-types.d.ts`, is written from it. `tools --json` gives `json_version`, and the window says when a CLI set in the settings prints another.
 - **Page and main process.** The page runs sandboxed with context isolation and a strict CSP and reaches the main process only through `window.va` (`preload.js`). Markdown is rendered with marked and sanitized with DOMPurify; `fs:read` reads only inside the workspace; `shell:open` opens any path, as a link in a summary may point anywhere (user decision).
 - **Concurrency.** Jobs are separate processes that share files. The CLI locks a video's folder while writing and writes files atomically; the app's queue keeps one processing or summary task per video and limits each kind. Details: [Concurrent jobs](docs/decisions/concurrent-jobs.md).
 - **Outside tools.** yt-dlp, FFmpeg and AutoSlides Extractor are run as programs, never copied in; a copy on `PATH` comes first.

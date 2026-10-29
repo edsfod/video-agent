@@ -10,7 +10,6 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const pty = require('node-pty');
-const access = require('./access');
 const { Logs } = require('./logs');
 const { createUpdater } = require('./updater');
 const accounts = require('./accounts');
@@ -796,7 +795,6 @@ function registerIpc() {
   ipcMain.handle('tasks:retry', (_, id) => queue.retry(id));
   ipcMain.handle('tasks:clear', () => queue.clearFinished());
   ipcMain.handle('cli:json', async (_, args) => {
-    if (!access.pageCommand(args)) return { error: `窗口不能直接运行 video-agent ${args?.[0]}` };
     const [command, ...prefix] = cliCommand();
     const { code, out, err } = await runToEnd(command, [...prefix, ...args]);
     // Logged, so a list that failed to show can be traced (the window only shows the last line).
@@ -809,7 +807,6 @@ function registerIpc() {
     }
   });
   ipcMain.handle('cli:text', (_, { args, stdin }) => {
-    if (!access.pageCommand(args)) return { code: 2, out: '', err: `窗口不能直接运行 video-agent ${args?.[0]}` };
     const [command, ...prefix] = cliCommand();
     return runToEnd(command, [...prefix, ...args], stdin);
   });
