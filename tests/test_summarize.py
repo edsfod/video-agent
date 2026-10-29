@@ -437,6 +437,19 @@ def test_imported_windows_line_endings_stay_single(processed):
   assert again.read_bytes() == saved, 'importing a saved summary again changes nothing'
 
 
+def test_a_draft_beside_the_summary_is_imported_and_removed(processed, capsys):
+  from video_agent import cli
+
+  video, workspace = processed
+  with pytest.raises(SystemExit):
+    cli.main(['summarize', str(video), '-o', str(workspace), '--import'])
+  assert 'no draft at' in capsys.readouterr().err
+  draft = asset_folder(workspace, video.resolve()) / '总结.draft.md'
+  draft.write_text(SUMMARY, encoding='utf-8')
+  assert cli.main(['summarize', str(video), '-o', str(workspace), '--import', '--source', 'Claude Code']) == 0
+  assert (draft.parent / '总结.md').read_text(encoding='utf-8') == SUMMARY and not draft.exists()
+
+
 def test_the_code_block_a_chat_ai_puts_the_summary_in_is_taken_off():
   from video_agent.summarize import _clean
 

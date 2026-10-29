@@ -229,10 +229,10 @@ const file = /读 (.+) 并完成里面的任务/.exec(process.argv.slice(2).join
 const task = file ? fs.readFileSync(file, 'utf8') : fs.readFileSync(0, 'utf8');
 const video = /总结这个视频：(.+)/.exec(task)[1].trim();
 const workspace = /工作区是 (.+?)，/.exec(task)[1];
-const draft = path.join(workspace, 'draft.md');
+const draft = /写成 (.+?\\.draft\\.md)，/.exec(task)[1];
 fs.writeFileSync(draft, '# 别的 Agent 写的\\n\\n## 概要\\n\\n这是另一个 Agent 按 skill 写的测试总结，任务来自' + (file ? '文件' : '标准输入') + '。\\n');
-execFileSync('video-agent', ['summarize', video, '-o', workspace, '--import', draft, '--source', /--source "([^"]+)"/.exec(task)[1]]);
-fs.rmSync(draft);
+execFileSync('video-agent', ['summarize', video, '-o', workspace, '--import', '--source', /--source "([^"]+)"/.exec(task)[1]]);
+if (fs.existsSync(draft)) throw new Error('the import left the draft');
 `;
 
 devTest('another agent writes a summary from standard input or from a task file', async () => {

@@ -97,6 +97,7 @@ def test_a_screen_region_given_by_hand(tmp_path):
     'activity': [],
     'picture': None,
     'given': True,
+    'warning': None,
   }
   assert len(manifest['screen_pages']) == PAGES
   with pytest.raises(ValueError):

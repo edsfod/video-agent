@@ -9,7 +9,7 @@ from pathlib import Path
 from . import collection, corrections, files, processor, settings, templates, transcript, versions
 from . import compress as compression
 from . import summarize as summaries
-from .download import DownloadError, download_urls
+from .download import DownloadError, clean_url, download_urls
 from .media import MediaError, duration, parse_clock, probe, save_frame
 from .processor import asset_folder, process_video
 from .summarize import EFFORTS, import_summary, list_models, material, pack, pack_folder, summarize_video
@@ -143,6 +143,11 @@ def build_parser():
     help='allow sending extracted audio to Bilibili BCut; requires --asr bcut',
   )
   process.add_argument(
+    '--force',
+    action='store_true',
+    help='process again a video processed before with the same settings (by default that run is used as it is)',
+  )
+  process.add_argument(
     '--overwrite-transcript', action='store_true', help='replace an existing transcript with newly selected source data'
   )
   process.add_argument(
@@ -230,7 +235,10 @@ def build_parser():
     '--import',
     dest='import_from',
     metavar='FILE',
-    help='save a summary written elsewhere (a file, or - for stdin) instead of calling a model',
+    nargs='?',
+    const=True,
+    help='save a summary written elsewhere (a file, or - for stdin) instead of calling a model; without FILE, the '
+    'draft beside the summary (总结.draft.md, 合集总结.draft.md, 学习提纲.draft.md), removed once saved',
   )
   summarize.add_argument(
     '--template', metavar='NAME', help='the summary template to follow (default: the chosen one; see template --list)'
@@ -388,7 +396,8 @@ def build_parser():
     action='append',
     default=[],
     metavar=('WRONG', 'RIGHT'),
-    help='replace WRONG with RIGHT throughout the transcript; a Latin word matches as a whole word only',
+    help='replace WRONG with RIGHT throughout the transcript; a Latin word matches as a whole word only, Chinese as '
+    'written, inside longer words too, so give only forms that are wrong wherever they occur',
   )
   fixing.add_argument('--remove', action='append', default=[], metavar='WRONG', help='take a correction back')
   fixing.add_argument('--reset', action='store_true', help='remove every correction and the cleaned transcript')
@@ -543,6 +552,7 @@ def _collection(args):
     collection.set_terms(workspace, args.name, args.replace, args.remove)
   elif action == 'follow':
     if args.url:
+      args.url = clean_url(args.url)
       where = args.folder or Path(workspace) / DOWNLOADS
       collection.follow(workspace, args.name, args.url, where, auto=bool(args.auto))
     elif args.auto is not None:
@@ -709,6 +719,7 @@ def _fix(args):
 
 def run(args):
   if args.command == 'download':
+    args.urls = [clean_url(url) for url in args.urls]
     following = args.follow and args.collection and args.playlist and len(args.urls) == 1
     if args.follow and not following:
       print('download: --follow needs --playlist, --collection and exactly one URL')
@@ -842,7 +853,15 @@ def run(args):
 
   if args.command == 'summarize' and args.import_from:
     # Bytes, not text: the GUI sends UTF-8, whatever code page a frozen build would decode stdin with.
-    source = sys.stdin.buffer.read() if args.import_from == '-' else Path(args.import_from).read_bytes()
+    draft = None
+    if args.import_from is True:
+      where = {'collection': args.collection, 'guide': args.guide}
+      draft = summaries.draft_path(args.output, args.video, **where)
+      if not draft.is_file():
+        raise ValueError(f'no draft at {draft}; write the text there first, or give --import a file')
+      source = draft.read_bytes()
+    else:
+      source = sys.stdin.buffer.read() if args.import_from == '-' else Path(args.import_from).read_bytes()
     text = source.decode('utf-8-sig')
     written = {'overwrite': args.overwrite, 'source': args.source, 'note': args.note}
     if args.collection:
@@ -854,6 +873,8 @@ def run(args):
       if pairs:
         listed = '、'.join(f'{wrong}→{right}' for wrong, right in pairs)
         print(f'applied {len(pairs)} transcript corrections from the summary: {listed}', file=sys.stderr)
+    if draft:
+      draft.unlink(missing_ok=True)
     _written(target, args)
     return 0
 
@@ -954,6 +975,7 @@ def run(args):
         subtitles=args.subtitles,
         slides_folder=args.slides,
         status=say,
+        force=args.force,
       )
     except (OSError, MediaError, RuntimeError, ValueError) as error:
       if args.json:

@@ -50,7 +50,7 @@ video-agent process "D:\Video-Downloads\video-one.mp4" "D:\Video-Downloads\video
 
 Downloading is optional. Video Agent installs yt-dlp as a dependency, and the desktop installer bundles it, so `download` works without a separate install. A yt-dlp on `PATH` or the one Media Downloader keeps under `%APPDATA%\media-downloader\bin` is preferred when present, since either may be newer. yt-dlp is told where Video Agent's FFmpeg is, so separate video and audio streams are merged. If no executable or module is available, `download` reports the missing tool and exits with status 1. The downloader only handles URLs supported by yt-dlp. A video saved by any other method can be passed directly to `process`.
 
-Share-tracking query parameters are not needed. For Bilibili, the bare `https://www.bilibili.com/video/<BV id>/` link is enough: on 2026-10-26, `BV1aknV6CEFB` downloaded successfully with its `?vd_source=...` suffix removed. Keep other query parameters (such as `?p=2` for a multi-part video's part) when they select specific content.
+Share-tracking query parameters are dropped before downloading: Bilibili's `vd_source`, `spm_id_from`, `from_spmid` and `share_*` marks, YouTube's `si` and `feature`, and `utm_*`. Parameters that select content, such as `?p=2` for a multi-part video's part or `?t=90`, stay.
 
 ### `inspect`
 
@@ -83,9 +83,16 @@ video-agent process VIDEO... [OPTIONS]
 | `--slide-extractor PATH` | Auto-detected | Executable path for AutoSlides Extractor. Search order: this option, `AUTOSLIDES_EXTRACTOR`, `SlidesExtractor` or `AutoSlidesExtractor` on `PATH`, then common Windows install folders. |
 | `--asr {none,bcut}` | `none` | Speech-recognition provider used only when no sidecar or embedded subtitles are available. |
 | `--allow-remote-asr` | Off | Explicitly permits sending extracted audio to Bilibili BCut. Valid only with `--asr bcut`. |
+| `--force` | Off | Process again a video processed before. Without it, a video already processed with the same frame settings is used as it is (each run samples a new set of frames), unless this run asks for more: a transcript it lacks (`--asr`), slides, a screen region, a subtitle file or `--overwrite-transcript`. The desktop app always passes it. |
 | `--overwrite-transcript` | Off | Re-acquire transcript data even when `transcript.srt` already exists. If refresh fails, the prior transcript is kept and the run is marked incomplete. |
 | `--subtitles FILE` | None | Use this SRT or WebVTT file as the transcript, whatever its name; replaces an existing transcript. One video only. |
 | `--slides FOLDER` | None | Take the slide images (PNG, JPEG) in this folder: AutoSlides' `timeline.json` gives their times, otherwise each takes the time of the screen page it looks like. A `screen_<name>` video takes the `slides_<name>` folder AutoSlides keeps beside it without this option. One video only. |
+
+#### Layout check and pointed-at frames
+
+When a recording of five minutes or more with a camera gives fewer than two screen pages, `process` says the layout may have been read wrong, names `layout.jpg` (the screen region outlined in green) and suggests `--screen-region`; `summary-context.md` carries the same note as a "Layout check" line.
+
+In a layout with a camera, a line of the transcript in which the speaker points at something shown (如图, 看这个, 这张表, as you can see, this slide, …) gets a frame in `frames/extra/` when no representative frame is within 10 seconds: at most one per 20 seconds and 30 in all. `summary-context.md` lists them with the words said under "Frames where the speaker points".
 
 #### Subtitle and upload behavior
 
@@ -172,6 +179,7 @@ video-agent summarize VIDEO [-o WORKSPACE] [--provider anthropic|openai] [--mode
 | `--max-extra-frames N` | 8 | Frames the model may request through tool calling; `0` allows none. |
 | `--no-tools` | Off | Send no tool definition, for models without tool calling. |
 | `--overwrite` | Off | Replace an existing `总结.md`. |
+| `--import [FILE]` | None | Save a summary written elsewhere instead of calling a model: a file, `-` for standard input, or with no value the draft beside the summary (`总结.draft.md` in the video's folder; `合集总结.draft.md` or `学习提纲.draft.md` in the collection's), which is removed once saved. |
 
 The API key comes from Windows Credential Manager (saved with `config --set-key`), else `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`. An OpenAI-compatible server that needs no key, such as Ollama, works without one. The summary and the frames are sent to the configured provider.
 

@@ -2,6 +2,7 @@
 
 import io
 import json
+import os
 import shutil
 
 import pytest
@@ -91,4 +92,14 @@ def test_overview_and_guide_from_the_summaries(two_videos, tmp_path, capsys, fak
   assert cli.main(['summarize', '--collection', '系列', '--guide', '--import', '-', '-o', str(workspace)]) == 0
   assert (workspace / '合集' / '系列' / '学习提纲.md').read_text(encoding='utf-8').startswith('# 学习提纲')
   shown = _show(workspace, '系列', capsys)
-  assert shown['overview'] and shown['guide']
+  assert shown['overview'] and shown['guide'] and shown['overview_behind'] == shown['guide_behind'] == []
+
+  # A summary changed after the overview: show names its video. An overview written as a draft is saved over it.
+  summary = asset_folder(workspace, first) / '总结.md'
+  later = target.stat().st_mtime + 5
+  os.utime(summary, (later, later))
+  assert _show(workspace, '系列', capsys)['overview_behind'] == [1]
+  draft = workspace / '合集' / '系列' / '合集总结.draft.md'
+  draft.write_text(OVERVIEW + '\n第二版\n', encoding='utf-8')
+  assert cli.main(['summarize', '--collection', '系列', '--import', '--make-current', '-o', str(workspace)]) == 0
+  assert '第二版' in target.read_text(encoding='utf-8') and not draft.exists()

@@ -135,6 +135,17 @@ The rules and template a summary follows are a summary template. Several exist s
 
 `SKILL.md` stays read-only (the GUI shows it in a dialog): it holds the consent rule for BCut uploads, the lock rule and the command forms, and every update replaces the plugin files, so edits would break safety rules or be lost. Personal preferences go into the rules copy. Personal preferences go into a template. In the GUI: the summary page's 模板 drop-down (the collection's overview and study guide use it too) and 设置 → 总结模板 (编辑, 打开新版对比, 已合并, 恢复自带的, 删除, 新建 from any template, 查看 skill).
 
+## Skill steps in code — user request (2026-10-29)
+
+What the skill asked the Agent to remember or do by hand, and a program can do, is code, so `SKILL.md` keeps only consent, judgment, reading and writing:
+
+- `download` drops share-tracking parameters (Bilibili's share and recommendation marks, YouTube's `si` and `feature`, `utm_*`) and keeps those that pick content (`p`, `t`).
+- `process` uses a video processed before with the same frame settings as it is, since each run samples a new set of frames and would change a summary's links; `--force`, or a run asking for more (a missing transcript with `--asr`, slides, a region, a subtitle file), processes again. The desktop app always passes `--force`: there, processing is asked for on purpose.
+- A layout check: a recording of five minutes or more with a camera and fewer than two screen pages gets a note naming `layout.jpg` and `--screen-region`, in the output and in `summary-context.md`.
+- Pointed-at frames: in a layout with a camera, a transcript line with pointing words and no representative frame within 10 s gets a frame in `frames/extra/` (one per 20 s, 30 at most), listed in the context with the words said. **Claude judgment:** the word list, the distances, and leaving out whole-screen recordings, whose screen pages already show what is pointed at; a heuristic, where a frame too many costs little.
+- An Agent writes `总结.draft.md` (`合集总结.draft.md`, `学习提纲.draft.md`) beside the file it becomes, and `summarize --import` with no file saves it and removes it, instead of a temporary file of its own that it had to delete.
+- `collection show` and `list` give `overview_behind` and `guide_behind`, the videos whose summary changed after the overview or guide was written (by modification time); the GUI's collection page says so above the text.
+
 ## Concurrent jobs — user decision (2026-10-27), modelled on AutoSlides
 
 Until 0.2.0 the window ran one job at a time and refused a second one, even a download while another video was being processed. The user asked for the rules to be worked out from what each job reads and writes, and pointed to AutoSlides (its download queue, `renderer/shared/services/downloadService.ts`, and its serial extraction worker) as a model. Jobs are separate processes, so what they share is files:

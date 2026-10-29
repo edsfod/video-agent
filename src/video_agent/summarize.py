@@ -705,6 +705,15 @@ def _collection_target(workspace, name, guide):
   return collection.folder(workspace, name) / (collection.GUIDE if guide else collection.OVERVIEW)
 
 
+def draft_path(workspace, video=None, *, collection=None, guide=False):
+  """Where an Agent writes a summary, overview or study guide before `summarize --import` saves it: beside the file
+  it becomes (so its links resolve), as <name>.draft.md; the import removes it."""
+  target = (
+    _collection_target(workspace, collection, guide) if collection else _processed(video, workspace)[2] / SUMMARY_NAME
+  )
+  return target.with_name(f'{target.stem}.draft.md')
+
+
 def collection_material(workspace, name, *, guide=False, request='', template=None):
   """The prompt for a chat AI to write the collection overview or study guide."""
   target = _collection_target(workspace, name, guide)

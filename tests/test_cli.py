@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from video_agent import cli, download, media, settings, transcript
+from video_agent import cli, download, layout, media, processor, settings, transcript
 from video_agent.processor import asset_folder
 
 VTT = 'WEBVTT\n\nNOTE skipped\n\n00:01.000 --> 00:02.500\nfirst\n\n1\n00:00:03.000 --> 00:00:04.000\nsecond\nline\n'
@@ -50,6 +50,43 @@ def test_process_uses_sidecar_and_frame_saves_extra(sample_video, tmp_path, caps
   out = capsys.readouterr().out
   assert (asset / 'frames' / 'extra' / 'frame-00-00-05.jpg').is_file()
   assert '9s: ERROR' in out
+
+
+def test_a_processed_video_is_used_as_it_is_unless_forced_or_asked_for_more(sample_video, tmp_path, capsys):
+  workspace = tmp_path / 'work'
+  first = ['process', str(sample_video), '-o', str(workspace), '--frame-interval', '2', '--json']
+  assert cli.main(first) == 0
+  asset = asset_folder(workspace, sample_video.resolve())
+  run = json.loads((asset / 'manifest.json').read_text(encoding='utf-8'))['representative_frame_run']
+  capsys.readouterr()
+  assert cli.main(first) == 0
+  captured = capsys.readouterr()
+  assert json.loads(captured.out)['reused'] is True and 'processed already' in captured.err
+  assert json.loads((asset / 'manifest.json').read_text(encoding='utf-8'))['representative_frame_run'] == run
+  assert cli.main([*first, '--force']) == 0
+  assert 'reused' not in json.loads(capsys.readouterr().out)
+  assert cli.main(['process', str(sample_video), '-o', str(workspace), '--frame-interval', '3', '--json']) == 0
+  assert 'reused' not in json.loads(capsys.readouterr().out), 'other frame settings'
+
+
+def test_pointed_at_frames_and_the_layout_check():
+  rows = [(5.0, 7.0, '如图所示'), (30.0, 32.0, '大家看这个表'), (40.0, 42.0, '看这里'), (90.0, 92.0, '下面讲理论')]
+  frames = [{'time_s': 0.0}, {'time_s': 60.0}]
+  assert processor.pointing_times(rows, frames, 'camera') == [(30.0, '大家看这个表')], 'near a frame, or too soon after'
+  assert processor.pointing_times(rows, frames, 'screen') == [], 'the screen pages show it'
+
+  camera = layout.Layout('camera', 640, 360, None)
+  assert 'layout was probably read wrong' in processor.layout_warning(camera, 0, 3600, False)
+  assert processor.layout_warning(camera, 0, 120, False) is None, 'too short to tell'
+  assert processor.layout_warning(camera, 0, 3600, True) is None, 'a region given by hand'
+
+
+def test_share_tracking_is_dropped_from_links():
+  assert download.clean_url('https://www.bilibili.com/video/BV1x/?p=2&vd_source=ab&spm_id_from=333.1') == (
+    'https://www.bilibili.com/video/BV1x/?p=2'
+  )
+  assert download.clean_url('https://youtu.be/abc?si=XYZ&t=90&utm_source=x') == 'https://youtu.be/abc?t=90'
+  assert download.clean_url(' https://example.com/a ') == 'https://example.com/a'
 
 
 def test_a_chosen_subtitle_file_becomes_the_transcript_whatever_its_name(sample_video, tmp_path):

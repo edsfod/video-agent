@@ -1248,6 +1248,11 @@ async function renderCollection() {
   );
   for (const button of document.querySelectorAll('.doc-tabs button')) button.classList.toggle('active', button.dataset.doc === state.doc);
   const file = state.doc === 'guide' ? item.guide : item.overview;
+  // A summary changed after the overview or guide was written: say which, so it can be written again.
+  const behind = (state.doc === 'guide' ? item.guide_behind : item.overview_behind) || [];
+  $('collection-doc-behind').hidden = !file || !behind.length;
+  $('collection-doc-behind').textContent =
+    `第 ${behind.join('、')} 集的总结在这份${state.doc === 'guide' ? '学习提纲' : '合集总结'}写好之后改过，可以重新生成。`;
   const article = $('collection-doc');
   if (!file) {
     article.replaceChildren(element('p', { className: 'placeholder', textContent: state.doc === 'guide' ? '还没有学习提纲。' : '还没有合集总结。' }));

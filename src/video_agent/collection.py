@@ -159,7 +159,8 @@ def set_terms(workspace, name, replace=(), remove=()):
 
 def status(workspace, name):
   """The collection with one entry per video: whether it is processed and summarized, its length, how much of it is
-  speech, whether it may be empty, and whether it was skipped."""
+  speech, whether it may be empty, and whether it was skipped; and which videos' summaries changed after the overview
+  and the study guide were written (`overview_behind`, `guide_behind`), so they can be brought up to date."""
   data = load(workspace, name)
   members = []
   for index, video in enumerate(data['videos'], 1):
@@ -186,11 +187,23 @@ def status(workspace, name):
       }
     )
   place = folder(workspace, name)
+
+  def behind(path):
+    """The videos whose summary changed after the overview or study guide was written, by index."""
+    if not path.is_file():
+      return []
+    written = path.stat().st_mtime
+    return [
+      member['index'] for member in members if member['summary'] and Path(member['summary']).stat().st_mtime > written
+    ]
+
   return {
     'name': data['name'],
     'folder': str(place),
     'overview': str(place / OVERVIEW) if (place / OVERVIEW).is_file() else None,
     'guide': str(place / GUIDE) if (place / GUIDE).is_file() else None,
+    'overview_behind': behind(place / OVERVIEW),
+    'guide_behind': behind(place / GUIDE),
     'terms': data['terms'],
     'source': data.get('source'),
     'videos': members,

@@ -100,6 +100,21 @@ def _copy_candidates(candidates, target, prefix):
 MAX_FRAMES = 500
 MAX_PAGES = 500
 
+# Words with which a speaker points at something shown: the picture at that moment is taken into frames/extra when the
+# layout has a camera and no representative frame is near, so whoever writes the summary sees what was pointed at
+# without asking for it (user request, 2026-10-29: steps the skill described become code). A heuristic: a frame too
+# many costs little; a whole-screen recording is left out, since its screen pages already show what was on screen.
+POINTING = re.compile(
+  r'如图|如下图|看这[张个里幅边]|看一下这|大家看|我们看|这张图|这个图|这张表|这个表|这幅|屏幕上|黑板上|演示一下'
+  r'|as you can see|look at (?:this|that|the)|this (?:slide|chart|table|figure|picture|diagram|graph)|on the screen',
+  re.IGNORECASE,
+)
+POINTED_NEAR_S = 10.0  # a representative frame this close already shows it
+POINTED_GAP_S = 20.0  # at most one pointed-at frame in this span
+MAX_POINTED = 30
+# A recording at least this long whose layout gave fewer than two screen pages may have been read wrong.
+LAYOUT_CHECK_MIN_S = 300.0
+
 LAYOUT_TEXT = {
   'screen': 'the whole frame is a screen recording',
   'split': 'a screen region beside a camera picture',
@@ -134,6 +149,8 @@ def _context(manifest, rows):
   kind = (manifest.get('layout') or {}).get('kind')
   if kind:
     lines.append(f'- Layout: {LAYOUT_TEXT[kind]}')
+  if (manifest.get('layout') or {}).get('warning'):
+    lines.append(f'- Layout check: {manifest["layout"]["warning"]} Tell the user.')
   if told.get('error'):
     lines.extend(['', f'- Transcript status: {told["error"]}'])
   lines.extend(['', '## Transcript', ''])
@@ -182,6 +199,21 @@ def _context(manifest, rows):
       ]
     )
     lines.extend(f'- {item["time_s"]:.1f}s: ![page]({link(item["path"])})' for item in pages)
+  pointed = manifest.get('pointed_frames') or []
+  if pointed:
+    lines.extend(
+      [
+        '',
+        '## Frames where the speaker points',
+        '',
+        'Taken where the speaker refers to something shown and no representative frame is near, with what was said.',
+        '',
+      ]
+    )
+    lines.extend(
+      f'- {transcript.format_clock(item["time_s"])} 「{item["text"]}」: ![frame]({link(item["path"])})'
+      for item in pointed
+    )
   slides = (manifest.get('slide_extraction') or {}).get('slides') or []
   if slides:
     lines.extend(['', '## Extracted slides', ''])
@@ -242,14 +274,17 @@ def refresh_transcript(asset):
 GROUPED = 'Lines are grouped by the'
 
 
-def update_context(asset):
+def update_context(asset, locked=False):
   """Rewrites a summary-context.md written before its transcript marked the picture on screen (0.8.3 and earlier),
-  so videos processed then get the new form without processing again. Takes the video's lock."""
+  so videos processed then get the new form without processing again. Takes the video's lock unless `locked`."""
   asset = Path(asset)
   context = asset / 'summary-context.md'
   if (asset / 'manifest.json').is_file() and context.is_file() and GROUPED not in context.read_text(encoding='utf-8'):
-    with files.video_lock(asset, 'context'):
+    if locked:
       write_context(asset)
+    else:
+      with files.video_lock(asset, 'context'):
+        write_context(asset)
 
 
 def write_context(asset):
@@ -283,6 +318,54 @@ def _previous_source(asset):
   return source if source and source != 'unavailable' else 'existing-output'
 
 
+def pointing_times(rows, frames, kind):
+  """The (time, words) at which to take a pointed-at frame: lines with POINTING words, in a layout with a camera, with
+  no representative frame within POINTED_NEAR_S, at most one per POINTED_GAP_S and MAX_POINTED in all."""
+  if kind == 'screen':
+    return []
+  chosen = []
+  for start, _, text in rows:
+    if not POINTING.search(text) or any(abs(item['time_s'] - start) <= POINTED_NEAR_S for item in frames):
+      continue
+    if chosen and start - chosen[-1][0] < POINTED_GAP_S:
+      continue
+    chosen.append((start, ' '.join(text.split())))
+    if len(chosen) == MAX_POINTED:
+      break
+  return chosen
+
+
+def layout_warning(found, pages_found, length, given):
+  """A note when the layout may have been read wrong: a long recording with a camera and fewer than two screen
+  pages."""
+  if given or found.kind == 'screen' or length < LAYOUT_CHECK_MIN_S or pages_found >= 2:
+    return None
+  what = 'no screen region was found' if found.kind == 'camera' else f'only {pages_found} screen page was found'
+  return (
+    f'{what} in {length / 60:.0f} minutes. If this is a recording of slides or a screen, the layout was probably read '
+    'wrong: see layout.jpg, which outlines the screen region in green, and process again with --screen-region X,Y,W,H.'
+  )
+
+
+def _options(interval, scene_threshold, max_frames):
+  return {'frame_interval': interval, 'scene_threshold': scene_threshold, 'max_frames': max_frames}
+
+
+def _reusable(asset, options, asr, wanted):
+  """The manifest of an earlier run that already gives what this one asks for, or None."""
+  try:
+    manifest = json.loads((asset / 'manifest.json').read_text(encoding='utf-8'))
+  except (OSError, ValueError):
+    return None
+  if wanted or not (asset / 'summary-context.md').is_file():
+    return None
+  if manifest.get('options', _options(60.0, 0.35, None)) != options:
+    return None
+  if asr != 'none' and not manifest['transcript'].get('srt'):
+    return None  # asked to transcribe what has no transcript yet
+  return manifest
+
+
 def process_video(
   video,
   workspace,
@@ -299,10 +382,30 @@ def process_video(
   subtitles=None,
   slides_folder=None,
   status=print,
+  force=False,
 ):
+  """Prepares the evidence. A video processed before with the same frame settings is used as it is (each run samples
+  a new set of frames, so a summary's links would change), unless `force`, or this run asks for more: a transcript it
+  lacks, slides, a screen region, a subtitle file."""
   video, info = media.probe(video)
   asset = asset_folder(workspace, video)
   with files.video_lock(asset, 'process'):
+    wanted = extract_slides or screen_region or subtitles or slides_folder or overwrite
+    earlier = None if force else _reusable(asset, _options(interval, scene_threshold, max_frames), asr, wanted)
+    if earlier:
+      update_context(asset, locked=True)
+      status(f'{video.name}: processed already ({earlier["updated_utc"][:16]}); using that (--force processes again)')
+      told, slides = earlier['transcript'], earlier.get('slide_extraction') or {}
+      return {
+        'asset': asset,
+        'rows': told['segments'],
+        'frames': len(earlier.get('representative_frames') or []),
+        'slides': len(slides.get('slides') or []),
+        'transcript_error': told.get('error') or '',
+        'slide_error': slides.get('error') or '',
+        'source': told['source'],
+        'reused': True,
+      }
     return _process_locked(
       video,
       info,
@@ -389,6 +492,9 @@ def _process_locked(
         status(f'{video.name}: {pages_found} screen pages; keeping {MAX_PAGES} spread over the video')
       pages = _copy_candidates(_bounded(page_candidates, MAX_PAGES), frames_dir / 'screen', 'page')
       status(f'{video.name}: {len(pages)} screen pages')
+    warning = layout_warning(found, pages_found, length, bool(screen_region))
+    if warning:
+      status(f'{video.name}: layout check: {warning} ({picture or "no layout.jpg"})')
 
     if extract_slides:
       try:
@@ -451,6 +557,15 @@ def _process_locked(
   slides = slide_result['slides'] if slide_result else []
   # A transcript taken again (--overwrite-transcript) gets its corrections again.
   corrections.rebuild(asset)
+  pointed = []
+  for second, words in pointing_times(corrections.rows_in_use(asset) or rows, frames, found.kind):
+    try:
+      saved = media.save_frame(video, asset, second, length)
+    except media.MediaError:
+      continue
+    pointed.append({'time_s': second, 'path': Path(saved).relative_to(asset).as_posix(), 'text': words})
+  if pointed:
+    status(f'{video.name}: {len(pointed)} frames where the speaker points at something')
   manifest = {
     'schema_version': 1,
     'source_video': str(video),
@@ -471,7 +586,10 @@ def _process_locked(
       **found.as_manifest(),
       'picture': picture.relative_to(asset).as_posix() if picture else None,
       'given': bool(screen_region),
+      'warning': warning,
     },
+    'pointed_frames': pointed,
+    'options': _options(interval, scene_threshold, max_frames),
     'screen_pages': [{'time_s': item['time_s'], 'path': item['path'].relative_to(asset).as_posix()} for item in pages],
     'limits': {
       'frames': frame_limit,

@@ -7,12 +7,30 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from . import media
+
+# Query parameters that only record where a shared link came from (Bilibili's share and recommendation marks, YouTube's
+# share id, utm_*). They are dropped; parameters that pick the content, such as ?p=2 or ?t=90, stay.
+TRACKING = {
+  'vd_source', 'spm_id_from', 'from_spmid', 'share_source', 'share_medium', 'share_plat', 'share_session_id',
+  'share_tag', 'share_from', 'unique_k', 'is_story_h5', 'si', 'feature',
+}  # fmt: skip
 
 
 class DownloadError(RuntimeError):
   pass
+
+
+def clean_url(url):
+  """The URL without TRACKING parameters."""
+  parts = urlsplit(url.strip())
+  if not parts.query:
+    return url.strip()
+  kept = [(key, value) for key, value in parse_qsl(parts.query, keep_blank_values=True)]
+  kept = [(key, value) for key, value in kept if key not in TRACKING and not key.startswith('utm_')]
+  return urlunsplit(parts._replace(query=urlencode(kept, safe=':/,')))
 
 
 def executable(explicit=None):
@@ -168,7 +186,7 @@ def download_urls(
   archive = ['--download-archive', str(Path(archive_path).resolve())] if archive_path else []
   downloaded, failed = [], 0
 
-  for url in urls:
+  for url in map(clean_url, urls):
     if not playlist:
       try:
         found = _list_info(program, url, config, cookies)

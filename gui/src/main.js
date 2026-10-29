@@ -324,7 +324,8 @@ function cliArgs(task) {
       return args;
     }
     case 'process': {
-      const args = ['process', task.video, ...out, '--json', '--frame-interval', String(task.interval)];
+      // Processing asked for in the window always runs again; only an Agent reuses an earlier run.
+      const args = ['process', task.video, ...out, '--json', '--force', '--frame-interval', String(task.interval)];
       if (task.maxFrames) args.push('--max-frames', String(task.maxFrames));
       if (task.bcut) args.push('--asr', 'bcut', '--allow-remote-asr'); // the user's BCut setting, on by default
       if (task.slides) args.push('--extract-slides');
@@ -416,18 +417,18 @@ function startAgent(task) {
     ? ['--collection', task.collection, ...(task.guide ? ['--guide'] : [])]
     : [video];
   spawnSync(command, [...prefix, 'versions', ...target, '-o', workspace, '--keep', name], { windowsHide: true, env: childEnv() });
-  const save = (what, args) =>
-    `写好后不要直接覆盖 ${what}：先写到一个临时文件，再运行 video-agent summarize ${args} -o "${workspace}" --import <临时文件> --source "${task.model ? `${name} ${task.model}` : name}" 保存（已经有 ${what} 时会另存为一个版本，由用户决定用哪个），然后删掉临时文件。`;
+  const save = (what, draft, args) =>
+    `写成 ${draft}，再运行 video-agent summarize ${args} -o "${workspace}" --import --source "${task.model ? `${name} ${task.model}` : name}" 保存为 ${what}（它会删掉草稿；已经有 ${what} 时另存为一个版本，由用户决定用哪个）。`;
   const text = (task.kind === 'collection'
     ? [
         `为合集「${task.collection}」写 ${file}，按 skill 里「A collection」的做法。`,
         `工作区是 ${workspace}，合集文件夹是 ${folder}。先运行 video-agent collection show "${task.collection}" -o "${workspace}" 看各集的状态；还没有总结的视频先按 skill 写总结，几乎没有内容的视频用 collection skip 跳过并写明原因。不要上传音频。`,
-        save(file, `--collection "${task.collection}"${task.guide ? ' --guide' : ''}`),
+        save(file, path.join(folder, file.replace(/\.md$/, '.draft.md')), `--collection "${task.collection}"${task.guide ? ' --guide' : ''}`),
       ]
     : [
         `总结这个视频：${video}`,
-        `工作区是 ${workspace}，这个视频已经用 process 处理过，处理结果在 ${folder}。直接用这个文件夹，不要再运行 process，也不要上传音频。`,
-        save('总结.md', `"${video}"`),
+        `工作区是 ${workspace}，这个视频已经处理过，处理结果在 ${folder}。不要上传音频。`,
+        save('总结.md', path.join(folder, '总结.draft.md'), `"${video}"`),
       ]
   ).concat(
     task.template ? [`按 video-agent template "${task.template}" 打印的规则和模板写，不用别的模板。`] : [],
