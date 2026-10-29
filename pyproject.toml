@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "video-agent"
-version = "0.9.2b0"
+version = "0.9.2"
 description = "Local video evidence preparation for transcription and summarization"
 requires-python = ">=3.11"
 license = "AGPL-3.0-or-later"

@@ -1,14 +1,14 @@
 ---
 name: video-agent
 description: Summarize any video from a local file or a link - prepare its transcript (existing subtitles first, BCut speech recognition only with the user's consent) and representative frames with the Video Agent CLI, look at the frames, and write a timestamped summary. Use for requests to summarize, take notes on, or answer questions about a video, lecture recording, talk, tutorial or news clip, given as a file path or a URL.
-allowed-tools: Bash(video-agent *), Bash(uvx --from https://github.com/edsfod/video-agent/releases/download/v0.9.2-beta/video_agent-0.9.2b0-py3-none-any.whl video-agent *)
+allowed-tools: Bash(video-agent *), Bash(uvx --from https://github.com/edsfod/video-agent/releases/download/v0.9.2/video_agent-0.9.2-py3-none-any.whl video-agent *)
 ---
 
 # Video Agent
 
 ## Running commands
 
-`<video-agent>` stands for `video-agent` when that command is on `PATH` (the desktop installer adds its bundled copy; `uv tool install` adds one too), and otherwise for `uvx --from https://github.com/edsfod/video-agent/releases/download/v0.9.2-beta/video_agent-0.9.2b0-py3-none-any.whl video-agent`, which fetches this skill's matching version of the CLI on first use; it needs uv but not git, and brings its own FFmpeg and yt-dlp. Check once with `video-agent --help`. If neither works because `uv` is missing, tell the user to install the Video Agent desktop app from https://github.com/edsfod/video-agent/releases or uv (`winget install astral-sh.uv`), and to start a new session afterwards so the new `PATH` is seen. Run each command as a single `<video-agent> …` with the paths written out and no `cd`, variables, `&&` or pipes, so a harness can approve the prefix once. Quote paths that contain spaces or brackets.
+`<video-agent>` stands for `video-agent` when that command is on `PATH` (the desktop installer adds its bundled copy; `uv tool install` adds one too), and otherwise for `uvx --from https://github.com/edsfod/video-agent/releases/download/v0.9.2/video_agent-0.9.2-py3-none-any.whl video-agent`, which fetches this skill's matching version of the CLI on first use; it needs uv but not git, and brings its own FFmpeg and yt-dlp. Check once with `video-agent --help`. If neither works because `uv` is missing, tell the user to install the Video Agent desktop app from https://github.com/edsfod/video-agent/releases or uv (`winget install astral-sh.uv`), and to start a new session afterwards so the new `PATH` is seen. Run each command as a single `<video-agent> …` with the paths written out and no `cd`, variables, `&&` or pipes, so a harness can approve the prefix once. Quote paths that contain spaces or brackets.
 
 When a command fails, tell the user what it said instead of working around it: do not call FFmpeg, yt-dlp or BCut yourself and do not edit the CLI. The full command reference is `docs/commands.md` in the repository.
 
