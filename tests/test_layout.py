@@ -6,7 +6,7 @@ import subprocess
 
 import pytest
 
-from video_agent import cli, layout, media
+from video_agent import cli, layout, media, page_rules
 from video_agent.processor import asset_folder
 
 PAGE_S, PAGES = 6, 6
@@ -135,9 +135,11 @@ def test_short_minor_changes_and_returns_are_not_new_pages(tmp_path):
 
 def test_the_shown_time_is_tuned_towards_a_page_count_per_hour():
   # Pretend each step up of LONG_S removes 40 pages from 300.
-  counts = dict(zip(media.LONG_STEPS, (380, 340, 300, 260, 220, 180, 140)))
-  assert media.tune_long(counts.get, 2) == 40.0  # 150 allowed in 2 h: raised to the last step, still above
-  assert media.tune_long(counts.get, 4) == 6.0  # 300 allowed: the default stays
-  assert media.tune_long(counts.get, 3.5) == 10.0  # 262 allowed: one step up is enough
-  assert media.tune_long(dict.fromkeys(media.LONG_STEPS, 5).get, 1) == 2.0  # too few at any value: lowered to the end
-  assert media.tune_long(dict.fromkeys(media.LONG_STEPS, 25).get, 0.2) == 6.0  # a short video may keep 30
+  counts = dict(zip(page_rules.LONG_STEPS, (380, 340, 300, 260, 220, 180, 140)))
+  assert page_rules.tune_long(counts.get, 2) == 40.0  # 150 allowed in 2 h: raised to the last step, still above
+  assert page_rules.tune_long(counts.get, 4) == 6.0  # 300 allowed: the default stays
+  assert page_rules.tune_long(counts.get, 3.5) == 10.0  # 262 allowed: one step up is enough
+  assert (
+    page_rules.tune_long(dict.fromkeys(page_rules.LONG_STEPS, 5).get, 1) == 2.0
+  )  # too few at any value: lowered to the end
+  assert page_rules.tune_long(dict.fromkeys(page_rules.LONG_STEPS, 25).get, 0.2) == 6.0  # a short video may keep 30

@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import quote
 
-from . import corrections, files, layout, media, slide_extractor, transcript
+from . import corrections, files, layout, media, page_rules, slide_extractor, transcript
 
 
 def slug(value):
@@ -233,13 +233,13 @@ def _place_slides(slides, pages, work_dir):
   untimed = [slide for slide in slides if slide['time_s'] is None]
   if not untimed or not pages:
     return slides
-  page_thumbs = media._thumbnails(pages, Path(work_dir))
-  slide_thumbs = media._thumbnails(untimed, Path(work_dir))
+  page_thumbs = media.thumbnails(pages, Path(work_dir))
+  slide_thumbs = media.thumbnails(untimed, Path(work_dir))
   if page_thumbs is None or slide_thumbs is None:
     return slides
-  width, height = media.THUMB
+  width, height = page_rules.THUMB
   for slide, thumb in zip(untimed, slide_thumbs):
-    share, page = min((media._differ(thumb, other, width, height), page) for other, page in zip(page_thumbs, pages))
+    share, page = min((page_rules.differ(thumb, other, width, height), page) for other, page in zip(page_thumbs, pages))
     if share < SLIDE_MATCH:
       slide['time_s'] = page['time_s']
   return slides
@@ -597,7 +597,7 @@ def _process_locked(
       'frames_found': len(frame_candidates),
       'pages': MAX_PAGES,
       'pages_found': pages_found,
-      'page_shown_at_least_s': shown_s,  # tuned towards media.PAGES_PER_HOUR
+      'page_shown_at_least_s': shown_s,  # tuned towards page_rules.PAGES_PER_HOUR
     },
     'representative_frames': [
       {'time_s': item['time_s'], 'path': item['path'].relative_to(asset).as_posix()} for item in frames

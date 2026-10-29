@@ -27,7 +27,8 @@ Agents and shells           other agents follow it        commands
 | --- | --- |
 | `cli.py` | The commands and their options, each bound to a function that runs it; prints text, or JSON with `--json`. |
 | `download.py` | Runs yt-dlp: finds it, cleans share links, saves site subtitles, playlists. |
-| `media.py` | Runs FFmpeg and ffprobe: probing, audio, frame sampling, screen pages and their thinning, contact sheets. |
+| `media.py` | Runs FFmpeg and ffprobe: probing, audio, frame sampling, screen pages, contact sheets. |
+| `page_rules.py` | Which screen pages to keep, compared on small grey copies; pure functions, tested on made-up pictures. |
 | `layout.py` | Finds the screen and camera regions of a video. |
 | `transcript.py` | Reads, picks and writes timed subtitles. |
 | `providers/bcut.py` | BCut (必剪) speech recognition over HTTP. |

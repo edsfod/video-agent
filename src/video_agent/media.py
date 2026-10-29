@@ -8,7 +8,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from . import files
+from . import files, page_rules
 
 
 class MediaError(RuntimeError):
@@ -341,104 +341,11 @@ def screen_pages(video, output_dir, region_filter, stable=PAGE_STABLE_S, duratio
   return merge_similar(pages, output_dir, duration_s)
 
 
-# Pages whose small grey copies differ in fewer than this share of pixels show the same content: a pointer, a typed
-# character, a pop-up, a highlighted line. Two slides in one template can differ in as little as 4 %.
-SAME_PAGE = 0.025
-THUMB = (128, 72)
-SCROLL_NEW = 1 / 3  # a scroll that brings in less than this share of new lines leaves the same page
-# A page shown for less than LONG_S counts only when most of it is new (another window, another slide); short pages
-# with smaller changes are passing states, such as a terminal printing in bursts or a page being typed or scrolled.
-LONG_S = 6.0
-NEW_SCREEN = 0.5
-RECENT = 8  # a page like one of the last RECENT kept pages is a return to it (switching windows), not a new page
-
-
-def _differ(a, b, width, height, shift=0, columns=None):
-  """The share of pixels that differ by more than 20 grey levels where `b`, moved up by `shift` rows, overlaps `a`;
-  within `columns` (a range) when given."""
-  x0, x1 = (columns.start, columns.stop) if columns else (0, width)
-  rows = range(max(0, -shift), min(height, height - shift))
-  changed = 0
-  for y in rows:
-    top, other = y * width, (y + shift) * width
-    changed += sum(abs(x - z) > 20 for x, z in zip(a[top + x0 : top + x1], b[other + x0 : other + x1]))
-  return changed / max(1, len(rows) * (x1 - x0))
-
-
-# A page built up step by step (a list, a diagram, a chat that grows) keeps everything already shown: when `b` changed
-# fewer than this share of the pixels that carry content in `a`, `b` is `a` with more added. Background is the most
-# common grey level of `a`; a page with content in less than BLANK of its pixels (a title alone, an empty window) counts
-# as built up by whatever follows (user report, 2026-10-28: steps of one slide were kept as pages of their own).
-KEPT_INK = 0.03
-BLANK = 0.01
-
-
-def _added(a, b):
-  """Whether `b` shows everything `a` shows, with more added."""
-  counts = [0] * 256
-  for value in a:
-    counts[value] += 1
-  background = max(range(256), key=counts.__getitem__)
-  ink = [index for index, value in enumerate(a) if abs(value - background) > 20]
-  if len(ink) < BLANK * len(a):
-    return True
-  changed = sum(abs(a[index] - b[index]) > 20 for index in ink)
-  return changed < KEPT_INK * len(ink)
-
-
-def _scroll(a, b, width, height, columns):
-  """How many rows `b` is scrolled against `a` within `columns`, matched on the rows' mean brightness."""
-  limit = int(height * SCROLL_NEW)
-  first = [sum(a[y * width + columns.start : y * width + columns.stop]) for y in range(height)]
-  second = [sum(b[y * width + columns.start : y * width + columns.stop]) for y in range(height)]
-
-  def cost(shift):
-    rows = range(max(0, -shift), min(height, height - shift))
-    return sum(abs(first[y] - second[y + shift]) for y in rows) / max(1, len(rows))
-
-  return min(range(-limit, limit + 1), key=lambda shift: (cost(shift), abs(shift)))
-
-
-def _scrolled(a, b, width, height):
-  """Whether `b` is `a` with its text scrolled, as a whole or in its left and right halves separately (an editor
-  beside a terminal), by less than SCROLL_NEW of the height."""
-  halves = (range(width), range(width // 2), range(width // 2, width))
-  for panes in ((halves[0],), halves[1:]):
-    if all(
-      _differ(a, b, width, height, 0, pane) < SAME_PAGE
-      or _differ(a, b, width, height, _scroll(a, b, width, height, pane), pane) < SAME_PAGE
-      for pane in panes
-    ):
-      return True
-  return False
-
-
-# How many pages an hour of video should give; outside this band LONG_S is tuned, as Opencast's video segmenter tunes its
-# threshold towards a segment count. Wide on purpose: slides alone give 20-60 an hour, live coding more.
-PAGES_PER_HOUR = (15, 75)
-MIN_ALLOWED = 30  # a short video may always keep this many
-LONG_STEPS = (2.0, 4.0, 6.0, 10.0, 15.0, 25.0, 40.0)  # values LONG_S is tuned through; LONG_S is the starting point
-
-
-def tune_long(count_for, hours):
-  """The LONG_S to use: raised step by step while count_for(LONG_S) gives more pages than the band allows for `hours`,
-  lowered while it gives fewer, never beyond LONG_STEPS. Only short pages that are not mostly new respond to it, so a
-  slide that replaces the screen survives any value."""
-  low, high = PAGES_PER_HOUR[0] * hours, max(MIN_ALLOWED, PAGES_PER_HOUR[1] * hours)
-  index = LONG_STEPS.index(LONG_S)
-  count = count_for(LONG_STEPS[index])
-  step = 1 if count > high else -1 if count < low else 0
-  while step and 0 <= index + step < len(LONG_STEPS) and (count > high if step > 0 else count < low):
-    index += step
-    count = count_for(LONG_STEPS[index])
-  return LONG_STEPS[index]
-
-
-def _thumbnails(pages, work_dir):
+def thumbnails(pages, work_dir):
   """Small grey copies of the pages, or None when FFmpeg cannot make them (then nothing is merged)."""
   listing = Path(work_dir) / 'thumbs.txt'
   listing.write_text(''.join(f"file '{page['path'].as_posix()}'\n" for page in pages), encoding='utf-8')
-  width, height = THUMB
+  width, height = page_rules.THUMB
   command = [tool('ffmpeg'), '-v', 'error', '-f', 'concat', '-safe', '0', '-i', str(listing)]
   command += ['-vf', f'scale={width}:{height}:flags=area,format=gray', '-f', 'rawvideo', 'pipe:1']
   result = subprocess.run(command, capture_output=True, check=False)
@@ -448,50 +355,30 @@ def _thumbnails(pages, work_dir):
   return [result.stdout[index * size : (index + 1) * size] for index in range(len(pages))]
 
 
-def _merge(pages, thumbs, long_s):
-  width, height = THUMB
-  merged, firsts = [], []  # kept pages, and the grey copy each group started with
-  for page, thumb in zip(pages, thumbs):
-    if firsts:
-      first = firsts[-1]
-      if _differ(first, thumb, width, height) < SAME_PAGE or _added(first, thumb):
-        merged[-1]['path'] = page['path']
-        continue
-      if _scrolled(first, thumb, width, height):
-        continue
-      if any(_differ(earlier, thumb, width, height) < SAME_PAGE for earlier in firsts[-RECENT - 1 : -1]):
-        continue
-      if page.get('stayed_s', math.inf) < long_s and _differ(first, thumb, width, height) < NEW_SCREEN:
-        continue
-    merged.append(dict(page))
-    firsts.append(thumb)
-  return merged
-
-
 def merge_similar(pages, work_dir, duration_s=None):
   """Drops pages that add little to the ones kept, comparing small grey copies:
   - the same page with small changes (bullets that appear one by one, a finished line of typing, a pop-up), or with
-    anything added to what it showed (_added: a slide built up step by step): the group keeps its first time and its
+    anything added to what it showed (page_rules.added: a slide built up step by step): the group keeps its first time and its
     last picture, which is the most complete;
   - the same text scrolled by less than SCROLL_NEW of the page, as a whole or in its left and right halves: the
     group keeps its picture;
   - a return to one of the last RECENT pages, as when switching between slides and a terminal: dropped;
   - a page shown for less than LONG_S that is not mostly new: dropped as a passing state. With `duration_s`, LONG_S is
-    tuned so that the count falls within PAGES_PER_HOUR (tune_long).
+    tuned so that the count falls within page_rules.PAGES_PER_HOUR (page_rules.tune_long).
   Comparing with the group's first page, not its latest, keeps slow typing and scrolling from drifting along.
   Returns the kept pages and the LONG_S used."""
-  thumbs = _thumbnails(pages, work_dir) if len(pages) > 1 else None
+  thumbs = thumbnails(pages, work_dir) if len(pages) > 1 else None
   if thumbs is None:
-    return pages, LONG_S  # keep them all rather than lose any
+    return pages, page_rules.LONG_S  # keep them all rather than lose any
   if not duration_s:
-    return _merge(pages, thumbs, LONG_S), LONG_S
+    return page_rules.merge(pages, thumbs, page_rules.LONG_S), page_rules.LONG_S
   tried = {}
 
   def count_for(long_s):
-    tried[long_s] = _merge(pages, thumbs, long_s)
+    tried[long_s] = page_rules.merge(pages, thumbs, long_s)
     return len(tried[long_s])
 
-  long_s = tune_long(count_for, duration_s / 3600)
+  long_s = page_rules.tune_long(count_for, duration_s / 3600)
   return tried[long_s], long_s
 
 
