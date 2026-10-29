@@ -265,7 +265,8 @@ def test_pack_zips_the_prompt_with_frames_at_their_folder_paths(processed, capsy
   assert f'附上了这个视频的 {len(pages)} 张屏幕页' in prompt
   assert sheets == [f'总图/总图-{index:03d}.jpg' for index in range(1, -(-len(pages) // 4) + 1)]
   first = manifest['screen_pages'][0]
-  assert f'- 总图/总图-001.jpg：00:00:{round(first["time_s"]):02d} {first["path"]}' in prompt
+  assert f'- 总图/总图-001.jpg：#1 00:00:{round(first["time_s"]):02d} {first["path"]}' in prompt
+  assert '左下角印着编号和时间' in prompt, 'each picture carries its number'
   assert '我的要求：写短一点' in prompt
   assert '「视频」那一行的开头照抄：视频：sample clip [test] · [打开视频]' in prompt
   assert '我们看看这张图表' in prompt and '# Writing a video summary' in prompt
@@ -297,7 +298,7 @@ def test_pack_folder_fits_the_prompt_and_numbered_pictures_in_a_file_limit(proce
   assert len(names) == 3 and names[0].startswith('001-屏幕页-') and names[1].startswith('002-画面-')
   assert names[2] == '提示词.md'
   prompt = (first / '提示词.md').read_text(encoding='utf-8')
-  assert f'- {names[0]}：00:00:{round(page["time_s"]):02d} {page["path"]}' in prompt
+  assert f'- {names[0]}：#1 00:00:{round(page["time_s"]):02d} {page["path"]}' in prompt
   assert '链接右边的路径' in prompt and '我们看看这张图表' in prompt
   with pytest.raises(SystemExit):
     cli.main(['pack', str(video), '-o', str(workspace), '--folder', str(out), '--max-files', '1'])
@@ -343,7 +344,8 @@ def test_screen_pages_go_on_contact_sheets_when_they_exceed_the_budget(tmp_path)
   assert [name for name, _ in entries][:2] == ['001-屏幕页总图-00-00-00.jpg', '002-屏幕页总图-00-00-40.jpg']
   assert len(entries) == 8 and '30 张屏幕页（幻灯片、代码、文档），拼在 8 张总图里（每张 2×2 页' in note
   assert (
-    '- 008-屏幕页总图-00-04-40.jpg：00:04:40 frames/run/screen/p-029.jpg、00:04:50 frames/run/screen/p-030.jpg' in note
+    '- 008-屏幕页总图-00-04-40.jpg：#29 00:04:40 frames/run/screen/p-029.jpg、#30 00:04:50 frames/run/screen/p-030.jpg'
+    in note
   )
 
 

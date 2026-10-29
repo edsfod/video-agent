@@ -143,3 +143,20 @@ def test_the_shown_time_is_tuned_towards_a_page_count_per_hour():
     page_rules.tune_long(dict.fromkeys(page_rules.LONG_STEPS, 5).get, 1) == 2.0
   )  # too few at any value: lowered to the end
   assert page_rules.tune_long(dict.fromkeys(page_rules.LONG_STEPS, 25).get, 0.2) == 6.0  # a short video may keep 30
+
+
+def test_a_camera_without_a_border_in_a_corner_below_a_title_bar(tmp_path):
+  # A speaker cut out onto the slide in its lower right corner, with no frame around him, under a title bar that never
+  # changes: the bar's edge spans the frame, but a screen that never changes is no screen (容斥原理, 2026-10-29).
+  # Noise that changes every frame and fades into the slide, so no lasting edge closes a box around it.
+  graph = (
+    f'{_slides("slides")};color=c=white:s=64x40:r=5:d={LENGTH},noise=alls=90:allf=t[person];'
+    '[slides]drawbox=x=0:y=0:w=320:h=16:color=0x204080:t=fill[titled];'
+    '[titled][person]overlay=x=256:y=140[out]'
+  )
+  manifest = _process(_video(tmp_path, 'corner', graph), tmp_path / 'work')
+  found = manifest['layout']
+  assert found['kind'] == 'inset', found
+  x, y, w, h = found['camera']
+  assert 220 <= x <= 256 and 120 <= y <= 148 and x + w == 320 and y + h == 180, found
+  assert len(manifest['screen_pages']) == PAGES

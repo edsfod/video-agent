@@ -30,6 +30,7 @@ const ENV = {
   // AutoSlides Extractor, which finds the screen pages where it is installed, is left out: results must not depend
   // on the machine.
   AUTOSLIDES_EXTRACTOR: 'none',
+  VA_DEEPSEEK_RETRY_MS: '500',
   APPDATA,
   NO_PROXY: '127.0.0.1,localhost',
   no_proxy: '127.0.0.1,localhost',
@@ -93,8 +94,9 @@ async function saved(check, timeout = 15_000) {
     if (Date.now() > end) assert.fail(`the settings were not saved as expected: ${JSON.stringify(settings).slice(0, 500)}`);
   }
 }
-// The parts of chat.deepseek.com that deepseek.js drives. The first answer asks for pictures in a 画面调整 section,
-// the next round's (its prompt starts with the candidates taken) asks for none. What it was sent is in window.sent.
+// The parts of chat.deepseek.com that deepseek.js drives. The first answer is a busy notice, as DeepSeek's servers
+// give at times; then the answer asks for pictures in a 画面调整 section, and the next round's (its prompt starts with
+// the candidates taken) asks for none. What it was sent is kept in localStorage, which outlives loading the page again.
 const FAKE_DEEPSEEK = `<!doctype html><meta charset="utf-8"><title>DeepSeek</title>
 <div id="chat"></div>
 <div><div><div><div><div><div>
@@ -108,7 +110,7 @@ const FAKE_DEEPSEEK = `<!doctype html><meta charset="utf-8"><title>DeepSeek</tit
   const send = document.getElementById('send');
   const icon = send.querySelector('path');
   let files = [];
-  window.sent = [];
+  window.sent = JSON.parse(localStorage.getItem('sent') || '[]');
   document.querySelector('input').onchange = (event) => (files = [...event.target.files].map((file) => file.name));
   for (const button of document.querySelectorAll('.ds-toggle-button')) button.onclick = () => button.classList.toggle('ds-toggle-button--selected');
   setInterval(() => send.classList.toggle('ds-button--disabled', !box.value), 50);
@@ -117,6 +119,8 @@ const FAKE_DEEPSEEK = `<!doctype html><meta charset="utf-8"><title>DeepSeek</tit
     const text = box.value;
     const toggles = [...document.querySelectorAll('.ds-toggle-button--selected')].map((button) => button.textContent);
     window.sent.push({ text, files, toggles });
+    localStorage.setItem('sent', JSON.stringify(window.sent));
+    const busy = window.sent.length === 1;
     box.value = '';
     files = [];
     icon.setAttribute('d', 'M2 4'); // the stop square while writing
@@ -125,9 +129,10 @@ const FAKE_DEEPSEEK = `<!doctype html><meta charset="utf-8"><title>DeepSeek</tit
       const answer = document.createElement('div');
       answer.className = 'ds-markdown';
       const code = document.createElement('pre');
-      code.textContent = '# 测试视频\\n\\n视频：x · 时长：0:08\\n\\n## 概要\\n\\n' +
+      if (busy) answer.textContent = '服务器繁忙，请稍后再试。';
+      else code.textContent = '# 测试视频\\n\\n视频：x · 时长：0:08\\n\\n## 概要\\n\\n' +
         (next ? '第二轮写的测试总结，用上了补截的候选。\\n' : '第一轮写的测试总结，讲了彩条和测试图案。\\n\\n## 画面调整\\n\\n- 补截：00:00:01–00:00:06 彩条\\n');
-      answer.append(code);
+      if (!busy) answer.append(code);
       document.getElementById('chat').append(answer);
       icon.setAttribute('d', 'M8 1');
     }, 2500);
@@ -290,12 +295,14 @@ devTest('summary through DeepSeek\'s web chat, in rounds until it asks for no mo
   assert.equal(task.status, 'done', JSON.stringify(output).slice(-1500));
   const sent = await app.evaluate(({ BrowserWindow }) =>
     BrowserWindow.getAllWindows().find((win) => win.getTitle() === 'DeepSeek').webContents.executeJavaScript('window.sent'));
-  assert.equal(sent.length, 2, 'a second round for the pictures asked for, then none');
-  assert.match(sent[0].text, /# Writing a video summary/);
-  assert.deepEqual(sent[0].toggles, ['DeepThink', 'Search'], 'DeepThink and Search on');
-  assert.ok(sent[0].files.length > 0 && sent[0].files.every((name) => name.endsWith('.jpg')));
-  assert.match(sent[1].text, /^我照你上一稿/);
-  assert.ok(sent[1].files.length >= 1 && sent[1].files.every((name) => name.includes('补截')));
+  assert.equal(sent.length, 3, 'sent again after the busy notice; a second round for the pictures asked for, then none');
+  assert.equal(sent[1].text, sent[0].text, 'the same message again');
+  assert.match(sent[1].text, /# Writing a video summary/);
+  assert.deepEqual(sent[1].toggles, ['DeepThink', 'Search'], 'DeepThink and Search on');
+  assert.ok(sent[1].files.length > 0 && sent[1].files.every((name) => name.endsWith('.jpg')));
+  assert.match(sent[2].text, /^我照你上一稿/);
+  assert.ok(sent[2].files.length >= 1 && sent[2].files.every((name) => name.includes('补截')));
+  assert.ok(output.some(([, text]) => text.includes('服务器繁忙')), 'the retry is in the task output');
   // A summary was there already (the model API's), so both rounds are kept as versions beside it.
   const versions = JSON.parse(cli(['versions', VIDEO, '-o', WORKSPACE, '--json'])).versions.filter((item) => item.source === 'DeepSeek 网页');
   assert.deepEqual(versions.map((item) => item.note).sort(), ['第 1 轮', '第 2 轮']);

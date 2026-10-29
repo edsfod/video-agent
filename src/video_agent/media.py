@@ -408,6 +408,56 @@ def merge_similar(pages, work_dir, duration_s=None):
   return tried[long_s], long_s
 
 
+# A label printed on each picture sent to a chat AI, so it reads which picture it is from the picture itself: with 48
+# pictures attached, DeepSeek matched a stock shot to another picture's name (2026-10-29). The bundled FFmpeg has no
+# drawtext (no font library), so the label is drawn here from a 5x7 bitmap font and laid over with `overlay`.
+GLYPHS = {
+  '0': '01110 10001 10011 10101 11001 10001 01110',
+  '1': '00100 01100 00100 00100 00100 00100 01110',
+  '2': '01110 10001 00001 00010 00100 01000 11111',
+  '3': '11110 00001 00001 01110 00001 00001 11110',
+  '4': '00010 00110 01010 10010 11111 00010 00010',
+  '5': '11111 10000 11110 00001 00001 10001 01110',
+  '6': '00110 01000 10000 11110 10001 10001 01110',
+  '7': '11111 00001 00010 00100 01000 01000 01000',
+  '8': '01110 10001 10001 01110 10001 10001 01110',
+  '9': '01110 10001 10001 01111 00001 00010 01100',
+  '#': '01010 01010 11111 01010 11111 01010 01010',
+  ':': '00000 00100 00100 00000 00100 00100 00000',
+  '-': '00000 00000 00000 11111 00000 00000 00000',
+  ' ': '00000 00000 00000 00000 00000 00000 00000',
+}
+
+
+def label_bitmap(text, scale):
+  """(width, height, grey bytes) of `text` in black on white, each font pixel `scale` pixels, with a margin."""
+  rows = [[glyph.split()[row] for glyph in (GLYPHS[char] for char in text)] for row in range(7)]
+  line = [' '.join(parts) for parts in rows]  # a blank column between characters
+  pad = scale * 2
+  width, height = len(line[0]) * scale + 2 * pad, 7 * scale + 2 * pad
+  pixels = bytearray([255]) * (width * height)
+  for row, bits in enumerate(line):
+    for column, bit in enumerate(bits):
+      if bit == '1':
+        for y in range(pad + row * scale, pad + (row + 1) * scale):
+          start = y * width + pad + column * scale
+          pixels[start : start + scale] = bytes(scale)
+  return width, height, bytes(pixels)
+
+
+def label_picture(source, target, text):
+  """Copies a picture with `text` (digits, '#', ':', '-', spaces) printed in its lower left corner."""
+  width = frame_size(probe(source)[1])[0] or 1280
+  label_w, label_h, pixels = label_bitmap(text, max(3, width // 240))
+  command = [tool('ffmpeg'), '-y', '-v', 'error', '-i', str(source)]
+  command += ['-f', 'rawvideo', '-pix_fmt', 'gray', '-s', f'{label_w}x{label_h}', '-i', 'pipe:0']
+  command += ['-filter_complex', '[0:v][1:v]overlay=0:main_h-overlay_h', '-frames:v', '1', '-q:v', '3', str(target)]
+  result = subprocess.run(command, input=pixels, capture_output=True, check=False)
+  if result.returncode or not Path(target).is_file():
+    raise MediaError(f'Could not label {Path(source).name}: {result.stderr.decode(errors="replace").strip()}')
+  return Path(target)
+
+
 # Contact sheets of screen pages for models and chat AIs that take a limited number of images. Anthropic scales larger
 # images down to about this width, so the tiles stay near the size of a typical screen region.
 SHEET_WIDTH = 1568

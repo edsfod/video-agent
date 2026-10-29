@@ -78,24 +78,40 @@ async function attach(view, files) {
   await debug.sendCommand('DOM.setFileInputFiles', { nodeId, files });
 }
 
-/**
- * Sends `text` with `files` and returns the answer: the text of its longest code block (the Markdown as written), or
- * the answer's text when it has none (`fenced` false).
- * @param {{ text: string, files?: string[], newChat?: boolean, onStatus?: (line: string) => void }} message
- * @returns {Promise<{ answer: string, fenced: boolean }>}
- */
-async function ask({ text, files = [], newChat = false, onStatus = () => {} }) {
-  stopped = false;
-  const view = open();
-  if (newChat) await view.loadURL(URL);
-  await waitFor("!!document.querySelector('textarea')", '登录 DeepSeek（在 DeepSeek 窗口里登录）', onStatus);
-  // DeepThink and Search on (user decision, 2026-10-29): search serves the 补充 a summary may add.
-  await page(`(() => { for (const b of document.querySelectorAll('.ds-toggle-button')) if (!b.classList.contains('ds-toggle-button--selected')) b.click(); })()`);
-  const answersBefore = await page(`document.querySelectorAll('.ds-markdown').length`);
+// DeepSeek's servers are sometimes busy (user report, 2026-10-29): an upload fails or never ends, or the answer is only
+// a busy notice. Either is tried again, up to TRIES times; the page is loaded again first, which keeps the
+// conversation and empties the box.
+const TRIES = 3;
+const BUSY = /服务器繁忙|稍后再试|server is busy|try again later/i;
+const UPLOAD_FAILED = /上传失败|重新上传|upload failed|failed to upload/i;
+const UPLOAD_TIMEOUT_MS = 5 * 60 * 1000;
+const BUSY_PAUSE_MS = Number(process.env.VA_DEEPSEEK_RETRY_MS) || 30000; // tests wait less
+
+/** Attaches the files and types the text; resolves once the send button may be pressed. */
+async function compose(view, text, files, onStatus) {
   if (files.length) await attach(view, files);
   await page(`document.querySelector('textarea').focus()`);
   view.webContents.insertText(text);
-  await waitFor(`(() => { const b = ${SEND}; return !!b && !b.classList.contains('ds-button--disabled'); })()`, '图片上传完', onStatus, 10 * 60 * 1000);
+  const ready = `(() => { const b = ${SEND}; return !!b && !b.classList.contains('ds-button--disabled'); })()`;
+  const failed = `${UPLOAD_FAILED}.test((${COMPOSER})?.innerText || '')`;
+  const start = Date.now();
+  let told = false;
+  for (;;) {
+    if (stopped) throw new Error('已停止');
+    if (await page(failed)) throw Object.assign(new Error('图片上传失败'), { again: true });
+    if (await page(ready)) return;
+    if (Date.now() - start > UPLOAD_TIMEOUT_MS) throw Object.assign(new Error('图片五分钟没有传完'), { again: true });
+    if (!told && Date.now() - start > 5000) {
+      onStatus('等待图片上传完…');
+      told = true;
+    }
+    await pause(1000);
+  }
+}
+
+/** Presses send and waits until the answer is written; returns it. */
+async function sendAndRead(onStatus) {
+  const answersBefore = await page(`document.querySelectorAll('.ds-markdown').length`);
   const idle = await page(`${SEND}.querySelector('svg path')?.getAttribute('d') || ''`);
   await page(`${SEND}.click()`);
   onStatus('已发送，DeepSeek 正在写…');
@@ -119,8 +135,44 @@ async function ask({ text, files = [], newChat = false, onStatus = () => {} }) {
     const code = [...last.querySelectorAll('pre')].map((pre) => pre.textContent).sort((a, b) => b.length - a.length)[0];
     return { code: code || null, text: last.innerText };
   })()`);
-  onStatus(`DeepSeek 写完了，用时 ${Math.round((Date.now() - start) / 1000)} 秒`);
-  return read.code ? { answer: read.code, fenced: true } : { answer: read.text, fenced: false };
+  return { ...read, seconds: Math.round((Date.now() - start) / 1000) };
+}
+
+/**
+ * Sends `text` with `files` and returns the answer: the text of its longest code block (the Markdown as written), or
+ * the answer's text when it has none (`fenced` false).
+ * @param {{ text: string, files?: string[], newChat?: boolean, onStatus?: (line: string) => void }} message
+ * @returns {Promise<{ answer: string, fenced: boolean }>}
+ */
+async function ask({ text, files = [], newChat = false, onStatus = () => {} }) {
+  stopped = false;
+  const view = open();
+  if (newChat) await view.loadURL(URL);
+  for (let attempt = 1; ; attempt++) {
+    if (attempt > 1) {
+      await view.webContents.loadURL(view.webContents.getURL()); // the same conversation, with an empty box
+    }
+    await waitFor("!!document.querySelector('textarea')", '登录 DeepSeek（在 DeepSeek 窗口里登录）', onStatus);
+    // DeepThink and Search on (user decision, 2026-10-29): search serves the 补充 a summary may add.
+    await page(`(() => { for (const b of document.querySelectorAll('.ds-toggle-button')) if (!b.classList.contains('ds-toggle-button--selected')) b.click(); })()`);
+    try {
+      await compose(view, text, files, onStatus);
+    } catch (error) {
+      if (!error.again || attempt >= TRIES) throw error;
+      onStatus(`${error.message}，重新上传（第 ${attempt + 1} 次）`);
+      await pause(5000);
+      continue;
+    }
+    const read = await sendAndRead(onStatus);
+    if (!read.code && BUSY.test(read.text) && read.text.length < 200) {
+      if (attempt >= TRIES) throw new Error(`DeepSeek 服务器繁忙，试了 ${TRIES} 次`);
+      onStatus(`DeepSeek 服务器繁忙，${Math.round(BUSY_PAUSE_MS / 1000)} 秒后再发（第 ${attempt + 1} 次）`);
+      await pause(BUSY_PAUSE_MS);
+      continue;
+    }
+    onStatus(`DeepSeek 写完了，用时 ${read.seconds} 秒`);
+    return read.code ? { answer: read.code, fenced: true } : { answer: read.text, fenced: false };
+  }
 }
 
 function stop() {

@@ -7,6 +7,7 @@ round (`follow_up`) gives the candidates taken and the summary as saved, until i
 import shutil
 import tempfile
 import zipfile
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from . import files, media, picture_review, templates
@@ -77,15 +78,47 @@ PICTURES_SECTION = f"""## {picture_review.HEADING}（网页 AI 写在总结最�
 ```"""
 
 
+class Labels:
+  """Copies of pictures with '#<number> <time>' printed in a corner (media.label_picture), numbered in the order
+  given: with dozens of pictures attached, a chat AI matched a picture to another one's name (DeepSeek, 2026-10-29),
+  and the number on the picture itself is what it can go by."""
+
+  def __init__(self, asset, items, work_dir):
+    self.folder = Path(work_dir) / 'labelled'
+    self.folder.mkdir(parents=True, exist_ok=True)
+    self.numbers = {}
+    jobs = []
+    for second, relative in items:
+      if relative not in self.numbers:
+        self.numbers[relative] = number = len(self.numbers) + 1
+        jobs.append((asset / relative, self.path(relative), f'#{number} {clock(second)}'))
+    with ThreadPoolExecutor(max_workers=8) as pool:
+      list(pool.map(lambda job: media.label_picture(*job), jobs))
+
+  def path(self, relative):
+    return self.folder / f'{self.numbers[relative]:04d}.jpg'
+
+  def entry(self, second, relative):
+    """How a picture is listed for the chat AI: its number, time and path."""
+    return f'#{self.numbers[relative]} {clock(second)} {relative}'
+
+
+LABEL_NOTE = (
+  '每张图（总图里的每一页）左下角印着编号和时间，如「#12 00:03:14」。认图以图上印的编号为准，不要按上传的先后顺序去'
+  '对；写总结时链接那个编号在下表里对应的路径。'
+)
+
+
 def numbered_pictures(asset, manifest, budget, work_dir):
   """At most `budget` pictures with numbered names, for a chat AI that takes a limited number of files, and the note
   that says which frames each one shows and which paths to link."""
-  chosen, side, dropped = plan(asset, manifest, budget, work_dir)
+  labels = Labels(asset, pages(manifest) + frames(asset, manifest, 10**6), work_dir)
+  chosen, side, dropped = plan(asset, manifest, budget, work_dir, labels.path)
   entries, lines = [], []
   for number, (kind, path, shown) in enumerate(chosen, 1):
     name = f'{number:03d}-{PICTURE_KINDS[kind]}-{clock(shown[0][0]).replace(":", "-")}.jpg'
     entries.append((name, path))
-    lines.append(f'- {name}：' + '、'.join(f'{clock(second)} {relative}' for second, relative in shown))
+    lines.append(f'- {name}：' + '、'.join(labels.entry(second, relative) for second, relative in shown))
   page_count = sum(len(shown) for kind, _, shown in chosen if kind != 'frame')
   frame_count = sum(kind == 'frame' for kind, _, _ in chosen)
   sheets = ''
@@ -95,8 +128,8 @@ def numbered_pictures(asset, manifest, budget, work_dir):
   note = (
     f'我附上了 {len(entries)} 张图片：这个视频的 {page_count} 张屏幕页（幻灯片、代码、文档）{sheets}，'
     f'和 {frame_count} 张整幅画面。'
-    '上传后的文件名不是总结里要用的路径：下表左边是图片的文件名，右边是它显示的画面的时间和路径（总图按顺序列出'
-    '每一页）。写总结时链接右边的路径，链接到画面所在的那一页；没有出现在表里的画面不要链接。'
+    '上传后的文件名不是总结里要用的路径：下表左边是图片的文件名，右边是它显示的画面的编号、时间和路径（总图按顺'
+    '序列出每一页）。写总结时链接右边的路径，链接到画面所在的那一页；没有出现在表里的画面不要链接。' + LABEL_NOTE
   )
   if dropped:
     note += f'屏幕页太多，有 {dropped} 页没有附上，材料里提到它们时你看不到。'
@@ -119,20 +152,24 @@ def material(video, workspace, *, request='', max_images=40, work_dir=None, max_
     entries, note = numbered_pictures(asset, manifest, max_files - 1, Path(work_dir))
     notes.append(note)
   else:
-    entries = [(relative, asset / relative) for _, relative in shown + found]
+    labels = Labels(asset, shown + found, work_dir)
+    entries = [(relative, labels.path(relative)) for _, relative in shown + found]
     notes.append(
       f'我附上了这个视频的 {len(shown)} 张屏幕页（幻灯片、代码、文档，每页一张）和 {len(found)} 张整幅画面，'
-      '文件名里带时间点。下面材料引用它们时写的是 frames/… 的相对路径：看图时按文件名对应，写总结时照材料里的相对'
-      '路径链接，不要只写文件名。没有附上的画面不要链接。'
+      '文件名里带时间点。下面材料引用它们时写的是 frames/… 的相对路径：写总结时照材料里的相对路径链接，不要只写'
+      '文件名。没有附上的画面不要链接。'
+      + LABEL_NOTE
+      + '\n\n'
+      + '\n'.join(f'- {labels.entry(second, relative)}' for second, relative in shown + found)
     )
     if shown:
-      sheets = media.sheets([asset / relative for _, relative in shown], 2, Path(work_dir))
+      sheets = media.sheets([labels.path(relative) for _, relative in shown], 2, Path(work_dir))
       lines = []
       for index, sheet in enumerate(sheets, 1):
         name = f'{SHEET_FOLDER}/{SHEET_FOLDER}-{index:03d}.jpg'
         entries.append((name, sheet))
         group = shown[(index - 1) * 4 : index * 4]
-        lines.append(f'- {name}：' + '、'.join(f'{clock(second)} {relative}' for second, relative in group))
+        lines.append(f'- {name}：' + '、'.join(labels.entry(second, relative) for second, relative in group))
       notes.append(
         f'如果一次收不了这么多图片，就看 {SHEET_FOLDER}/ 里的 {len(sheets)} 张总图：每张拼了 4 页屏幕页，从左到右、'
         '从上到下，对应下表。链接时仍写原来的屏幕页路径。\n\n' + '\n'.join(lines)
@@ -179,12 +216,21 @@ def follow_up(video, workspace, *, work_dir=None, max_files=None):
       names[relative] = f'{number:03d}-补截-{Path(relative).stem.removeprefix("frame-")}.jpg'
     else:
       names[relative] = relative if work_dir is not None else Path(relative).name
+  seconds = {
+    relative: media.parse_clock(Path(relative).stem.removeprefix('frame-').replace('-', ':')) for relative in names
+  }
+  labels = (
+    Labels(asset, [(seconds[relative], relative) for relative in names], work_dir) if work_dir is not None else None
+  )
   lines = []
   for request in requests:
     span = f'{clock(request["start_s"])}–{clock(request["end_s"])} {request["what"]}'.rstrip()
     shown = [relative for relative in request['candidates'] if relative in names]
     if shown:
-      lines.append(f'- {span}：' + ''.join(f'\n  - {names[relative]}：{relative}' for relative in shown))
+      listed = [labels.entry(seconds[relative], relative) if labels else relative for relative in shown]
+      lines.append(
+        f'- {span}：' + ''.join(f'\n  - {names[relative]}：{entry}' for relative, entry in zip(shown, listed))
+      )
     else:
       lines.append(f'- {span}：没有截到（时间超出视频，或者图片太多没有附上）')
   same = all(names[relative] == relative for relative in names)
@@ -192,7 +238,7 @@ def follow_up(video, workspace, *, work_dir=None, max_files=None):
     '下表列出每张图的路径。'
     if same
     else '附件的文件名不是总结里要用的路径：下表左边是文件名，右边是它的路径，链接时写右边的路径。'
-  )
+  ) + (LABEL_NOTE if labels else '')
   text = '\n\n'.join(
     (
       (
@@ -208,7 +254,7 @@ def follow_up(video, workspace, *, work_dir=None, max_files=None):
       REMINDER,
     )
   )
-  return text, [(names[relative], asset / relative) for relative in names] if work_dir is not None else []
+  return text, [(names[relative], labels.path(relative)) for relative in names] if labels else []
 
 
 def pack(video, workspace, target, *, request='', max_images=40, template=None, follow=False):

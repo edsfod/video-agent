@@ -24,11 +24,22 @@ MOTION_LEVEL = 12  # grey levels between frames one second apart; compression no
 EDGE_LEVEL = 12  # grey levels across a border
 LASTING = 0.85  # share of sampled frames in which an edge must be present to count as a border
 SPAN = 0.9  # a split line runs across this share of the frame
+# A speaker walking in front of the border hides part of it: on an NJU lecture (classroom camera left, screen right) it
+# was there along 71 % of the height (2026-10-29). A line this long is weaker evidence, tried after the camera boxes:
+# 容斥原理's board and browser met in such a line, beside a camera in the browser's corner.
+WEAK_SPAN = 0.6
 INSET_SIDE = 0.15  # a camera inset's sides run along at least this share of the frame
 MARGIN = 0.08  # borders this close to the frame's edge are frames of the picture, not splits
 WHOLE = 0.9  # a region given by hand this large in both directions is the whole screen
 ACTIVE = 0.002  # a region is active in a second when this share of it changed
 CAMERA = 0.5  # a camera picture is active in at least this share of the seconds; a screen in less
+# A screen side that changed in fewer seconds than this is a title bar or a logo, not a screen: 容斥原理's title bar
+# changed in 0.1 % of two hours, and it was taken for the screen beside a camera (2026-10-29).
+STATIC = 0.01
+# A camera picture without a border, found as cells active in at least CAMERA of the seconds: at least this many of
+# them, their box in a corner and at most CORNER_AREA of the frame (a talking head fills the middle, a clock is a cell).
+HOT_CELLS = 12
+CORNER_AREA = 0.25
 
 
 @dataclass
@@ -118,14 +129,14 @@ class Measure:
     return active / len(self.seconds)
 
 
-def _split_lines(vertical, horizontal, w, h):
-  """Lasting lines across the whole frame, away from its edges: [('x', position) | ('y', position)]."""
+def _split_lines(vertical, horizontal, w, h, span=SPAN):
+  """Lasting lines across `span` of the frame, away from its edges: [('x', position) | ('y', position)]."""
   lines = []
   for x in range(round(MARGIN * w), round((1 - MARGIN) * w)):
-    if sum(vertical[y * w + x] >= LASTING for y in range(h)) >= SPAN * h:
+    if sum(vertical[y * w + x] >= LASTING for y in range(h)) >= span * h:
       lines.append(('x', x))
   for y in range(round(MARGIN * h), round((1 - MARGIN) * h)):
-    if sum(horizontal[y * w + x] >= LASTING for x in range(w)) >= SPAN * w:
+    if sum(horizontal[y * w + x] >= LASTING for x in range(w)) >= span * w:
       lines.append(('y', y))
   return _merge(lines)
 
@@ -171,6 +182,33 @@ def _insets(vertical, horizontal, w, h):
   return list(best.values())
 
 
+def _corner_camera(measure):
+  """A camera picture in a corner without a border line: the box of the cells that changed in at least CAMERA of the
+  seconds, grown to the frame's edges it is near and by a cell, when there are HOT_CELLS of them and the box is in a
+  corner and at most CORNER_AREA of the frame. [box] or []."""
+  columns, rows = measure.columns, measure.rows
+  if not measure.seconds:
+    return []
+  counts = [0] * (columns * rows)
+  level = ACTIVE * 4 * 255  # a cell is active when ACTIVE of it changed, as `activity` counts a region
+  for cells in measure.seconds:
+    for index, value in enumerate(cells):
+      if value > level:
+        counts[index] += 1
+  hot = [(i % columns, i // columns) for i, count in enumerate(counts) if count >= CAMERA * len(measure.seconds)]
+  if len(hot) < HOT_CELLS:
+    return []
+  x0, x1 = min(x for x, _ in hot), max(x for x, _ in hot) + 1
+  y0, y1 = min(y for _, y in hot), max(y for _, y in hot) + 1
+  near = 2  # cells
+  left, right, top, bottom = x0 <= near, x1 >= columns - near, y0 <= near, y1 >= rows - near
+  if not ((left or right) and (top or bottom)) or (x1 - x0) * (y1 - y0) > CORNER_AREA * columns * rows:
+    return []
+  x0, x1 = (0 if left else max(0, x0 - 1)), (columns if right else min(columns, x1 + 1))
+  y0, y1 = (0 if top else max(0, y0 - 1)), (rows if bottom else min(rows, y1 + 1))
+  return [(x0 * CELL, y0 * CELL, (x1 - x0) * CELL, (y1 - y0) * CELL)]
+
+
 def _trim_dark(measure, box):
   """Shrinks a region by rows and columns that are dark in every sample (letterbox bars)."""
   x, y, w, h = box
@@ -198,13 +236,18 @@ def analyse(measure):
     return Layout('screen', w, h, whole)
   vertical, horizontal = measure.lasting_edges()
 
-  splits = []  # (screen box, camera box, kind)
-  for axis, position in _split_lines(vertical, horizontal, w, h):
-    if axis == 'x':
-      first, second = (0, 0, position, h), (position, 0, w - position, h)
-    else:
-      first, second = (0, 0, w, position), (0, position, w, h - position)
-    splits += [(first, second, 'split'), (second, first, 'split')]
+  def splits(lines):  # (screen box, camera box, kind) on either side of each line
+    found = []
+    for axis, position in lines:
+      if axis == 'x':
+        first, second = (0, 0, position, h), (position, 0, w - position, h)
+      else:
+        first, second = (0, 0, w, position), (0, position, w, h - position)
+      found += [(first, second, 'split'), (second, first, 'split')]
+    return found
+
+  strong = _split_lines(vertical, horizontal, w, h)
+  weak = [line for line in _split_lines(vertical, horizontal, w, h, WEAK_SPAN) if line not in strong]
 
   def choose(candidates):
     best = None
@@ -212,6 +255,8 @@ def analyse(measure):
       # Measured a cell away from the border, where the two pictures blur into each other.
       screen_active = measure.activity(_inner(screen, camera, kind))
       camera_active = measure.activity(_pad(camera, -CELL))
+      if kind == 'split' and screen_active < STATIC:
+        continue
       if camera_active >= CAMERA and screen_active < CAMERA and screen_active <= camera_active / 2:
         margin = camera_active - screen_active
         if best is None or margin > best.activity[1] - best.activity[0]:
@@ -220,7 +265,12 @@ def analyse(measure):
 
   # A line across the whole frame is the stronger evidence: a corner box is only looked at without a split. (Board
   # edges inside a camera picture can close a box with the split line.)
-  best = choose(splits) or choose([(whole, box, 'inset') for box in _insets(vertical, horizontal, w, h)])
+  best = (
+    choose(splits(strong))
+    or choose([(whole, box, 'inset') for box in _insets(vertical, horizontal, w, h)])
+    or choose([(whole, box, 'inset') for box in _corner_camera(measure)])
+    or choose(splits(weak))
+  )
   if best:
     if best.kind == 'split':
       best.screen = _trim_dark(measure, _shrink(best.screen, best.camera))

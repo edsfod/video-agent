@@ -73,11 +73,13 @@ def pages(manifest):
   return [] if kind == 'frame' else [(item['time_s'], item['path']) for item in items]
 
 
-def plan(asset, manifest, budget, work_dir):
+def plan(asset, manifest, budget, work_dir, source=None):
   """What goes into `budget` images: every screen page, alone or on 2x2 or 3x3 contact sheets when there are too
   many, then representative and extra frames in the room left (at least MIN_FRAMES where there are). Pages are
   dropped, evenly, only when even 3x3 sheets do not fit. Returns ('page' | 'sheet' | 'frame', file, [(second,
-  relative)]) per image, pages per row, and the number of pages left out."""
+  relative)]) per image, pages per row, and the number of pages left out. `source(relative)` gives the file to use for
+  a picture (default: the picture itself), such as a copy with a label printed on it."""
+  source = source or (lambda relative: asset / relative)
   shown = pages(manifest)
   found = frames(asset, manifest, 10**6)
   room = max(1, budget - min(len(found), MIN_FRAMES))
@@ -90,14 +92,14 @@ def plan(asset, manifest, budget, work_dir):
     shown = [shown[int(index * step)] for index in range(room * per)]
   chosen = []
   if side == 1:
-    chosen = [('page', asset / relative, [(second, relative)]) for second, relative in shown]
+    chosen = [('page', source(relative), [(second, relative)]) for second, relative in shown]
   elif shown:
-    for index, sheet in enumerate(media.sheets([asset / relative for _, relative in shown], side, work_dir)):
+    for index, sheet in enumerate(media.sheets([source(relative) for _, relative in shown], side, work_dir)):
       chosen.append(('sheet', sheet, shown[index * per : (index + 1) * per]))
   left = max(0, budget - len(chosen))
   if len(found) > left:
     found = [found[int(index * len(found) / left)] for index in range(left)] if left else []
-  chosen += [('frame', asset / relative, [(second, relative)]) for second, relative in found]
+  chosen += [('frame', source(relative), [(second, relative)]) for second, relative in found]
   return chosen, side, dropped
 
 
