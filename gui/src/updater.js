@@ -9,6 +9,7 @@ const { autoUpdater } = require('electron-updater');
 const { GenericProvider } = require('electron-updater/out/providers/GenericProvider');
 const { Provider, parseUpdateInfo, resolveFiles } = require('electron-updater/out/providers/Provider');
 const { CancellationToken } = require('builder-util-runtime');
+const semver = require('semver'); // electron-updater's own dependency
 const signature = require('./update-signature');
 const updatePlan = require('./update-plan');
 
@@ -62,7 +63,8 @@ class ReleaseProvider extends GenericProvider {
 
   async getLatestVersion() {
     const root = this.configuration.url.replace(/\/+$/, '');
-    const latest = `${root}/latest/download/`;
+    // A pre-release is never GitHub's "latest"; with 接收测试版 on, the newest one is read from its own folder.
+    const latest = this.configuration.tag ? `${root}/download/${this.configuration.tag}/` : `${root}/latest/download/`;
     const info = await signedInfo(this, new URL('latest.yml', latest), new URL('latest.yml.sig', latest));
     // Download from the versioned folder: electron-updater finds the old blockmap by putting the old version wherever
     // the new one appears in the path, so the folder must carry the version as well as the file name does.
@@ -86,7 +88,8 @@ class ApiProvider extends Provider {
   }
 
   async getLatestVersion() {
-    const url = new URL(`https://api.github.com/repos/${REPO}/releases/latest`);
+    const { tag } = this.configuration;
+    const url = new URL(`https://api.github.com/repos/${REPO}/releases/${tag ? `tags/${tag}` : 'latest'}`);
     const release = JSON.parse(await request(this, url, { Accept: 'application/vnd.github+json' }));
     this.assets = new Map((release.assets || []).map((asset) => [asset.name, asset.url]));
     const asset = (name) => {
@@ -117,6 +120,24 @@ function sources(mirror) {
       url: prefix + RELEASES,
     })),
   ];
+}
+
+// The newest release, pre-releases included, from GitHub's API (the release pages cannot list them); null when that
+// is a full release, which `latest` already names, or when the API cannot be reached, so the check falls back to the
+// full releases. Tests: VA_UPDATE_RELEASES=<url of a release list>; with test sources and without it, none is looked for.
+async function newestTag() {
+  if (process.env.VA_UPDATE_ROOT && !process.env.VA_UPDATE_RELEASES) return null;
+  const url = process.env.VA_UPDATE_RELEASES || `https://api.github.com/repos/${REPO}/releases?per_page=20`;
+  const response = await autoUpdater.netSession.fetch(url, {
+    headers: { Accept: 'application/vnd.github+json' },
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT),
+  });
+  if (!response.ok) throw new Error(`${new URL(url).host} 回答 ${response.status}`);
+  const releases = await response.json();
+  const newest = releases
+    .filter((release) => !release.draft && semver.valid(release.tag_name?.replace(/^v/, '')))
+    .sort((a, b) => semver.rcompare(a.tag_name.replace(/^v/, ''), b.tag_name.replace(/^v/, '')))[0];
+  return newest?.prerelease ? newest.tag_name : null;
 }
 
 function notesText(notes) {
@@ -178,16 +199,29 @@ function createUpdater({ logs, send, settings, remember, running }) {
     tooSlow();
   });
 
+  let tag = null; // the pre-release offered, when 接收测试版 is on and the newest release is one
   function use(i) {
     const source = sources(settings().updateMirror)[i];
     autoUpdater.disableDifferentialDownload = source.differential === false;
-    autoUpdater.setFeedURL({ provider: 'custom', updateProvider: source.provider, url: source.url });
+    autoUpdater.setFeedURL({ provider: 'custom', updateProvider: source.provider, url: source.url, tag });
     return source;
   }
+
+  // 接收测试版: off unless chosen, but on by default for someone running a pre-release (user request, 2026-10-29: a
+  // beta could not be found by 检查更新).
+  const betas = () => settings().betaUpdates ?? !!semver.prerelease(app.getVersion());
 
   async function check() {
     if (['checking', 'downloading', 'downloaded'].includes(state.status)) return state;
     set({ status: 'checking', message: '' });
+    tag = null;
+    if (betas()) {
+      try {
+        tag = await newestTag();
+      } catch (error) {
+        logs.line('warn', `update check: the list of releases could not be read, so only full releases are looked for: ${reason(error)}`);
+      }
+    }
     const failures = [];
     const count = sources(settings().updateMirror).length;
     for (let i = 0; i < count; i++) {

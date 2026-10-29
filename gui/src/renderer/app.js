@@ -1645,6 +1645,7 @@ $('open-settings').onclick = async () => {
   $('set-compress-local').checked = state.settings.compressLocal === true;
   $('set-theme').value = state.settings.theme || 'system';
   $('set-check-updates').checked = state.settings.checkUpdates !== false;
+  $('set-beta-updates').checked = state.settings.betaUpdates ?? (state.appVersion || '').includes('-'); // as updater.js decides
   for (const kind of LIMITED) $(`set-limit-${kind}`).value = state.settings.limits[kind] ?? 1;
   renderWorkspaceLock();
   $('set-update-mirror').value = state.settings.updateMirror || '';
@@ -1674,7 +1675,7 @@ $('open-settings').onclick = async () => {
 // Closing by ×, Esc or a click outside keeps nothing; with changes it asks first, otherwise it just closes.
 let settingsShown = '';
 const SETTINGS_FIELDS = [
-  'set-theme', 'set-workspace', 'set-cli', 'set-close-to-tray', 'set-compress-downloads', 'set-compress-local', 'set-check-updates', 'set-update-mirror', 'set-limit-download',
+  'set-theme', 'set-workspace', 'set-cli', 'set-close-to-tray', 'set-compress-downloads', 'set-compress-local', 'set-check-updates', 'set-beta-updates', 'set-update-mirror', 'set-limit-download',
   'set-limit-process', 'set-limit-summary', 'set-limit-compress', 'set-provider', 'set-model', 'set-base-url', 'set-key',
 ];
 const settingsValues = () =>
@@ -1715,7 +1716,9 @@ const agentRowsValue = () =>
     return { key: box.dataset.agent, command: command === state.env.agents[box.dataset.agent]?.command ? '' : command };
   });
 $('settings').addEventListener('close', () => {
-  if ($('settings').returnValue !== 'save') window.va.previewTheme(state.settings.theme || 'system');
+  // Setting the theme repaints the whole window (most of a second), so only a previewed one is put back.
+  const saved = state.settings.theme || 'system';
+  if ($('settings').returnValue !== 'save' && $('set-theme').value !== saved) window.va.previewTheme(saved);
   $('settings-unsaved').hidden = true;
   $('discard-settings').textContent = '取消';
 });
@@ -1824,6 +1827,8 @@ $('settings').addEventListener('close', async () => {
     compressLocal: $('set-compress-local').checked,
     theme: $('set-theme').value,
     checkUpdates: $('set-check-updates').checked,
+    // Kept only when it differs from the default, so a beta installed later still looks for betas.
+    betaUpdates: $('set-beta-updates').checked === (state.appVersion || '').includes('-') ? undefined : $('set-beta-updates').checked,
     updateMirror: $('set-update-mirror').value.trim(),
     limits: Object.fromEntries(
       LIMITED.map((kind) => [kind, Math.min(8, Math.max(1, Number($(`set-limit-${kind}`).value) || 1))]),
@@ -1877,6 +1882,7 @@ function when(iso) {
 
 function renderUpdate(update) {
   const current = update.current;
+  state.appVersion = current;
   const last = update.lastCheck;
   // What that check found, against the version running now (it may have been installed since).
   const order = last ? newer(last.version, current) : 0;

@@ -1,6 +1,7 @@
 // End-to-end test of checking for and downloading an update, against a local fake release feed signed with a test
-// key: a tampered latest.yml is refused, a dead source is skipped, a source that serves the installer too slowly is
-// left for the next one, and a good update downloads and passes the sha512 check. Installing is covered by update-install.test.js on an installed build.
+// key: a tampered latest.yml is refused, a dead source is skipped, a pre-release is offered only with 接收测试版, a
+// source that serves the installer too slowly is left for the next one, and a good update downloads and passes the
+// sha512 check. Installing is covered by update-install.test.js on an installed build.
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -37,14 +38,21 @@ const latest = [
   '',
 ].join('\n');
 
+// A pre-release, never GitHub's "latest": only its own folder has its latest.yml.
+const BETA = '9.9.10-beta';
+const betaLatest = latest.replaceAll(VERSION, BETA);
+let releases = [{ tag_name: `v${VERSION}`, prerelease: false, draft: false }];
+
 let tampered = true;
 const served = [];
 const server = http.createServer((request, response) => {
   served.push(request.url);
+  if (request.url === '/api/releases') return response.end(JSON.stringify(releases));
   const file = request.url.split('?')[0].split('/').pop();
+  const yml = request.url.includes(`/v${BETA}/`) ? betaLatest : latest;
   const body = {
-    'latest.yml': tampered ? latest.replace('一条说明', '被改过的说明') : latest,
-    'latest.yml.sig': signature.sign(latest, PRIVATE),
+    'latest.yml': tampered ? yml.replace('一条说明', '被改过的说明') : yml,
+    'latest.yml.sig': signature.sign(yml, PRIVATE),
     [NAME]: INSTALLER,
   }[file];
   if (body === undefined) return (response.statusCode = 404), response.end();
@@ -81,6 +89,7 @@ test.before(async () => {
       ...process.env,
       VA_UPDATE_ROOT: [`http://127.0.0.1:${deadPort}/releases`, `${base()}/slow/releases`, `${base()}/releases`].join(','),
       VA_UPDATE_PUBLIC_KEY: PUBLIC,
+      VA_UPDATE_RELEASES: `${base()}/api/releases`,
       VA_E2E_BACKGROUND: '1',
       VA_UPDATE_DELAY_MS: '300',
       VA_UPDATE_SLOW: '3000,50000,2', // after 3 s, under 50 KB/s with more than 2 s to go
@@ -118,6 +127,19 @@ test('a signed update is offered with its notes, after skipping the dead source'
   assert.ok(served.includes('/slow/releases/latest/download/latest.yml'), 'the check is answered by the first live source');
   assert.equal(await page.isVisible('#update-download'), true);
   assert.ok(await page.$eval('#open-settings', (button) => button.classList.contains('has-update')));
+});
+
+test('a pre-release is offered only with 接收测试版 on', async () => {
+  releases = [{ tag_name: `v${BETA}`, prerelease: true, draft: false }, ...releases];
+  const check = async (on, expected) => {
+    await page.evaluate((betaUpdates) => window.va.saveSettings({ betaUpdates }), on);
+    await page.click('#update-check');
+    await page.waitForFunction((text) => document.querySelector('#update-status').textContent.includes(text), `有新版本 ${expected}`, { timeout: 60_000 });
+  };
+  await check(true, BETA);
+  assert.ok(served.includes(`/slow/releases/download/v${BETA}/latest.yml`), 'read from the pre-release\'s own folder');
+  await check(false, VERSION);
+  releases = releases.slice(1); // the download below is of the full release
 });
 
 test('a slow download moves to the next source, which fetches the installer from the versioned folder and checks its sha512', async () => {
