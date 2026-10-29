@@ -121,8 +121,8 @@ test('a signed update is offered with its notes, after skipping the dead source'
 
 test('a slow download moves to the next source, which fetches the installer from the versioned folder and checks its sha512', async () => {
   await page.click('#update-download');
-  await page.waitForFunction(() => /测试源 2：太慢（约 \d+ KB\/s），换下一个/.test(document.querySelector('#update-status').textContent), null, { timeout: 30_000 });
   await page.waitForFunction(() => /已下载并通过校验/.test(document.querySelector('#update-status').textContent), null, { timeout: 120_000 });
+  assert.match(await status(), /测试源 2：太慢（约 \d+ KB\/s），换下一个/, 'the source left stays named');
   assert.ok(served.includes(`/slow/releases/download/v${VERSION}/${NAME}`), served.join(' '));
   assert.ok(served.includes(`/releases/download/v${VERSION}/${NAME}`), served.join(' '));
   assert.equal(await page.isVisible('#update-install'), true);

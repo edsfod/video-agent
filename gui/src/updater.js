@@ -245,7 +245,8 @@ function createUpdater({ logs, send, settings, remember, running }) {
         clearTimeout(stall);
         index = i;
         logs.line('info', `update ${result.updateInfo.version} downloaded via ${source.name}`);
-        return set({ status: 'downloaded', version: result.updateInfo.version, percent: 100, message: '' });
+        // Sources left on the way stay named under the result.
+        return set({ status: 'downloaded', version: result.updateInfo.version, percent: 100, message: failures.join('\n') });
       } catch (error) {
         clearTimeout(stall);
         const message = attempt?.why || (token?.cancelled ? `${STALL_TIMEOUT / 1000} 秒没有进度` : reason(error));

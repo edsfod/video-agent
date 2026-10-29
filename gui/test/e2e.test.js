@@ -516,7 +516,16 @@ test('ticked tasks stop together, and 全部停止 stops the rest', async () => 
   }))), videos);
   if (await page.isHidden('#log')) await page.click('#open-tasks');
   const item = (name) => `#task-list .task-item:has-text("等待${name}")`;
-  await page.waitForSelector(`${item('乙')} .badge:text("运行中")`);
+  const states = () => page.evaluate(async () => {
+    const tasks = (await window.va.tasks()).filter((task) => task.title.startsWith('等待'));
+    const outputs = await Promise.all(tasks.map((task) => window.va.taskOutput(task.id)));
+    return tasks.map((task, i) => `${task.title} ${task.status}: ${JSON.stringify(outputs[i]).slice(0, 400)}`).join('\n');
+  });
+  try {
+    await page.waitForSelector(`${item('乙')} .badge:text("运行中")`, { timeout: 15_000 });
+  } catch (error) {
+    assert.fail(`等待乙 is not running:\n${await states()}\n${error.message}`);
+  }
   assert.equal(await page.isDisabled('#stop-all'), false);
   assert.equal(await page.isHidden('#stop-picked'), true, 'nothing ticked yet');
   await page.check(`${item('甲')} .pick`);
