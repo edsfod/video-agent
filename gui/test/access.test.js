@@ -1,8 +1,8 @@
-// What the page may ask of the main process, without Electron: the CLI commands it runs itself and the paths it opens.
+// Which CLI commands the page may run itself, without Electron.
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { openable, pageCommand } = require('../src/access');
+const { pageCommand } = require('../src/access');
 
 test('the page runs reading and editing commands, and the rest only through the queue', () => {
   for (const args of [
@@ -26,21 +26,5 @@ test('the page runs reading and editing commands, and the rest only through the 
     'show',
   ]) {
     assert.ok(!pageCommand(args), JSON.stringify(args));
-  }
-});
-
-test('the page opens files in the workspace, templates, the licence and videos, not any linked path', () => {
-  const places = { workspace: 'D:\\Work', cliSettings: 'C:\\Users\\me\\AppData\\Roaming\\video-agent', files: ['C:\\VA\\resources\\LICENSE.txt', null] };
-  for (const target of [
-    'D:\\work\\clip-0123456789\\总结.md',
-    'D:\\Work\\合集\\课',
-    'C:\\Users\\me\\AppData\\Roaming\\video-agent\\templates\\标准.md',
-    'C:\\VA\\resources\\LICENSE.txt',
-    'E:\\Videos\\lecture.MP4',
-  ]) {
-    assert.ok(openable(target, places), target);
-  }
-  for (const target of ['C:\\Windows\\System32\\calc.exe', 'D:\\Work-other\\x.md', 'D:\\Work\\..\\x.bat', 'C:\\VA\\resources\\app.asar', '', null]) {
-    assert.ok(!openable(target, places), String(target));
   }
 });

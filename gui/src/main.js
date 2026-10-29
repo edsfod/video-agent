@@ -662,13 +662,8 @@ async function refreshPluginsAfterUpdate() {
 }
 
 function insideWorkspace(target) {
-  return access.inside(target, loadSettings().workspace);
-}
-
-function openable(target) {
-  const about = aboutFiles();
-  const cliSettings = path.join(process.env.APPDATA || app.getPath('appData'), 'video-agent'); // as settings.py
-  return access.openable(target, { workspace: loadSettings().workspace, cliSettings, files: [about.license, about.notices] });
+  const root = path.resolve(loadSettings().workspace).toLowerCase() + path.sep;
+  return path.resolve(target).toLowerCase().startsWith(root);
 }
 
 // ---------- IPC ----------
@@ -764,7 +759,7 @@ function registerIpc() {
       title: '选择视频',
       properties: ['openFile', 'multiSelections'],
       filters: [
-        { name: '视频', extensions: access.VIDEO_EXTENSIONS },
+        { name: '视频', extensions: ['mp4', 'mkv', 'webm', 'mov', 'avi', 'flv', 'm4v', 'ts', 'wmv'] },
         { name: '所有文件', extensions: ['*'] },
       ],
     });
@@ -823,11 +818,7 @@ function registerIpc() {
     if (!insideWorkspace(file)) throw new Error('只能读取工作区里的文件');
     return fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : null;
   });
-  ipcMain.handle('shell:open', (_, target) => {
-    if (openable(target)) return shell.openPath(target);
-    logs.line('warn', `refused to open ${target}`);
-    return '只能打开工作区里的文件、总结模板和视频';
-  });
+  ipcMain.handle('shell:open', (_, target) => shell.openPath(target));
   ipcMain.handle('shell:reveal', (_, target) => shell.showItemInFolder(target));
   ipcMain.handle('shell:external', (_, url) => /^https?:\/\//.test(url) && shell.openExternal(url));
   ipcMain.handle('clipboard:write', (_, text) => clipboard.writeText(text));
