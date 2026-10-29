@@ -1,0 +1,10 @@
+# Summary versions — user request (2026-10-28)
+
+The user asked that summarizing again never replace a summary on its own, and for a note on imported summaries; the mechanism was left to Claude (Claude judgment on the design, `src/video_agent/versions.py`):
+
+- The current text keeps its name (`总结.md`, `合集总结.md`, `学习提纲.md`), which every link, route and collection reads. Every other version is a file beside it, `总结 (2026-10-28 15-30-12).md`, in the same folder so its `frames/…` and `../../` links still resolve; `<name>.versions.json` records each text's time, source (模型 API · model, 网页 AI, Claude Code, 导入) and note.
+- A new text becomes current only when there is none, or when asked (`--make-current`, the import dialog's 设为当前总结, off by default); otherwise it is kept as a version and the window says so. Making a version current keeps the one it replaces as a version; only an explicit delete removes a version, never the current text.
+- Claude Code and Codex write files themselves, so the skill saves through `summarize --import --source` like every other route, and the window keeps the current text as a version (`versions --keep`, skipped when an identical copy exists) before an Agent runs, so nothing is lost even if an Agent writes `总结.md` directly.
+- The summary tab lists the current text and the versions (time, source, note), shows any of them with a banner, and makes one current, notes or deletes it. Collections use the same files and commands; their page shows the current text only for now.
+
+Importing a chat AI's text (user reports, 2026-10-28) also repairs what chat AIs do to it: Gemini wraps relative links in a Google search and ChatGPT puts them under its sandbox, so a link whose search or path holds a file that exists in the folder is put back as the relative path; the 视频 line is replaced by the one this program writes, so 打开视频 works; and since a chat AI cannot run `video-agent fix`, the material asks it to list recurring mishearings under `## 字幕改正`, which the import applies to the cleaned transcript and removes from the summary. An imported summary of the first NJU lecture had 81 such search links; re-imported, it has none.

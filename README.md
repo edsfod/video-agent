@@ -162,7 +162,7 @@ video-agent config --provider anthropic --set-key
 video-agent config --provider openai --model Qwen/Qwen3.5-397B-A17B --base-url https://api-inference.modelscope.cn/v1 --set-key
 ```
 
-全部命令和选项见 [docs/commands.md](docs/commands.md)，处理流程见 [docs/cli.md](docs/cli.md)，设计记录见 [ARCHITECTURE.md](ARCHITECTURE.md)。
+全部命令和选项见 [docs/commands.md](docs/commands.md)，处理流程见 [docs/cli.md](docs/cli.md)，程序结构见 [ARCHITECTURE.md](ARCHITECTURE.md)，设计决定和缘由见 [docs/decisions/](docs/decisions/README.md)。
 
 ## 隐私和使用须知
 

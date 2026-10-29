@@ -1,6 +1,6 @@
 # Project instructions
 
-Rules for working on this project. Why each exists, and when it was decided, is in `ARCHITECTURE.md` and the git history; keep that out of this file.
+Rules for working on this project. Why each exists, and when it was decided, is in `docs/decisions/` and the git history; keep that out of this file.
 
 ## Product
 
@@ -19,4 +19,4 @@ Rules for working on this project. Why each exists, and when it was decided, is 
 - Before pushing, run the tests the change touches on this machine (`.git/hooks/pre-push`: CLI tests, and the GUI tests with their windows off the screen); when they pass, push to `main`. GitHub's test runs follow without being waited for; fix what they find next. Installer tests (install, PATH, update) run only on GitHub, for packaging changes.
 - Tag or release only when the user says. Set the version with `uv run scripts/bump_version.py <version>` and write `docs/releases/v<version>.md` by hand; releases are built on GitHub.
 - Commit messages carry no AI attribution trailer.
-- Record user-visible product decisions in `ARCHITECTURE.md`, marking those Claude made as `Claude judgment`. Research notes go in `notes/` (not published).
+- Record user-visible product decisions in `docs/decisions/` under their topic, marking those Claude made as `Claude judgment`; keep `ARCHITECTURE.md` describing the code as it is, and record each release's checks in `docs/release-log.md`. Research notes go in `notes/` (not published).

@@ -1,0 +1,7 @@
+# Downloader decision — Claude judgment
+
+Use yt-dlp as the optional download backend. Its official project is a command-line downloader with broad site support and documents both stable CLI output (`--print after_move:filepath`) and a Python embedding API. The project can therefore call it as a separate process and receive the final saved path without parsing human-oriented progress text.
+
+Do not use Media Downloader as the backend. Its repository describes it as a Qt/C++ GUI front end whose default engine is yt-dlp; it is useful as a standalone graphical downloader, but it is a second interface rather than the download engine this CLI needs. The new project will keep its own planned GUI over the shared processing modules.
+
+This choice adds one optional `download` subcommand and an external yt-dlp requirement. It does not change `process` input: `process` continues to accept local paths only. The CLI never chains a download into transcription or summarization; the GUI queues processing after a download unless the user unticks 下载完自动处理 (see [Concurrent jobs](concurrent-jobs.md)). The current Media Downloader-managed executable is auto-detected from the user's AppData directory; Video Agent does not install or update it. Since 0.1.1 yt-dlp is also a Python dependency (see [Distribution](distribution.md)), so `download` works out of the box; a yt-dlp on `PATH` or Media Downloader's copy still comes first.
