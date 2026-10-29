@@ -52,7 +52,7 @@ export interface PointedFrame {
 }
 
 export interface Layout {
-  kind: 'screen' | 'split' | 'inset' | 'camera';
+  kind: 'screen' | 'split' | 'inset' | 'projected' | 'camera';
   size: number[];
   screen: number[] | null;
   camera: number[] | null;

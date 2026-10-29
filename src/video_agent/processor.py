@@ -107,6 +107,7 @@ LAYOUT_TEXT = {
   'screen': 'the whole frame is a screen recording',
   'split': 'a screen region beside a camera picture',
   'inset': 'a camera picture inside the screen (blacked out when looking for pages)',
+  'projected': 'a camera filming a projected or displayed screen; pages are looked for in that screen',
   'camera': 'a camera picture only; pictures held still on the whole frame (charts, screenshots) are the screen pages',
 }
 
@@ -480,7 +481,7 @@ def _process_locked(
     if use_extractor:
       try:
         source = video
-        if found.kind in ('split', 'inset'):
+        if found.kind in ('split', 'inset', 'projected'):
           # AutoSlides Extractor compares whole frames; give it the screen region alone.
           status(f'{video.name}: cropping the screen region for AutoSlides Extractor')
           source = media.crop_video(video, temporary / 'screen.mp4', region)

@@ -127,7 +127,13 @@ function subtitleSource(source) {
 // ---------- the 处理, 字幕 and 画面 tabs ----------
 // The CLI finds the screen region; when it is wrong the user drags the right one on the layout picture.
 
-const LAYOUT_TEXT = { screen: '整个画面是屏幕', split: '屏幕和摄像头分开', inset: '屏幕里嵌着摄像头', camera: '只有摄像头，没有屏幕页' };
+const LAYOUT_TEXT = {
+  screen: '整个画面是屏幕',
+  split: '屏幕和摄像头分开',
+  inset: '屏幕里嵌着摄像头',
+  projected: '摄像机拍的投影或屏幕',
+  camera: '只有摄像头，屏幕页是画面里停住的图表和截图',
+};
 
 function renderLayout(video) {
   const found = video.info?.manifest?.layout;

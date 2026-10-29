@@ -70,7 +70,7 @@ class PointedFrame(Picture):  # frames taken for pointing words, in manifests wr
 
 
 class Layout(TypedDict):
-  kind: Literal['screen', 'split', 'inset', 'camera']
+  kind: Literal['screen', 'split', 'inset', 'projected', 'camera']
   size: list[int]
   screen: Region | None
   camera: Region | None

@@ -160,3 +160,14 @@ def test_a_camera_without_a_border_in_a_corner_below_a_title_bar(tmp_path):
   x, y, w, h = found['camera']
   assert 220 <= x <= 256 and 120 <= y <= 148 and x + w == 320 and y + h == 180, found
   assert len(manifest['screen_pages']) == PAGES
+
+
+def test_a_camera_filming_a_projected_screen(tmp_path):
+  # A camera on a room: the projected slides bright in the upper left, the speaker walking below them.
+  graph = f'{_slides("slides")};{_camera("room", "640x360", "48x96")};[room][slides]overlay=x=40:y=32[out]'
+  manifest = _process(_video(tmp_path, 'projected', graph), tmp_path / 'work')
+  found = manifest['layout']
+  assert found['kind'] == 'projected', found
+  x, y, w, h = found['screen']
+  assert x <= 44 and y <= 36 and x + w >= 356 and y + h >= 208 and w <= 400 and h <= 260, found
+  assert len(manifest['screen_pages']) == PAGES

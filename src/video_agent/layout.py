@@ -40,11 +40,19 @@ STATIC = 0.01
 # them, their box in a corner and at most CORNER_AREA of the frame (a talking head fills the middle, a clock is a cell).
 HOT_CELLS = 12
 CORNER_AREA = 0.25
+# A screen filmed by the camera (a projection, a monitor): a block of cells bright on average over the video and
+# changing in few seconds, rectangular and of a fair size. On a camera recording of 线性代数 the projection was the
+# brightest still block, the speaker moving below it (2026-10-29). Claude judgment on the values.
+BRIGHT = 150
+STILL_SHARE = 0.2
+PROJECTED_AREA = (0.08, 0.8)
+PROJECTED_FILL = 0.7
 
 
 @dataclass
 class Layout:
-  kind: str  # 'screen' (the whole frame), 'split', 'inset' (camera picture inside the screen), 'camera'
+  kind: str  # 'screen' (the whole frame), 'split', 'inset' (camera picture inside the screen), 'projected' (a screen
+  # filmed by the camera), 'camera'
   width: int
   height: int
   screen: tuple | None = None  # (x, y, w, h) in source pixels: where to look for page changes
@@ -189,13 +197,7 @@ def _corner_camera(measure):
   columns, rows = measure.columns, measure.rows
   if not measure.seconds:
     return []
-  counts = [0] * (columns * rows)
-  level = ACTIVE * 4 * 255  # a cell is active when ACTIVE of it changed, as `activity` counts a region
-  for cells in measure.seconds:
-    for index, value in enumerate(cells):
-      if value > level:
-        counts[index] += 1
-  hot = [(i % columns, i // columns) for i, count in enumerate(counts) if count >= CAMERA * len(measure.seconds)]
+  hot = [(i % columns, i // columns) for i, share in enumerate(_cell_activity(measure)) if share >= CAMERA]
   if len(hot) < HOT_CELLS:
     return []
   x0, x1 = min(x for x, _ in hot), max(x for x, _ in hot) + 1
@@ -207,6 +209,64 @@ def _corner_camera(measure):
   x0, x1 = (0 if left else max(0, x0 - 1)), (columns if right else min(columns, x1 + 1))
   y0, y1 = (0 if top else max(0, y0 - 1)), (rows if bottom else min(rows, y1 + 1))
   return [(x0 * CELL, y0 * CELL, (x1 - x0) * CELL, (y1 - y0) * CELL)]
+
+
+def _cell_activity(measure):
+  """Per cell, the share of seconds in which ACTIVE of it changed, as `activity` counts a region."""
+  counts = [0] * (measure.columns * measure.rows)
+  level = ACTIVE * CELL * 255
+  for cells in measure.seconds:
+    for index, value in enumerate(cells):
+      if value > level:
+        counts[index] += 1
+  return [count / max(1, len(measure.seconds)) for count in counts]
+
+
+def _projected(measure):
+  """A screen filmed by the camera: the bounding box, in grid pixels, of the largest group of touching cells that are
+  BRIGHT on average and changed in less than STILL_SHARE of the seconds, when it fills PROJECTED_FILL of its box and
+  the box covers PROJECTED_AREA of the frame. None otherwise."""
+  columns, rows, width = measure.columns, measure.rows, measure.width
+  if not measure.samples or not measure.seconds:
+    return None
+  samples = measure.samples[:: max(1, len(measure.samples) // 40)]
+  shares = _cell_activity(measure)
+  candidate = set()
+  for row in range(rows):
+    for column in range(columns):
+      pixels = [
+        frame[y * width + x]
+        for frame in samples
+        for y in range(row * CELL, (row + 1) * CELL)
+        for x in range(column * CELL, (column + 1) * CELL, 2)
+      ]
+      if sum(pixels) / len(pixels) >= BRIGHT and shares[row * columns + column] < STILL_SHARE:
+        candidate.add((column, row))
+  best = []
+  while candidate:  # the groups of touching cells, keeping the largest
+    stack, group = [candidate.pop()], []
+    while stack:
+      column, row = stack.pop()
+      group.append((column, row))
+      for near in ((column + 1, row), (column - 1, row), (column, row + 1), (column, row - 1)):
+        if near in candidate:
+          candidate.remove(near)
+          stack.append(near)
+    if len(group) > len(best):
+      best = group
+  if not best:
+    return None
+  x0, x1 = min(c for c, _ in best), max(c for c, _ in best) + 1
+  y0, y1 = min(r for _, r in best), max(r for _, r in best) + 1
+  area = (x1 - x0) * (y1 - y0)
+  if (
+    not PROJECTED_AREA[0] * columns * rows <= area <= PROJECTED_AREA[1] * columns * rows
+    or len(best) < PROJECTED_FILL * area
+  ):
+    return None
+  # A cell more on each side: the speaker walks along the screen's lower edge and keeps it from counting as still.
+  x0, y0, x1, y1 = max(0, x0 - 1), max(0, y0 - 1), min(columns, x1 + 1), min(rows, y1 + 1)
+  return (x0 * CELL, y0 * CELL, (x1 - x0) * CELL, (y1 - y0) * CELL)
 
 
 def _trim_dark(measure, box):
@@ -278,6 +338,9 @@ def analyse(measure):
   active = measure.activity(whole)
   if active < CAMERA:
     return Layout('screen', w, h, _trim_dark(measure, whole), None, (active,))
+  projected = _projected(measure)
+  if projected:
+    return Layout('projected', w, h, projected, None, (measure.activity(projected), active))
   return Layout('camera', w, h, whole, None, (active,))
 
 
