@@ -12,7 +12,7 @@ const path = require('node:path');
 const pty = require('node-pty');
 const { Logs } = require('./logs');
 const { createUpdater } = require('./updater');
-const bilibili = require('./bilibili');
+const accounts = require('./accounts');
 const { TaskQueue, DEFAULT_LIMITS } = require('./tasks');
 
 const VERSION = app.getVersion(); // package.json, kept equal to the CLI version
@@ -43,7 +43,7 @@ global.vaTray = {
   windowVisible: () => !!win && !win.isDestroyed() && win.isVisible(),
 };
 // The cookie export, for the same tests.
-global.vaBilibili = { writeCookies: (file) => bilibili.writeCookies(file) };
+global.vaAccounts = { writeCookies: (key, file) => accounts.writeCookies(key, file) };
 
 // --user-data=<dir> keeps test runs away from the user's settings.
 const userData = process.argv.find((arg) => arg.startsWith('--user-data='));
@@ -307,8 +307,6 @@ function stopJob(id) {
 
 // ---------- tasks ----------
 
-// Matches the window's check in app.js, which shows the login hint.
-const isBilibili = (url) => /(^|[/.])(bilibili\.com|b23\.tv)([/:?#]|$)/i.test(url);
 
 // The CLI arguments of each kind of task. The workspace is fixed when the task is added.
 function cliArgs(task) {
@@ -378,10 +376,11 @@ function startTask(task) {
   const options = { cwd: task.workspace, title: task.title };
   // A second later: FFmpeg, killed with the tree, may hold the file a moment longer than the CLI.
   if (task.kind === 'compress') options.onClose = () => task.stopping && setTimeout(() => removeLeftovers(task.video), 1000);
-  if (task.kind !== 'download' || !isBilibili(task.url)) return startJob(task.id, command, args, options);
-  // The Bilibili login goes to yt-dlp as a cookies file that lives as long as the download.
-  bilibili
-    .writeCookies(path.join(cookiesDir(), `${task.id}.txt`))
+  const site = task.kind === 'download' && accounts.siteOf(task.url);
+  if (!site) return startJob(task.id, command, args, options);
+  // The site's cookies go to yt-dlp as a cookies file that lives as long as the download.
+  accounts
+    .writeCookies(site, path.join(cookiesDir(), `${task.id}.txt`))
     .then((cookies) => {
       if (task.stopping) return queue.exited(task.id, -1);
       startJob(task.id, command, [...args, ...(cookies ? ['--cookies', cookies] : [])], {
@@ -670,9 +669,17 @@ function registerIpc() {
   });
   ipcMain.handle('skill:read', () => fs.readFileSync(path.join(pluginRoot(), 'skills', 'video-agent', 'SKILL.md'), 'utf8'));
 
-  ipcMain.handle('bilibili:status', () => bilibili.status());
-  ipcMain.handle('bilibili:login', () => bilibili.login(win));
-  ipcMain.handle('bilibili:logout', () => bilibili.logout());
+  ipcMain.handle('accounts:list', () => accounts.list());
+  ipcMain.handle('accounts:login', (_, key) => accounts.login(key, win));
+  ipcMain.handle('accounts:logout', (_, key) => accounts.logout(key));
+  ipcMain.handle('accounts:import', async (_, key) => {
+    const picked = await dialog.showOpenDialog(win, {
+      title: `导入${accounts.SITES[key].name}的 cookies.txt`,
+      filters: [{ name: 'cookies.txt', extensions: ['txt'] }, { name: '所有文件', extensions: ['*'] }],
+      properties: ['openFile'],
+    });
+    return picked.canceled ? null : accounts.importCookies(key, picked.filePaths[0]);
+  });
 
   ipcMain.handle('update:state', () => updater.state());
   ipcMain.handle('update:check', () => updater.check());

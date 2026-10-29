@@ -220,6 +220,12 @@ main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 .routes { display: flex; gap: 18px; flex-wrap: wrap; margin-bottom: 4px; }
 .routes label { display: flex; gap: 6px; align-items: center; cursor: pointer; }
 .routes label.unavailable { opacity: 0.45; }
+.accounts { display: flex; flex-direction: column; gap: 10px; margin-bottom: 6px; }
+.account { display: flex; gap: 12px; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; }
+.account-text { flex: 1 1 260px; min-width: 0; }
+.account-text p { margin: 2px 0 0; }
+.account-name { font-weight: 600; margin-right: 8px; }
+.account-buttons { flex-wrap: wrap; justify-content: flex-end; }
 .route-model { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
 .route-model input { width: 240px; }
 #route-note { font-size: 12px; margin: 4px 0 10px; }

@@ -86,7 +86,7 @@ FFmpeg 和 yt-dlp 会作为依赖一起装上，不需要 git。电脑上已经�
   <img src="docs/images/process-split.webp" width="90%" alt="处理页：抽帧间隔、是否用必剪转录、是否另外用 AutoSlides Extractor 提取幻灯片；左边浅色，右边深色" />
 </p>
 
-添加本地视频（也可以拖进窗口），或在左上角粘贴链接下载。下载 B 站视频前，先在「设置」里登录一次哔哩哔哩，字幕（包括 AI 字幕）会一起下载，处理时直接用，不必转录。在「处理」页开始处理：屏幕页每次都会截取，不需要另装软件；必剪转录和 AutoSlides Extractor 都是默认关闭的选项（没装 AutoSlides Extractor 时这一项是灰的），勾选必剪只对这一次处理生效。
+添加本地视频（也可以拖进窗口），或在左上角粘贴链接下载。下载 B 站视频前，先在「设置 → 账号」里登录一次哔哩哔哩，字幕（包括 AI 字幕）会一起下载，处理时直接用，不必转录；抖音要在那里打开一次网页（不用登录）；YouTube 一般不用登录，遇到年龄限制或“确认你不是机器人”时再登录，登不上就从浏览器导出 cookies.txt 导入。在「处理」页开始处理：屏幕页每次都会截取，不需要另装软件；必剪转录和 AutoSlides Extractor 都是默认关闭的选项（没装 AutoSlides Extractor 时这一项是灰的），勾选必剪只对这一次处理生效。
 
 <p align="center">
   <img src="docs/images/frames-split.webp" width="90%" alt="画面页：代表画面和补截的画面；左边浅色，右边深色" />
@@ -119,7 +119,7 @@ video-agent frame "D:\Videos\lecture.mp4" 1:10 4:49 -o D:\Video-Work
 video-agent summarize "D:\Videos\lecture.mp4" -o D:\Video-Work
 ```
 
-`download` 会把网站提供的字幕存在视频旁边（不要字幕加 `--no-subs`），`process` 会自动用上；有多份时先用人工字幕、中文优先，最后才是 AI 字幕。B 站只给登录的账号看字幕：命令行用 `--cookies cookies.txt` 传入登录状态（Netscape 格式）。浏览器正开着时 yt-dlp 读不到它的 cookie，而且新版 Edge、Chrome 加密的 cookie yt-dlp 也解不开，所以桌面程序里改用自带的 B 站登录窗口。
+`download` 会把网站提供的字幕存在视频旁边（不要字幕加 `--no-subs`），`process` 会自动用上；有多份时先用人工字幕、中文优先，最后才是 AI 字幕。B 站只给登录的账号看字幕：命令行用 `--cookies cookies.txt` 传入登录状态（Netscape 格式）。浏览器正开着时 yt-dlp 读不到它的 cookie，而且新版 Edge、Chrome 加密的 cookie yt-dlp 也解不开，所以桌面程序里改用自带的登录窗口。
 
 `process` 在工作区里为每个视频建一个文件夹，放字幕（`transcript.srt`、`transcript.txt`）、代表画面（`frames/`）、总结材料（`summary-context.md`）和 `manifest.json`，原视频不会被修改或移动。没有字幕时加 `--asr bcut --allow-remote-asr` 用必剪转录；`--subtitles 文件` 用指定的字幕文件；`--slides 文件夹` 导入课件图片；加 `--extract-slides` 另外用 AutoSlides Extractor 提取幻灯片（会先裁出屏幕区域）。`video-agent compress 视频` 用 AV1 原地压缩视频（会替换原文件，替换前核对时长；已经是 AV1、HEVC 的跳过）。`video-agent tools` 列出会用到的 FFmpeg、ffprobe、yt-dlp 和 AutoSlides Extractor 各在哪里，没找到的写明。识别出的布局画在 `frames/<本次运行>/layout.jpg` 上（绿框是屏幕区域），认错了可以用 `--screen-region X,Y,宽,高` 手动指定。
 
@@ -169,7 +169,7 @@ video-agent config --provider openai --model Qwen/Qwen3.5-397B-A17B --base-url h
 - 必剪转录会把视频的音轨上传到哔哩哔哩，用的是必剪的非官方接口，随时可能失效。命令行要同时加 `--asr bcut --allow-remote-asr` 才会上传；桌面程序里「没有字幕时用必剪转录」默认勾选，对下载的视频生效，本地添加的视频没有字幕时会先问你；Agent 要先问过你。
 - 用模型 API 总结时，字幕和画面会发给你设置的服务商；用 Claude Code、Codex 时，由它们按各自的规则处理。设置里选的其他 Agent 以你的身份运行命令，不像 Codex 那样限制在工作区里。
 - 日志不记录 API key。
-- 哔哩哔哩登录：在桌面程序里登录后，登录状态（cookie）只存在本机，安装版用 Windows 的 DPAPI 加密保存。只在下载 B 站视频时临时导出给 yt-dlp、发给 B 站，下载结束就删掉导出的文件；在设置里可以退出登录。
+- 网站登录（哔哩哔哩、抖音、YouTube）：在桌面程序里登录或导入后，登录状态（cookie）只存在本机，安装版用 Windows 的 DPAPI 加密保存。只在下载那个网站的视频时临时导出给 yt-dlp、发给那个网站，下载结束就删掉导出的文件；在设置里可以退出登录。
 - 检查更新：桌面程序启动时会向 GitHub 查一次最新版本，连不上时依次改用 GitHub API 和下载镜像（gh-proxy.com、ghfast.top，或你在设置里填的镜像）。这些请求只是普通的下载请求，不附带你的视频、字幕、设置或其他数据；对方能看到的是你的 IP 地址和请求的文件。可以在设置里关掉启动时的检查。
 - 除此之外，程序只在你要求时联网：下载链接（yt-dlp）、必剪转录、调用你设置的模型 API。
 

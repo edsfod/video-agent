@@ -20,7 +20,7 @@ const state = {
   version: null, // { video, file }: a summary version shown instead of the current one
   tools: null, // `video-agent tools`: where FFmpeg, yt-dlp and AutoSlides Extractor were found (null: not found)
   term: null,
-  bilibili: { loggedIn: false }, // { loggedIn, name? }
+  accounts: [], // accounts.js status() of each site: { key, name, why, urls, ready, loggedIn, user? }
 };
 let ptyCounter = 0;
 
@@ -1222,7 +1222,7 @@ function checkSource(item) {
   return addTask({
     kind: 'download',
     title: `检查新视频：${item.name}`,
-    url: item.source.url, // for the Bilibili login and so the same list is not checked twice at once
+    url: item.source.url, // for the site's cookies and so the same list is not checked twice at once
     update: item.name,
     then: state.settings.processAfterDownload !== false ? 'process' : undefined,
   });
@@ -1466,30 +1466,103 @@ new ResizeObserver(() => state.term && state.tab === 'terminal' && state.term.fi
 
 $('add-videos').onclick = async () => addLocalVideos(await window.va.pickVideos());
 
-// ---------- Bilibili login (subtitles are shown only to logged-in accounts) ----------
+// ---------- site accounts (accounts.js: which sites need one, and why) ----------
 
-const isBilibili = (url) => /(^|[/.])(bilibili\.com|b23\.tv)([/:?#]|$)/i.test(url);
-
-function renderBilibili() {
-  const { loggedIn, name } = state.bilibili;
-  $('bili-status').textContent = loggedIn ? `已登录${name ? `：${name}` : ''}` : '没有登录';
-  $('bili-login').textContent = loggedIn ? '重新登录' : '登录';
-  $('bili-logout').hidden = !loggedIn;
-  $('download-hint').hidden = loggedIn || !isBilibili($('download-url').value.trim());
-}
-
-async function bilibiliLogin() {
-  state.bilibili = await window.va.bilibiliLogin();
-  renderBilibili();
-}
-
-$('bili-login').onclick = bilibiliLogin;
-$('download-login').onclick = (event) => (event.preventDefault(), bilibiliLogin());
-$('bili-logout').onclick = async () => {
-  state.bilibili = await window.va.bilibiliLogout();
-  renderBilibili();
+// Links whose download fails or misses subtitles without the site's cookies, and what the hint under the link says.
+const ACCOUNT_HINTS = {
+  bilibili: ['没有登录 B 站，只能下载视频，拿不到字幕。', '登录'],
+  douyin: ['还没在这里打开过抖音网页，下载抖音视频会被拒绝。', '打开'],
 };
-$('download-url').oninput = renderBilibili;
+const accountOf = (url) => state.accounts.find((account) => new RegExp(account.urls, 'i').test(url || ''));
+
+// The settings' order first, then any site added since; hidden ones apart.
+function accountOrder() {
+  const keys = state.accounts.map((account) => account.key);
+  const order = (state.settings.accountOrder || []).filter((key) => keys.includes(key));
+  return [...order, ...keys.filter((key) => !order.includes(key))];
+}
+
+async function saveAccountLayout(changes) {
+  state.settings = await window.va.saveSettings(changes);
+  renderAccounts();
+}
+
+function accountState({ loggedIn, ready, user }) {
+  if (loggedIn) return `已登录${user ? `：${user}` : ''}`;
+  return ready ? '可以下载（没有登录）' : '没有登录';
+}
+
+async function accountAction(key, action) {
+  const result = await action(key);
+  if (!result) return; // a file dialog cancelled
+  const status = result.status || result;
+  state.accounts = state.accounts.map((account) => (account.key === key ? status : account));
+  renderAccounts();
+  if (result.count !== undefined) alert(result.count ? `导入了 ${result.count} 条${status.name}的 Cookie。` : `文件里没有${status.name}的 Cookie。`);
+}
+
+function renderAccounts() {
+  const hidden = state.settings.hiddenAccounts || [];
+  const order = accountOrder();
+  const shown = order.filter((key) => !hidden.includes(key));
+  const move = (key, by) => {
+    const next = [...order];
+    const from = next.indexOf(key);
+    next.splice(from, 1);
+    next.splice(Math.max(0, Math.min(next.length, from + by)), 0, key);
+    saveAccountLayout({ accountOrder: next });
+  };
+  $('accounts').replaceChildren(
+    ...shown.map((key, i) => {
+      const account = state.accounts.find((item) => item.key === key);
+      const button = (text, onclick, extra = {}) => Object.assign(element('button', { type: 'button', textContent: text, ...extra }), { onclick });
+      const row = element('div', { className: 'account' }, [
+        element('div', { className: 'account-text' }, [
+          element('span', { className: 'account-name', textContent: account.name }),
+          element('span', { className: 'muted small-text account-state', textContent: accountState(account) }),
+          element('p', { className: 'muted small-text', textContent: account.why }),
+        ]),
+        element('span', { className: 'row account-buttons' }, [
+          button(account.loggedIn ? '重新登录' : key === 'douyin' && !account.ready ? '打开' : '登录', () => accountAction(key, window.va.accountLogin)),
+          button('导入 cookies.txt…', () => accountAction(key, window.va.accountImport), { className: 'ghost', title: '从浏览器扩展导出的 Netscape 格式 Cookie 文件' }),
+          ...(account.ready || account.loggedIn ? [button('退出登录', () => accountAction(key, window.va.accountLogout), { className: 'ghost' })] : []),
+          button('↑', () => move(key, -1), { className: 'ghost small', title: '往前', disabled: i === 0 }),
+          button('↓', () => move(key, 1), { className: 'ghost small', title: '往后', disabled: i === shown.length - 1 }),
+          button('隐藏', () => saveAccountLayout({ hiddenAccounts: [...hidden, key] }), { className: 'ghost small' }),
+        ]),
+      ]);
+      row.dataset.account = key;
+      return row;
+    }),
+  );
+  $('accounts-hidden').hidden = !hidden.length;
+  $('accounts-hidden').replaceChildren(
+    '已隐藏：',
+    ...order.filter((key) => hidden.includes(key)).flatMap((key, i) => {
+      const link = element('a', { href: '#', textContent: state.accounts.find((item) => item.key === key)?.name || key });
+      link.title = '显示';
+      link.onclick = (event) => (event.preventDefault(), saveAccountLayout({ hiddenAccounts: hidden.filter((item) => item !== key) }));
+      return i ? ['、', link] : [link];
+    }),
+  );
+  renderDownloadHint();
+}
+
+function renderDownloadHint() {
+  const account = accountOf($('download-url').value.trim());
+  const hint = account && !account.ready && ACCOUNT_HINTS[account.key];
+  $('download-hint').hidden = !hint;
+  if (!hint) return;
+  $('download-hint-text').textContent = hint[0];
+  $('download-login').textContent = hint[1];
+}
+
+$('download-login').onclick = (event) => {
+  event.preventDefault();
+  const account = accountOf($('download-url').value.trim());
+  if (account) accountAction(account.key, window.va.accountLogin);
+};
+$('download-url').oninput = renderDownloadHint;
 
 $('download-form').onsubmit = (event) => {
   event.preventDefault();
@@ -1880,7 +1953,7 @@ async function init() {
     button.title = `复制到 ${state.env.agents[button.dataset.skill].skills}`;
   }
   renderUpdate(await window.va.updateState());
-  window.va.bilibiliStatus().then((status) => ((state.bilibili = status), renderBilibili()));
+  window.va.accounts().then((list) => ((state.accounts = list), renderAccounts()));
   state.route = state.env.claude ? 'claude' : state.env.codex ? 'codex' : 'api';
   state.videos = state.settings.videos.map((path) => ({ path, info: null }));
   state.tasks = await window.va.tasks();

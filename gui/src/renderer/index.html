@@ -20,7 +20,7 @@
           <button type="submit">下载</button>
         </form>
         <label class="check download-then"><input id="download-then-process" type="checkbox" /><span>下载或添加后自动处理</span></label>
-        <div id="download-hint" class="download-hint" hidden>没有登录 B 站，只能下载视频，拿不到字幕。<a href="#" id="download-login">登录</a></div>
+        <div id="download-hint" class="download-hint" hidden><span id="download-hint-text"></span><a href="#" id="download-login">登录</a></div>
         <div class="list-title row-title"><span>合集</span><button id="new-collection" class="ghost small" type="button">新建</button></div>
         <div id="collection-list" class="video-list collection-list"></div>
         <div class="list-title">视频</div>
@@ -304,13 +304,10 @@
         <p class="muted small-text">用 AV1 重新编码，分辨率不变，看不出画质差别：屏幕录像（画面基本不动）降到每秒 10 帧，大约剩原来的五分之一；摄像头画面大约剩一半多。已经是 AV1、HEVC 的视频（比如 B 站的）不再压缩。压好的文件先和原文件核对时长，再替换原文件，路径不变，处理结果和总结照常可用。压一节一个半小时的课要几分钟。</p>
         <label class="check"><input id="set-compress-downloads" type="checkbox" /><span>压缩下载的视频（下载完先压缩，再处理）</span></label>
         <label class="check"><input id="set-compress-local" type="checkbox" /><span>也压缩从本地添加的视频<br /><small class="warn">会用压缩后的文件替换你电脑上的原视频，原文件不保留。</small></span></label>
-        <h3>哔哩哔哩账号</h3>
-        <p class="muted small-text">B 站只给登录的账号看字幕（包括 AI 字幕）。在这里登录一次，之后下载 B 站视频会把字幕一起存下来，处理时直接用，不用转录。登录状态只存在本机，只在下载 B 站视频时交给 yt-dlp。</p>
-        <span class="row">
-          <span id="bili-status" class="muted small-text grow"></span>
-          <button id="bili-login" type="button">登录</button>
-          <button id="bili-logout" type="button" class="ghost" hidden>退出登录</button>
-        </span>
+        <h3>账号</h3>
+        <p class="muted small-text">有的网站要先在这里登录或打开一次，yt-dlp 才拿得到字幕或视频。登录状态只存在本机，只在下载那个网站的视频时交给 yt-dlp。用箭头调整顺序，不用的可以隐藏。</p>
+        <div id="accounts" class="accounts"></div>
+        <p id="accounts-hidden" class="muted small-text" hidden></p>
         <h3>Agent 插件</h3>
         <p class="muted small-text">把总结用的 skill 装进 Agent，之后在它们里面直接说“总结这个视频”即可。从本机安装，不需要 git，也不用联网；重复点击会刷新已装的版本，程序更新后也会自动刷新。pi、Hermes Agent、DeepSeek Harness 没有插件，是把 skill 文件夹复制到它们读 skill 的地方；别的 Agent 选它读 skill 的文件夹。在本程序里用它们写总结不需要先装。</p>
         <span class="row">

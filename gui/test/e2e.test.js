@@ -428,7 +428,7 @@ test('embedded terminal runs a command in the video folder', async () => {
   );
 });
 
-test('the Bilibili login is exported as a Netscape cookies file for yt-dlp', async () => {
+test('a site login is exported as a Netscape cookies file for yt-dlp', async () => {
   const file = path.join(ROOT, 'cookies', 'bilibili.txt');
   const written = await app.evaluate(async ({ session }, file) => {
     const store = session.fromPartition('persist:bilibili');
@@ -437,9 +437,9 @@ test('the Bilibili login is exported as a Netscape cookies file for yt-dlp', asy
     await store.cookies.set({ url, domain: '.bilibili.com', name: 'SESSDATA', value: 'login', httpOnly: true, secure: true, expirationDate });
     await store.cookies.set({ url, name: 'buvid3', value: 'host-only', expirationDate });
     await store.cookies.set({ url: 'https://example.com/', name: 'other', value: 'elsewhere', expirationDate });
-    const result = await global.vaBilibili.writeCookies(file);
+    const result = await global.vaAccounts.writeCookies('bilibili', file);
     await store.clearStorageData();
-    return [result, await global.vaBilibili.writeCookies(`${file}.after-logout`)];
+    return [result, await global.vaAccounts.writeCookies('bilibili', `${file}.after-logout`)];
   }, file);
   assert.deepEqual(written, [file, null]);
   const lines = fs.readFileSync(file, 'utf8').trim().split('\n');
@@ -447,6 +447,51 @@ test('the Bilibili login is exported as a Netscape cookies file for yt-dlp', asy
   assert.ok(lines.some((line) => /^#HttpOnly_\.bilibili\.com\tTRUE\t\/\tTRUE\t\d+\tSESSDATA\tlogin$/.test(line)), lines.join(' | '));
   assert.ok(lines.some((line) => /^www\.bilibili\.com\tFALSE\t\/\tFALSE\t\d+\tbuvid3\thost-only$/.test(line)), lines.join(' | '));
   assert.ok(!lines.some((line) => line.includes('elsewhere')));
+});
+
+test('accounts are listed in an order of one\'s own, can be hidden, and take an imported cookies.txt', async () => {
+  const names = () => page.$$eval('#accounts .account-name', (all) => all.map((item) => item.textContent));
+  await page.click('#open-settings');
+  await page.waitForSelector('#settings[open] #accounts .account');
+  assert.deepEqual(await names(), ['哔哩哔哩', '抖音', 'YouTube']);
+  await page.click('#accounts .account[data-account=youtube] button[title=往前]');
+  await page.waitForFunction(() => document.querySelector('#accounts .account:nth-child(2)')?.dataset.account === 'youtube');
+  await page.click('#accounts .account[data-account=douyin] button:text("隐藏")');
+  await page.waitForSelector('#accounts-hidden:not([hidden]) a:text("抖音")');
+  assert.deepEqual(await names(), ['哔哩哔哩', 'YouTube']);
+  assert.deepEqual((await page.evaluate(() => window.va.settings())).accountOrder, ['bilibili', 'youtube', 'douyin']);
+  await page.click('#accounts-hidden a:text("抖音")');
+  await page.waitForFunction(() => document.querySelectorAll('#accounts .account').length === 3);
+  // A cookies.txt from a browser, for when Google will not sign in here: only the site's own cookies are kept.
+  const exported = path.join(ROOT, 'youtube-cookies.txt');
+  const later = Math.floor(Date.now() / 1000) + 3600;
+  fs.writeFileSync(exported, ['# Netscape HTTP Cookie File',
+    `.youtube.com\tTRUE\t/\tTRUE\t${later}\tSAPISID\tfrom-browser`,
+    `#HttpOnly_.youtube.com\tTRUE\t/\tTRUE\t${later}\tLOGIN_INFO\tsecret`,
+    `.google.com\tTRUE\t/\tTRUE\t${later}\tSID\tnot-for-youtube`, ''].join('\n'));
+  await app.evaluate(({ dialog }, chosen) => {
+    const open = dialog.showOpenDialog;
+    globalThis.vaRestoreDialogs = () => Object.assign(dialog, { showOpenDialog: open });
+    dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [chosen] });
+  }, exported);
+  await page.click('#accounts .account[data-account=youtube] button:text("导入 cookies.txt…")'); // its alert is accepted
+  await page.waitForSelector('#accounts .account[data-account=youtube] .account-state:text("已登录")');
+  await app.evaluate(() => globalThis.vaRestoreDialogs());
+  const file = path.join(ROOT, 'cookies', 'youtube.txt');
+  await app.evaluate(({}, file) => global.vaAccounts.writeCookies('youtube', file), file);
+  const text = fs.readFileSync(file, 'utf8');
+  assert.match(text, /\.youtube\.com\tTRUE\t\/\tTRUE\t\d+\tSAPISID\tfrom-browser/);
+  assert.match(text, /#HttpOnly_\.youtube\.com\t.*LOGIN_INFO\tsecret/);
+  assert.doesNotMatch(text, /not-for-youtube/);
+  await page.click('#accounts .account[data-account=youtube] button:text("退出登录")');
+  await page.waitForSelector('#accounts .account[data-account=youtube] .account-state:text("没有登录")');
+  await page.click('#close-settings');
+  // The hint under the link names what a link from such a site needs.
+  await page.fill('#download-url', 'https://www.douyin.com/video/7300000000000000000');
+  await page.waitForSelector('#download-hint:not([hidden]) #download-login:text("打开")');
+  await page.fill('#download-url', 'https://www.youtube.com/watch?v=abc');
+  await page.waitForSelector('#download-hint', { state: 'hidden' });
+  await page.fill('#download-url', '');
 });
 
 test('a subtitle file of another name replaces the transcript', async () => {
