@@ -139,7 +139,10 @@ def build_parser():
     help='the screen part of the frame, in pixels, when the detected layout is wrong (see layout.jpg)',
   )
   process.add_argument(
-    '--extract-slides', action='store_true', help='run AutoSlides Extractor and save slide images; off by default'
+    '--extract-slides',
+    action=argparse.BooleanOptionalAction,
+    help='find the screen pages with AutoSlides Extractor (default: when it is installed and the video has a screen '
+    "region; otherwise with this program's own rules)",
   )
   process.add_argument(
     '--slide-extractor',

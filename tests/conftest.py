@@ -28,6 +28,13 @@ def checked_json(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def no_extractor(monkeypatch):
+  """AutoSlides Extractor, which finds the screen pages where it is installed, is left out unless a test brings one:
+  results must not depend on the machine."""
+  monkeypatch.setenv('AUTOSLIDES_EXTRACTOR', 'none')
+
+
+@pytest.fixture(autouse=True)
 def own_appdata(tmp_path_factory, monkeypatch):
   """Settings and the user's copy of the summary rules come from %APPDATA%; never read the real ones."""
   monkeypatch.setenv('APPDATA', str(tmp_path_factory.mktemp('appdata')))

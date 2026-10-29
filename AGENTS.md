@@ -9,7 +9,7 @@ Rules for working on this project. Why each exists, and when it was decided, is 
 - Subtitles come first: existing tracks or files beside the video, then a replaceable speech recogniser. Audio goes to a remote recogniser only with `--allow-remote-asr`.
 - Representative frames follow the video: enough for every distinct page and scene, no fixed small count; a high limit only stops runaway output and says when reached. Codec keyframes and scene changes are not assumed meaningful.
 - Detect the layout first; with a camera beside or inside the screen, look for page changes in the screen region only, at the source resolution.
-- Slide extraction with AutoSlides Extractor is off unless `--extract-slides`, with explicit settings, behind a replaceable adapter.
+- Screen pages come from AutoSlides Extractor where it is installed (the screen region cropped for it, the steps of one slide merged after it), otherwise from this program's own page rules; `--no-extract-slides` or `AUTOSLIDES_EXTRACTOR=none` turns it off. Explicit settings, behind a replaceable adapter.
 - Never modify or move source videos, except `compress` replacing one with its checked smaller copy: this program's downloads by default, the user's own files only with their consent. Artifacts go to the workspace.
 - The GUI and any other front end call the CLI; no media or summary logic of their own.
 - yt-dlp and FFmpeg are Python dependencies; the installer bundles yt-dlp and its own LGPL FFmpeg (with its source on each release). Copies on `PATH` come first. Do not install other tools; say which is missing and how to point to it.

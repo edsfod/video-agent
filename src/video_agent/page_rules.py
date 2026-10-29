@@ -137,3 +137,18 @@ def merge(pages, thumbs, long_s):
     merged.append(dict(page))
     firsts.append(thumb)
   return merged
+
+
+def merge_steps(pages, thumbs):
+  """The pages with the steps of one page as one: a page within SAME_PAGE of its group's first page, or showing all of
+  it with more added, joins the group, which keeps its first time and its last, fullest picture. For pages found by
+  another tool (AutoSlides Extractor keeps each step), where the rest of `merge` is that tool's own business."""
+  width, height = THUMB
+  merged, first = [], None
+  for page, thumb in zip(pages, thumbs):
+    if first is not None and (differ(first, thumb, width, height) < SAME_PAGE or added(first, thumb)):
+      merged[-1]['path'] = page['path']
+      continue
+    merged.append(dict(page))
+    first = thumb
+  return merged

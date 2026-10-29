@@ -121,7 +121,7 @@ video-agent summarize "D:\Videos\lecture.mp4" -o D:\Video-Work
 
 `download` 会把网站提供的字幕存在视频旁边（不要字幕加 `--no-subs`），`process` 会自动用上；有多份时先用人工字幕、中文优先，最后才是 AI 字幕。B 站只给登录的账号看字幕：命令行用 `--cookies cookies.txt` 传入登录状态（Netscape 格式）。浏览器正开着时 yt-dlp 读不到它的 cookie，而且新版 Edge、Chrome 加密的 cookie yt-dlp 也解不开，所以桌面程序里改用自带的登录窗口。
 
-`process` 在工作区里为每个视频建一个文件夹，放字幕（`transcript.srt`、`transcript.txt`）、代表画面（`frames/`）、总结材料（`summary-context.md`）和 `manifest.json`，原视频不会被修改或移动。没有字幕时加 `--asr bcut --allow-remote-asr` 用必剪转录；`--subtitles 文件` 用指定的字幕文件；`--slides 文件夹` 导入课件图片；加 `--extract-slides` 另外用 AutoSlides Extractor 提取幻灯片（会先裁出屏幕区域）。`video-agent compress 视频` 用 AV1 原地压缩视频（会替换原文件，替换前核对时长；已经是 AV1、HEVC 的跳过）。`video-agent tools` 列出会用到的 FFmpeg、ffprobe、yt-dlp 和 AutoSlides Extractor 各在哪里，没找到的写明。识别出的布局画在 `frames/<本次运行>/layout.jpg` 上（绿框是屏幕区域），认错了可以用 `--screen-region X,Y,宽,高` 手动指定。
+`process` 在工作区里为每个视频建一个文件夹，放字幕（`transcript.srt`、`transcript.txt`）、代表画面（`frames/`）、总结材料（`summary-context.md`）和 `manifest.json`，原视频不会被修改或移动。没有字幕时加 `--asr bcut --allow-remote-asr` 用必剪转录；`--subtitles 文件` 用指定的字幕文件；`--slides 文件夹` 导入课件图片；装了 AutoSlides Extractor 时，屏幕页默认由它来找（会先裁出屏幕区域，同一页逐步出现的几步合成一页），`--no-extract-slides` 改用本程序自己的规则。`video-agent compress 视频` 用 AV1 原地压缩视频（会替换原文件，替换前核对时长；已经是 AV1、HEVC 的跳过）。`video-agent tools` 列出会用到的 FFmpeg、ffprobe、yt-dlp 和 AutoSlides Extractor 各在哪里，没找到的写明。识别出的布局画在 `frames/<本次运行>/layout.jpg` 上（绿框是屏幕区域），认错了可以用 `--screen-region X,Y,宽,高` 手动指定。
 
 用网页上的聊天 AI 写总结时，`pack` 打出提示词（加 `--zip 文件.zip` 连画面一起打包，画面保留原来的相对路径），写好后用 `summarize --import 文件.md` 存成 `总结.md`，画面链接照样有效：
 

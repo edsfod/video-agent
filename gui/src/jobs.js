@@ -79,7 +79,8 @@ function cliArgs(task) {
       const args = ['process', task.video, ...out, '--json', '--force', '--frame-interval', String(task.interval)];
       if (task.maxFrames) args.push('--max-frames', String(task.maxFrames));
       if (task.bcut) args.push('--asr', 'bcut', '--allow-remote-asr'); // the user's BCut setting, on by default
-      if (task.slides) args.push('--extract-slides');
+      // AutoSlides Extractor finds the screen pages where the CLI finds it, unless turned off in the window.
+      if (loadSettings().extractor === false) args.push('--no-extract-slides');
       if (task.screenRegion) args.push('--screen-region', task.screenRegion);
       if (task.subtitles) args.push('--subtitles', task.subtitles);
       if (task.slidesFolder) args.push('--slides', task.slidesFolder);

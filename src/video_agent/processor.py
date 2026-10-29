@@ -228,6 +228,24 @@ def _place_slides(slides, pages, work_dir):
   return slides
 
 
+def _extractor_found(executable):
+  try:
+    slide_extractor.find_extractor(executable)
+  except slide_extractor.SlideExtractorError:
+    return False
+  return True
+
+
+def _merge_steps(slides, work_dir):
+  """AutoSlides Extractor's slides with the steps of one slide (bullets appearing, a diagram drawn) as one, by
+  page_rules.merge_steps; slides without a time are left as they are."""
+  timed = [slide for slide in slides if slide['time_s'] is not None]
+  if len(timed) < 2 or len(timed) < len(slides):
+    return slides
+  thumbs = media.thumbnails(timed, work_dir)
+  return slides if thumbs is None else page_rules.merge_steps(timed, thumbs)
+
+
 def shown_pictures(manifest):
   """What was on screen, by time: slides with a time when there are any (AutoSlides' are filtered and cropped), else
   the screen pages, else the representative frames. Returns their kind and [{time_s, path}]."""
@@ -342,7 +360,7 @@ def process_video(
   scene_threshold=0.35,
   max_frames=None,
   screen_region=None,
-  extract_slides=False,
+  extract_slides=None,
   slide_extractor_path=None,
   asr='none',
   allow_remote_asr=False,
@@ -354,7 +372,8 @@ def process_video(
 ):
   """Prepares the evidence. A video processed before with the same frame settings is used as it is (each run samples
   a new set of frames, so a summary's links would change), unless `force`, or this run asks for more: a transcript it
-  lacks, slides, a screen region, a subtitle file."""
+  lacks, slides, a screen region, a subtitle file. `extract_slides`: None uses AutoSlides Extractor for the screen
+  pages when it is installed and the video has a screen region, True always, False never."""
   video, info = media.probe(video)
   asset = asset_folder(workspace, video)
   with files.video_lock(asset, 'process'):
@@ -451,22 +470,14 @@ def _process_locked(
     except media.MediaError:
       picture = None
 
-    pages, pages_found, shown_s = [], 0, None
-    # In a video without a screen region, such as stock footage with a chart or a screenshot now and then, the
-    # pictures held still are what is shown; moving footage never stays still long enough (user report, 2026-10-29).
-    if region or found.kind == 'camera':
-      status(f'{video.name}: looking for screen pages' if region else f'{video.name}: looking for still pictures')
-      page_candidates, shown_s = media.screen_pages(video, temporary / 'pages', region or 'null', duration_s=length)
-      pages_found = len(page_candidates)
-      if pages_found > MAX_PAGES:
-        status(f'{video.name}: {pages_found} screen pages; keeping {MAX_PAGES} spread over the video')
-      pages = _copy_candidates(_bounded(page_candidates, MAX_PAGES), frames_dir / 'screen', 'page')
-      status(f'{video.name}: {len(pages)} screen pages')
-    warning = layout_warning(found, pages_found, length, bool(screen_region))
-    if warning:
-      status(f'{video.name}: layout check: {warning} ({picture or "no layout.jpg"})')
-
-    if extract_slides:
+    # AutoSlides Extractor, when installed, finds the screen pages (user decision, 2026-10-29): tuned on many lecture
+    # recordings, it keeps slides turned within seconds that our page rules dropped as passing states. The steps of one
+    # slide that it keeps are merged here; pages it keeps too many are left to whoever writes the summary to drop.
+    # Without it, or when it fails, our own page search runs.
+    use_extractor = extract_slides or (
+      extract_slides is None and bool(region) and _extractor_found(slide_extractor_path)
+    )
+    if use_extractor:
       try:
         source = video
         if found.kind in ('split', 'inset'):
@@ -479,9 +490,30 @@ def _process_locked(
           executable=slide_extractor_path,
           status=lambda message: status(f'{video.name}: {message}'),
         )
+        found_slides = len(slide_result['slides'])
+        slide_result['slides'] = _merge_steps(slide_result['slides'], temporary)
+        status(
+          f'{video.name}: {len(slide_result["slides"])} slides from AutoSlides Extractor ({found_slides} before steps were merged)'
+        )
       except (slide_extractor.SlideExtractorError, media.MediaError) as error:
         slide_error = str(error)
         status(f'{video.name}: slide extraction failed: {slide_error}')
+
+    pages, pages_found, shown_s = [], 0, None
+    # In a video without a screen region, such as stock footage with a chart or a screenshot now and then, the
+    # pictures held still are what is shown; moving footage never stays still long enough (user report, 2026-10-29).
+    if (region and not slide_result) or found.kind == 'camera':
+      status(f'{video.name}: looking for screen pages' if region else f'{video.name}: looking for still pictures')
+      page_candidates, shown_s = media.screen_pages(video, temporary / 'pages', region or 'null', duration_s=length)
+      pages_found = len(page_candidates)
+      if pages_found > MAX_PAGES:
+        status(f'{video.name}: {pages_found} screen pages; keeping {MAX_PAGES} spread over the video')
+      pages = _copy_candidates(_bounded(page_candidates, MAX_PAGES), frames_dir / 'screen', 'page')
+      status(f'{video.name}: {len(pages)} screen pages')
+    shown = pages_found or len(slide_result['slides'] if slide_result else [])
+    warning = layout_warning(found, shown, length, bool(screen_region))
+    if warning:
+      status(f'{video.name}: layout check: {warning} ({picture or "no layout.jpg"})')
 
     # Slides made already: a folder the user chose, or the one AutoSlides keeps beside a screen recording it downloaded.
     imported = None if slide_result else slides_folder or slide_extractor.autoslides_folder(video)
@@ -562,7 +594,7 @@ def _process_locked(
       {'time_s': item['time_s'], 'path': item['path'].relative_to(asset).as_posix()} for item in frames
     ],
     'slide_extraction': {
-      'enabled': bool(extract_slides),
+      'enabled': bool(use_extractor),
       'imported': str(imported) if imported else None,
       'output': str(slide_result['output_root'].relative_to(asset)) if slide_result else None,
       'timeline': str(slide_result['timeline'].relative_to(asset)) if slide_result else None,

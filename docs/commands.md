@@ -79,7 +79,7 @@ video-agent process VIDEO... [OPTIONS]
 | `--frame-interval SECONDS` | `60` | Positive number of seconds between regular frame samples. |
 | `--scene-threshold VALUE` | `0.35` | FFmpeg scene-change threshold, greater than 0 and at most 1. |
 | `--max-frames N` | `36` | Positive maximum number of representative frames written per video. |
-| `--extract-slides` | Off | Run the local AutoSlides Extractor CLI and save slide images plus its timeline. |
+| `--extract-slides`, `--no-extract-slides` | On where AutoSlides Extractor is installed and the video has a screen region | Find the screen pages with AutoSlides Extractor: its slides, with the steps of one slide merged, stand for the screen pages. `--no-extract-slides` (or `AUTOSLIDES_EXTRACTOR=none`) uses this program's own page search; `--extract-slides` runs it also on a video read as a camera picture. |
 | `--slide-extractor PATH` | Auto-detected | Executable path for AutoSlides Extractor. Search order: this option, `AUTOSLIDES_EXTRACTOR`, `SlidesExtractor` or `AutoSlidesExtractor` on `PATH`, then common Windows install folders. |
 | `--asr {none,bcut}` | `none` | Speech-recognition provider used only when no sidecar or embedded subtitles are available. |
 | `--allow-remote-asr` | Off | Explicitly permits sending extracted audio to Bilibili BCut. Valid only with `--asr bcut`. |
@@ -108,7 +108,7 @@ This permission is per invocation. If the video has no audio and no subtitles, t
 
 #### Slide extraction behavior
 
-Slide extraction is not part of the default run. `--extract-slides` invokes AutoSlides Extractor in JSON command-line mode, using explicit extraction settings and a fresh output directory for each run. The external CLI saves slide images and `timeline.json`; it does not create an editable `.pptx` or PDF in this integration. PDF export is a separate workflow in AutoSlides Extractor's GUI.
+Where AutoSlides Extractor is installed it finds the screen pages: Video Agent invokes it in JSON command-line mode on the screen region (cropped out first when a camera picture is beside or inside it), with explicit extraction settings and a fresh output directory for each run, and merges the steps of one slide it keeps (a slide that only adds to the one before joins it, keeping the first time and the fuller picture). Pages it keeps too many (a video playing on a slide) are left to whoever writes the summary to drop. When it is missing or fails, this program's own page search runs. The external CLI saves slide images and `timeline.json`; it does not create an editable `.pptx` or PDF in this integration. PDF export is a separate workflow in AutoSlides Extractor's GUI.
 
 ```powershell
 video-agent process "D:\Videos\lecture.mp4" --extract-slides
@@ -240,7 +240,7 @@ Transcript files are created when a usable subtitle source is acquired. A silent
 
 ## Commands not implemented
 
-The current CLI has `download`, `inspect`, `process`, and `frame`. It also has `summarize`, `config` and `template`. It has no `slides` subcommand and no GUI command. Slide extraction is the opt-in `process --extract-slides` option.
+The current CLI has `download`, `inspect`, `process`, and `frame`. It also has `summarize`, `config` and `template`. It has no `slides` subcommand and no GUI command. AutoSlides Extractor is used by `process` where it is installed (`--no-extract-slides` turns it off).
 
 
 

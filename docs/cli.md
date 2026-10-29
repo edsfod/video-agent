@@ -62,7 +62,7 @@ BCut hands out a plain-HTTP upload address on `jssz-boss.biliapi.net`. Video Age
 
 ## Optional slide extraction
 
-Slide extraction is disabled unless `--extract-slides` is present. When enabled, Video Agent runs AutoSlides Extractor in JSON command-line mode and saves its output under `slide-extraction/<run-id>/`. It uses explicit SSIM, downsampling, pHash, and ML settings rather than inheriting saved GUI preferences. Its CLI saves slide images and `timeline.json`; it does not create an editable `.pptx` or PDF. PDF export is a separate workflow in AutoSlides Extractor's GUI.
+Where AutoSlides Extractor is installed it finds the screen pages (`--no-extract-slides` turns it off); Video Agent runs AutoSlides Extractor in JSON command-line mode and saves its output under `slide-extraction/<run-id>/`. It uses explicit SSIM, downsampling, pHash, and ML settings rather than inheriting saved GUI preferences. Its CLI saves slide images and `timeline.json`; it does not create an editable `.pptx` or PDF. PDF export is a separate workflow in AutoSlides Extractor's GUI.
 
 ```powershell
 video-agent process "D:\Videos\lecture.mp4" `

@@ -59,13 +59,14 @@ for (const button of $$('#video .tabs button')) {
 function renderProcess(video) {
   $('opt-interval').value = state.settings.frameInterval;
   $('opt-bcut').checked = state.settings.bcut !== false;
-  // The external extractor is offered only where the CLI finds it (state.tools is null until `tools` answered).
+  // AutoSlides Extractor finds the screen pages where the CLI finds it, unless turned off here (user decision,
+  // 2026-10-29); state.tools is null until `tools` answered.
   const extractor = !state.tools || state.tools.slide_extractor;
   $('opt-slides').disabled = !extractor;
-  if (!extractor) $('opt-slides').checked = false;
+  $('opt-slides').checked = !!extractor && state.settings.extractor !== false;
   $('opt-slides-note').textContent = extractor
-    ? '屏幕页总会截取，写总结不需要它；要去重更细、导出课件时再勾。耗时较长。'
-    : '没有找到 AutoSlides Extractor。屏幕页照样会截取；需要它时安装后重新打开本程序。';
+    ? '已安装：屏幕页由它来找，讲者翻得快的页也不会漏；取消勾选就用本程序自己的规则。'
+    : '没有找到 AutoSlides Extractor，屏幕页用本程序自己的规则找；装上后重新打开本程序就会用它。';
   $('opt-max-frames').value = state.settings.maxFrames || '';
   const info = video.info;
   const facts = [];
@@ -181,7 +182,8 @@ async function startProcess(extra = {}) {
   const video = pageVideo();
   const interval = Number($('opt-interval').value) || 60;
   const maxFrames = Number($('opt-max-frames').value) || null; // empty: as many as the video has
-  state.settings = await window.va.saveSettings({ frameInterval: interval, maxFrames, bcut: $('opt-bcut').checked });
+  const extractor = $('opt-slides').disabled ? state.settings.extractor : $('opt-slides').checked;
+  state.settings = await window.va.saveSettings({ frameInterval: interval, maxFrames, bcut: $('opt-bcut').checked, extractor });
   await addTask({
     kind: 'process',
     title: `处理：${baseName(video.path)}`,
@@ -189,7 +191,6 @@ async function startProcess(extra = {}) {
     interval,
     maxFrames,
     bcut: $('opt-bcut').checked,
-    slides: $('opt-slides').checked,
     ...extra,
   });
 }

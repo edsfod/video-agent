@@ -31,6 +31,8 @@ function defaults() {
     // A video without subtitles is transcribed with BCut, which uploads its audio to Bilibili: on unless the user turns
     // it off, also for videos processed after a download (user decision, 2026-10-28). The CLI still needs the flag.
     bcut: true,
+    // AutoSlides Extractor finds the screen pages where it is installed (user decision, 2026-10-29).
+    extractor: true,
     // Other agents shown as summary routes, [{ key, command }]: a key of AGENTS or 'custom', and its command line, where
     // {prompt} stands for the task if it takes no standard input. null shows the presets found on this computer.
     agents: null,

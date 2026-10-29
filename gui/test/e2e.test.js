@@ -27,6 +27,9 @@ const ENV = {
   [PATH_KEY]: SEARCH,
   VA_E2E_BACKGROUND: '1',
   VA_DEEPSEEK_URL: require('node:url').pathToFileURL(DEEPSEEK_PAGE).href,
+  // AutoSlides Extractor, which finds the screen pages where it is installed, is left out: results must not depend
+  // on the machine.
+  AUTOSLIDES_EXTRACTOR: 'none',
   APPDATA,
   NO_PROXY: '127.0.0.1,localhost',
   no_proxy: '127.0.0.1,localhost',

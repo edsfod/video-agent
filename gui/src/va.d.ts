@@ -28,6 +28,7 @@ export interface Settings {
   compressDownloads: boolean;
   compressLocal: boolean;
   bcut: boolean;
+  extractor: boolean;
   /** Other agents shown as summary routes; null shows the presets found on this computer. */
   agents: { key: string; command?: string }[] | null;
   webFiles: number;

@@ -1,6 +1,7 @@
 """Subtitle parsing, times, process, frame, download with a fake yt-dlp, and summarize settings."""
 
 import json
+import os
 import subprocess
 import sys
 import textwrap
@@ -740,3 +741,50 @@ def test_compress_check_tells_the_state_and_forgets_it_when_the_file_changes(sam
   assert json.loads(capsys.readouterr().out)['state'] == 'not-smaller'
   video.write_bytes(video.read_bytes() + b'\0')  # another file now
   assert compress.known(video) == (False, None)
+
+
+# Stands in for AutoSlides Extractor: writes three slides, the second the first with a line added, and their
+# timeline.json, as the real one does with --write-timeline, and prints JSON lines.
+FAKE_EXTRACTOR = r"""
+import json, subprocess, sys
+from pathlib import Path
+args = sys.argv[1:]
+video, output = Path(args[args.index('--video') + 1]), Path(args[args.index('--output') + 1])
+folder = output / f'slides_{video.stem}'
+folder.mkdir(parents=True)
+pictures = [
+  'color=white:s=320x180,drawbox=x=20:y=20:w=200:h=16:color=black:t=fill',
+  'color=white:s=320x180,drawbox=x=20:y=20:w=200:h=16:color=black:t=fill,drawbox=x=20:y=60:w=200:h=16:color=black:t=fill',
+  'smptebars=s=320x180',
+]
+events, resolutions = [], {}
+for number, (graph, second) in enumerate(zip(pictures, (0.0, 2.0, 5.0)), 1):
+  name = f'slide_{number:03d}.jpg'
+  subprocess.run(['ffmpeg', '-v', 'error', '-filter_complex', graph + '[v]', '-map', '[v]', '-frames:v', '1', str(folder / name)], check=True)
+  events.append({'id': f'e{number}', 'changeAt': second, 'confirmedAt': second + 2, 'initialFile': name})
+  resolutions[f'e{number}'] = {'file': name, 'state': 'canonical'}
+(folder / 'timeline.json').write_text(json.dumps({'events': events, 'resolutions': resolutions}), encoding='utf-8')
+print(json.dumps({'event': 'done', 'slideCount': 3}), flush=True)
+"""
+
+
+def test_autoslides_extractor_finds_the_screen_pages_where_installed(sample_video, tmp_path, monkeypatch):
+  script = tmp_path / 'fake_extractor.py'
+  script.write_text(FAKE_EXTRACTOR, encoding='utf-8')
+  program = tmp_path / 'AutoSlidesExtractor.cmd'
+  program.write_text(f'@"{sys.executable}" "{script}" %*\n', encoding='utf-8')
+  monkeypatch.setenv('AUTOSLIDES_EXTRACTOR', str(program))
+  monkeypatch.setenv('PATH', f'{Path(media.tool("ffmpeg")).parent}{os.pathsep}{os.environ["PATH"]}')
+  workspace = tmp_path / 'work'
+  assert cli.main(['process', str(sample_video), '-o', str(workspace), '--json']) == 0
+  manifest = json.loads((asset_folder(workspace, sample_video.resolve()) / 'manifest.json').read_text(encoding='utf-8'))
+  slides = manifest['slide_extraction']['slides']
+  assert manifest['slide_extraction']['enabled'] and manifest['screen_pages'] == [], 'its slides stand for the pages'
+  # The step with a line added joins the first slide, keeping its time and the fuller picture.
+  assert [(item['time_s'], Path(item['path']).name) for item in slides] == [
+    (0.0, 'slide_002.jpg'),
+    (5.0, 'slide_003.jpg'),
+  ]
+  assert cli.main(['process', str(sample_video), '-o', str(workspace), '--json', '--force', '--no-extract-slides']) == 0
+  manifest = json.loads((asset_folder(workspace, sample_video.resolve()) / 'manifest.json').read_text(encoding='utf-8'))
+  assert not manifest['slide_extraction']['enabled'] and manifest['screen_pages'], 'turned off: our own page search'

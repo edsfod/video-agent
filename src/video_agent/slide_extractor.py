@@ -18,7 +18,10 @@ def find_extractor(explicit=None):
   candidates = []
   if explicit:
     candidates.append(Path(explicit).expanduser())
-  if configured := os.environ.get('AUTOSLIDES_EXTRACTOR'):
+  configured = os.environ.get('AUTOSLIDES_EXTRACTOR', '')
+  if configured.lower() == 'none' and not explicit:
+    raise SlideExtractorError('AutoSlides Extractor is turned off by AUTOSLIDES_EXTRACTOR=none')
+  if configured:
     candidates.append(Path(configured).expanduser())
   for command in ('SlidesExtractor', 'AutoSlidesExtractor'):
     if found := shutil.which(command):
