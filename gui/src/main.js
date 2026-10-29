@@ -13,6 +13,7 @@ const pty = require('node-pty');
 const { Logs } = require('./logs');
 const { createUpdater } = require('./updater');
 const accounts = require('./accounts');
+const models = require('./models');
 const { TaskQueue, DEFAULT_LIMITS } = require('./tasks');
 
 const VERSION = app.getVersion(); // package.json, kept equal to the CLI version
@@ -339,6 +340,7 @@ function cliArgs(task) {
     case 'collection': {
       const args = ['summarize', '--collection', task.collection, ...out];
       if (task.model) args.push('--model', task.model);
+      if (task.effort) args.push('--effort', task.effort);
       if (task.guide) args.push('--guide');
       if (task.request) args.push('--request', task.request);
       if (task.overwrite) args.push('--overwrite');
@@ -347,6 +349,7 @@ function cliArgs(task) {
     case 'summary': {
       const args = ['summarize', task.video, ...out];
       if (task.model) args.push('--model', task.model);
+      if (task.effort) args.push('--effort', task.effort);
       if (task.request) args.push('--request', task.request);
       if (task.overwrite) args.push('--overwrite');
       return args;
@@ -435,12 +438,13 @@ function startAgent(task) {
       '--allowedTools', 'Bash(video-agent *)', 'Read', 'Write', 'Edit', 'Skill',
       '--output-format', 'stream-json', '--verbose',
       ...(task.model ? ['--model', task.model] : []),
+      ...models.effortArgs('claude', task.effort),
     ], { cwd: workspace, stdin: prompt, title, prompt });
   } else if (agent === 'codex') {
     const prompt = `先读 ${skill} 并照它做，<video-agent> 用 video-agent 命令。\n${text}`;
     startJob(task.id, 'codex', [
       'exec', '--skip-git-repo-check', '--cd', workspace, '--sandbox', 'workspace-write', '--json',
-      ...(task.model ? ['-m', task.model] : []), '-',
+      ...(task.model ? ['-m', task.model] : []), ...models.effortArgs('codex', task.effort), '-',
     ], { cwd: workspace, stdin: prompt, title, prompt });
   } else {
     const prompt = `先读 ${skill} 并照它做，<video-agent> 用 video-agent 命令。\n${text}`;
@@ -454,6 +458,9 @@ function startAgent(task) {
     });
     const at = after && args.includes(after) ? args.indexOf(after) + 2 : args.length;
     args.splice(at, 0, ...modelArgs);
+    if (!args.includes('{prompt}') || args.indexOf('{prompt}') === args.length - 1) {
+      args.splice(args.includes('{prompt}') ? args.length - 1 : args.length, 0, ...models.effortArgs(other.key, task.effort));
+    }
     const onClose = () => temporary.forEach((file) => fs.rmSync(file, { force: true }));
     if (!args.includes('{prompt}')) return startJob(task.id, other.file, args, { cwd: workspace, stdin: prompt, title, prompt, onClose });
     // A command line keeps one line through cmd.exe, so the task goes in a file and the line points to it.
@@ -662,6 +669,14 @@ function registerIpc() {
   }));
 
   ipcMain.handle('plugin:install', (_, agent) => installPlugin(agent));
+  ipcMain.handle('models:list', (_, route) => {
+    const [command, ...prefix] = cliCommand();
+    return models.list(route, {
+      other: otherAgents().find((entry) => entry.key === route),
+      run: (file, args) => runToEnd(file, args),
+      cli: (args) => runToEnd(command, [...prefix, ...args]),
+    });
+  });
   ipcMain.handle('skill:install', async (_, target) => {
     if (target !== 'folder') return installSkill(target);
     const picked = await dialog.showOpenDialog(win, { title: '选择 Agent 读 skill 的文件夹', properties: ['openDirectory', 'createDirectory'] });

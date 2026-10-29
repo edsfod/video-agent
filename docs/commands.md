@@ -114,6 +114,14 @@ video-agent process "D:\Videos\lecture.mp4" `
   --extract-slides --slide-extractor "C:\Program Files (x86)\AutoSlides Extractor\AutoSlidesExtractor.exe"
 ```
 
+### `models`
+
+```powershell
+video-agent models [--provider anthropic|openai] [--base-url URL] [--json]
+```
+
+Lists the summarize provider's model IDs from its model list (`GET …/models`), which costs no tokens; the window fills the model API's 模型 drop-down from it. `summarize --effort low|medium|high` sets how hard the model thinks: `reasoning_effort` for OpenAI-compatible APIs, an extended-thinking budget for Anthropic's; it is not sent when not given.
+
 ### `compress`
 
 ```powershell

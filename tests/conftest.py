@@ -68,11 +68,20 @@ def sample_video(tmp_path_factory):
 class FakeModel:
   """Serves the scripted JSON replies in order and records each request body."""
 
-  def __init__(self, replies):
-    self.replies, self.requests = list(replies), []
+  def __init__(self, replies, models=()):
+    self.replies, self.requests, self.models = list(replies), [], list(models)
     model = self
 
     class Handler(BaseHTTPRequestHandler):
+      def do_GET(self):  # the model list
+        model.requests.append({'path': self.path, 'headers': dict(self.headers), 'body': None})
+        reply = json.dumps({'data': [{'id': name, 'type': 'model'} for name in model.models]}).encode()
+        self.send_response(200)
+        self.send_header('Content-Type', 'application/json')
+        self.send_header('Content-Length', str(len(reply)))
+        self.end_headers()
+        self.wfile.write(reply)
+
       def do_POST(self):
         body = self.rfile.read(int(self.headers['Content-Length']))
         model.requests.append({'path': self.path, 'headers': dict(self.headers), 'body': json.loads(body)})
@@ -98,8 +107,8 @@ class FakeModel:
 def fake_model():
   servers = []
 
-  def start(replies):
-    servers.append(FakeModel(replies))
+  def start(replies, models=()):
+    servers.append(FakeModel(replies, models))
     return servers[-1]
 
   yield start

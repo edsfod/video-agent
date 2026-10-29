@@ -229,6 +229,35 @@ class _Tools:
     return path, f'Saved {relative} at {_clock(second)}; link it as ({relative}).'
 
 
+# How hard the model thinks, chosen per summary (user request, 2026-10-29). OpenAI-compatible APIs take it as
+# `reasoning_effort`; Anthropic's as an extended-thinking budget, in tokens, added to the output allowance (Claude
+# judgment: the budgets). Not sent when not chosen, so a model or server without it is not refused.
+EFFORTS = ('low', 'medium', 'high')
+THINKING_BUDGET = {'low': 2000, 'medium': 8000, 'high': 24000}
+
+
+def list_models(config, key):
+  """The provider's model IDs from its model list (GET …/models), which costs no tokens."""
+  if config['provider'] == 'anthropic':
+    url, headers = (
+      f'{config["base_url"]}/v1/models?limit=1000',
+      {'x-api-key': key or '', 'anthropic-version': '2023-06-01'},
+    )
+  else:
+    url, headers = f'{config["base_url"]}/models', {'Authorization': f'Bearer {key}'} if key else {}
+  try:
+    reply = requests.get(url, headers=headers, timeout=30)
+  except requests.RequestException as error:
+    raise SummaryError(f'{url}: request failed ({type(error).__name__})') from error
+  if reply.status_code >= 400:
+    raise SummaryError(f'{url}: HTTP {reply.status_code}: {reply.text[:300]}')
+  try:
+    entries = reply.json().get('data') or reply.json().get('models') or []
+  except (ValueError, AttributeError) as error:
+    raise SummaryError(f'{url}: the model list was not JSON with a data list') from error
+  return sorted({entry.get('id') or entry.get('name') for entry in entries if isinstance(entry, dict)} - {None})
+
+
 def _anthropic(http, config, key, system, intro, images, tools):
   url = f'{config["base_url"]}/v1/messages'
   headers = {'x-api-key': key, 'anthropic-version': '2023-06-01'}
@@ -240,6 +269,9 @@ def _anthropic(http, config, key, system, intro, images, tools):
     ]
   messages = [{'role': 'user', 'content': content}]
   body = {'model': config['model'], 'max_tokens': 16000, 'system': system, 'messages': messages}
+  if config.get('effort'):
+    budget = THINKING_BUDGET[config['effort']]
+    body |= {'max_tokens': 16000 + budget, 'thinking': {'type': 'enabled', 'budget_tokens': budget}}
   if tools:
     body['tools'] = [
       {'name': FRAME_TOOL['name'], 'description': FRAME_TOOL['description'], 'input_schema': FRAME_TOOL['schema']}
@@ -274,6 +306,8 @@ def _openai(http, config, key, system, intro, images, tools):
     ]
   messages = [{'role': 'system', 'content': system}, {'role': 'user', 'content': content}]
   body = {'model': config['model'], 'messages': messages}
+  if config.get('effort'):
+    body['reasoning_effort'] = config['effort']
   if tools:
     body['tools'] = [
       {

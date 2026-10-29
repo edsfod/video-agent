@@ -86,6 +86,18 @@ input[type='text'], input[type='number'], input[type='search'], input[type='pass
   outline: none;
 }
 input:focus, select:focus, textarea:focus { border-color: var(--text-muted); }
+/* Drop-downs drawn like the text fields, with a thin chevron instead of the system's arrow (user report, 2026-10-29:
+   the summary page's model list looked out of place). The chevron is grey, legible on both themes. */
+select {
+  appearance: none;
+  padding-right: 30px;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23888' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 11px center;
+}
+select:hover { border-color: var(--text-muted); }
+select option { background: var(--bg-card); color: var(--text); }
 textarea { width: 100%; resize: vertical; }
 /* A long line of text beside buttons goes on its own line, not into the buttons: they keep their size and wrap whole. */
 .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
@@ -226,8 +238,10 @@ main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 .account-text p { margin: 2px 0 0; }
 .account-name { font-weight: 600; margin-right: 8px; }
 .account-buttons { flex-wrap: wrap; justify-content: flex-end; }
-.route-model { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
-.route-model input { width: 240px; }
+.route-model { display: flex; gap: 10px 16px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+.route-model label { display: flex; gap: 8px; align-items: center; }
+.route-model select { min-width: 200px; max-width: 360px; }
+.route-model input { width: 220px; }
 #route-note { font-size: 12px; margin: 4px 0 10px; }
 .card textarea { margin-bottom: 10px; }
 

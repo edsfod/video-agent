@@ -74,10 +74,10 @@ function logAppend(text) {
 // Adds a task, or shows the same one already in the queue. Resolves to true when a new task was added.
 async function addTask(spec) {
   // A summary runs with the model chosen on the summary page for its route, if any.
-  if (['summary', 'collection'].includes(spec.kind) && spec.route && modelTakes(spec.route) && modelFor(spec.route)) {
-    spec = { ...spec, model: modelFor(spec.route) };
-    spec.title = spec.title.replace(/^(总结|合集总结|学习提纲)（([^）]+)）/, `$1（$2 · ${spec.model}）`);
-    await rememberModel(spec.route, spec.model);
+  if (['summary', 'collection'].includes(spec.kind) && spec.route && modelTakes(spec.route)) {
+    const chosen = [modelFor(spec.route), effortFor(spec.route)].filter(Boolean);
+    spec = { ...spec, model: modelFor(spec.route) || undefined, effort: effortFor(spec.route) || undefined };
+    if (chosen.length) spec.title = spec.title.replace(/^(总结|合集总结|学习提纲)（([^）]+)）/, `$1（$2 · ${chosen.join(' · ')}）`);
   }
   const result = await window.va.addTask(spec);
   const task = result.added ? result.task : result.existing;
@@ -732,32 +732,67 @@ function otherRouteLabels() {
   );
 }
 
-// The model each route runs with, chosen on the summary page and kept per route (user request, 2026-10-29: not only
-// the configured default, and not only for the model API); empty means the route's own default. The list offers the
-// models used before on that route, and Claude Code's aliases.
-const MODEL_HINTS = { claude: ['opus', 'sonnet', 'haiku'] };
+// The model and thinking level each route runs with, chosen on the summary page and kept per route (user requests,
+// 2026-10-29: not only the configured default, for agents too, from a full list read without spending tokens, and
+// the thinking level). Empty means the route's own default. The lists come from models.js through the main process,
+// read once per route while the window is open; a model not in the list is typed in under 自定义….
+const CUSTOM_MODEL = '\u0000custom';
 const modelFor = (route) => (state.settings.routeModels || {})[route] || '';
+const effortFor = (route) => (state.settings.routeEfforts || {})[route] || '';
 const modelTakes = (route) => ['api', 'claude', 'codex'].includes(route) || !!otherRoute(route)?.model;
+const modelLists = {};
 
-async function rememberModel(route, model) {
-  const used = [model, ...((state.settings.modelHistory || {})[route] || []).filter((item) => item !== model)].slice(0, 8);
-  state.settings = await window.va.saveSettings({ modelHistory: { ...(state.settings.modelHistory || {}), [route]: used } });
+async function saveRouteChoice(changes) {
+  state.settings = await window.va.saveSettings(changes);
 }
 
-function renderModel() {
+async function renderModel() {
   const route = state.route;
   $('route-model-label').hidden = !modelTakes(route);
   if (!modelTakes(route)) return;
-  $('route-model').value = modelFor(route);
-  $('route-model').placeholder = route === 'api' ? '设置里的模型' : `${routeName(route)} 的默认模型`;
-  const offered = [...new Set([...((state.settings.modelHistory || {})[route] || []), ...(MODEL_HINTS[route] || [])])];
-  $('route-models').replaceChildren(...offered.map((value) => element('option', { value })));
+  const select = $('route-model');
+  const fill = (list, note) => {
+    if (route !== state.route) return; // another route was chosen meanwhile
+    const saved = modelFor(route);
+    const known = list.models.some((model) => model.value === saved);
+    select.replaceChildren(
+      element('option', { value: '', textContent: route === 'api' ? '默认（设置里的模型）' : `默认（${routeName(route)} 自己的设置）` }),
+      ...list.models.map((model) => element('option', { value: model.value, textContent: model.label })),
+      element('option', { value: CUSTOM_MODEL, textContent: '自定义…' }),
+    );
+    select.value = !saved ? '' : known ? saved : CUSTOM_MODEL;
+    $('route-model-custom').hidden = select.value !== CUSTOM_MODEL;
+    if (select.value === CUSTOM_MODEL) $('route-model-custom').value = saved;
+    // Codex lists the levels each model takes; the others one list for all.
+    const levels = list.models.find((model) => model.value === saved)?.efforts || list.efforts;
+    $('route-effort-label').hidden = !levels.length;
+    $('route-effort').replaceChildren(
+      element('option', { value: '', textContent: '默认' }),
+      ...levels.map((level) => element('option', { value: level, textContent: level })),
+    );
+    $('route-effort').value = levels.includes(effortFor(route)) ? effortFor(route) : '';
+    $('route-model-note').textContent = note || '';
+  };
+  if (!modelLists[route]) {
+    fill({ models: [], efforts: [] }, '正在读取模型列表…');
+    modelLists[route] = window.va.models(route).catch((error) => ({ models: [], efforts: [], error: error.message }));
+  }
+  const list = await modelLists[route];
+  if (list.error) delete modelLists[route]; // asked again next time
+  fill(list, list.error ? `读不到模型列表：${list.error}。可以选「自定义…」自己填。` : list.models.length ? '' : '没有读到模型列表，可以选「自定义…」自己填。');
 }
 
 $('route-model').onchange = async () => {
-  const routeModels = { ...(state.settings.routeModels || {}), [state.route]: $('route-model').value.trim() };
-  state.settings = await window.va.saveSettings({ routeModels });
+  const custom = $('route-model').value === CUSTOM_MODEL;
+  $('route-model-custom').hidden = !custom;
+  if (custom) return $('route-model-custom').focus();
+  await saveRouteChoice({ routeModels: { ...(state.settings.routeModels || {}), [state.route]: $('route-model').value } });
+  renderModel(); // the thinking levels may follow the model
 };
+$('route-model-custom').onchange = () =>
+  saveRouteChoice({ routeModels: { ...(state.settings.routeModels || {}), [state.route]: $('route-model-custom').value.trim() } });
+$('route-effort').onchange = () =>
+  saveRouteChoice({ routeEfforts: { ...(state.settings.routeEfforts || {}), [state.route]: $('route-effort').value } });
 
 function renderRoutes() {
   for (const label of document.querySelectorAll('#routes .route-agent')) label.remove();

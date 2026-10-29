@@ -42,18 +42,22 @@ def save(data):
   temporary.replace(path)
 
 
-def resolve(provider=None, model=None, base_url=None):
-  """The provider, model and base URL to use: command-line values, then saved settings, then defaults."""
+def endpoint(provider=None, base_url=None):
+  """The provider and base URL to use, without a model: command-line values, then saved settings, then defaults."""
   data = load()
   name = provider or data['provider']
   if name not in PROVIDERS:
     raise SettingsError(f'Unknown provider {name!r}; choose one of: {", ".join(PROVIDERS)}')
   saved = data['providers'].get(name, {})
-  chosen = {
-    'provider': name,
-    'model': model or saved.get('model') or PROVIDERS[name]['model'],
-    'base_url': (base_url or saved.get('base_url') or PROVIDERS[name]['base_url']).rstrip('/'),
-  }
+  return {'provider': name, 'base_url': (base_url or saved.get('base_url') or PROVIDERS[name]['base_url']).rstrip('/')}
+
+
+def resolve(provider=None, model=None, base_url=None):
+  """The provider, model and base URL to use: command-line values, then saved settings, then defaults."""
+  chosen = endpoint(provider, base_url)
+  saved = load()['providers'].get(chosen['provider'], {})
+  chosen['model'] = model or saved.get('model') or PROVIDERS[chosen['provider']]['model']
+  name = chosen['provider']
   if not chosen['model']:
     raise SettingsError(
       f'No model set for {name}; pass --model or run: video-agent config --provider {name} --model NAME'

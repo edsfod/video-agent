@@ -12,7 +12,7 @@ from . import summarize as summaries
 from .download import DownloadError, download_urls
 from .media import MediaError, duration, parse_clock, probe, save_frame
 from .processor import asset_folder, process_video
-from .summarize import import_summary, material, pack, pack_folder, summarize_video, template
+from .summarize import EFFORTS, import_summary, list_models, material, pack, pack_folder, summarize_video, template
 from .transcript import format_clock as transcript_clock
 
 # Where the window saves downloads in a workspace, and so where a followed list's new videos go by default.
@@ -213,6 +213,12 @@ def build_parser():
   )
   summarize.add_argument('--no-tools', action='store_true', help='for models without tool calling')
   summarize.add_argument(
+    '--effort',
+    choices=EFFORTS,
+    help="how hard the model thinks: reasoning_effort for OpenAI-compatible APIs, a thinking budget for Anthropic's; "
+    'not sent when not given',
+  )
+  summarize.add_argument(
     '--make-current',
     '--overwrite',
     dest='overwrite',
@@ -287,6 +293,12 @@ def build_parser():
     help='whole frames put into the zip besides every screen page (default: 40)',
   )
 
+  models = commands.add_parser(
+    'models', help="list the summarize provider's models from its model list (costs no tokens)"
+  )
+  models.add_argument('--provider', choices=tuple(settings.PROVIDERS), help='default: the one set with config')
+  models.add_argument('--base-url', help='default: the one set with config')
+  models.add_argument('--json', action='store_true', help='print a JSON list')
   config = commands.add_parser('config', help='show or change the summarize provider, model, base URL and API key')
   config.add_argument('--provider', choices=tuple(settings.PROVIDERS), help='choose the provider to use and edit')
   config.add_argument('--model')
@@ -827,8 +839,14 @@ def run(args):
     )
     return 0
 
+  if args.command == 'models':
+    where = settings.endpoint(args.provider, args.base_url)
+    found = list_models(where, settings.get_key(where['provider']))
+    print(json.dumps(found) if args.json else '\n'.join(found))
+    return 0
+
   if args.command == 'summarize' and args.collection:
-    chosen = settings.resolve(args.provider, args.model, args.base_url)
+    chosen = settings.resolve(args.provider, args.model, args.base_url) | {'effort': args.effort}
     path = summaries.summarize_collection(
       args.output,
       args.collection,
@@ -853,7 +871,7 @@ def run(args):
     return 0
 
   if args.command == 'summarize':
-    chosen = settings.resolve(args.provider, args.model, args.base_url)
+    chosen = settings.resolve(args.provider, args.model, args.base_url) | {'effort': args.effort}
     path = summarize_video(
       args.video,
       args.output,

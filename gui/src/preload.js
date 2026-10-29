@@ -37,6 +37,7 @@ contextBridge.exposeInMainWorld('va', {
   taskOutput: (id) => ipcRenderer.invoke('tasks:output', id),
   cancelTask: (id) => ipcRenderer.invoke('tasks:cancel', id),
   retryTask: (id) => ipcRenderer.invoke('tasks:retry', id),
+  models: (route) => ipcRenderer.invoke('models:list', route),
   installSkill: (target) => ipcRenderer.invoke('skill:install', target),
   clearTasks: () => ipcRenderer.invoke('tasks:clear'),
   onTasks: listen('tasks:changed'),

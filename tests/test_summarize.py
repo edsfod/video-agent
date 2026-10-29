@@ -13,6 +13,7 @@ from video_agent.summarize import (
   SummaryError,
   _numbered_pictures,
   evidence_images,
+  list_models,
   summarize_video,
   template,
   video_line,
@@ -31,6 +32,30 @@ def processed(sample_video, tmp_path):
 def config(provider, url):
   base = url if provider == 'anthropic' else f'{url}/v1'
   return {'provider': provider, 'model': 'test-model', 'base_url': base}
+
+
+def test_the_model_list_costs_no_tokens_and_effort_is_sent_only_when_chosen(processed, fake_model, no_proxy):
+  video, workspace = processed
+  reply = {'stop_reason': 'end_turn', 'content': [{'type': 'text', 'text': SUMMARY}]}
+  server = fake_model([reply, reply], models=['claude-b', 'claude-a'])
+  assert list_models(config('anthropic', server.url), 'secret') == ['claude-a', 'claude-b']
+  assert server.requests[0]['path'] == '/v1/models?limit=1000'
+  assert server.requests[0]['headers']['x-api-key'] == 'secret'
+  summarize_video(video, workspace, config('anthropic', server.url), 'secret', status=lambda message: None)
+  plain = server.requests[-1]['body']
+  assert 'thinking' not in plain and plain['max_tokens'] == 16000
+  chosen = config('anthropic', server.url) | {'effort': 'medium'}
+  summarize_video(video, workspace, chosen, 'secret', overwrite=True, status=lambda message: None)
+  assert server.requests[-1]['body']['thinking'] == {'type': 'enabled', 'budget_tokens': 8000}
+  assert server.requests[-1]['body']['max_tokens'] == 24000
+
+  openai = fake_model([{'choices': [{'message': {'role': 'assistant', 'content': SUMMARY}}]}], models=['m-2', 'm-1'])
+  assert list_models(config('openai', openai.url), '') == ['m-1', 'm-2']
+  assert openai.requests[0]['path'] == '/v1/models'
+  summarize_video(
+    video, workspace, config('openai', openai.url) | {'effort': 'high'}, '', overwrite=True, status=lambda m: None
+  )
+  assert openai.requests[-1]['body']['reasoning_effort'] == 'high'
 
 
 def test_anthropic_tool_round(processed, fake_model, no_proxy):

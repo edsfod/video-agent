@@ -49,6 +49,8 @@ function fakeModel() {
     { choices: [{ message: { role: 'assistant', content: SUMMARY } }] },
   ];
   const server = http.createServer((request, response) => {
+    // The model list (video-agent models), which costs no tokens.
+    if (request.method === 'GET') return response.end(JSON.stringify({ data: [{ id: 'fake-model' }, { id: 'chosen-model' }] }));
     let body = '';
     request.on('data', (chunk) => (body += chunk));
     request.on('end', () => {
@@ -180,15 +182,25 @@ test('summary through the model API, with one frame tool round', async () => {
   assert.equal(await page.getAttribute('#routes label:first-child input', 'value'), 'copy', '复制材料 comes first');
   await page.check('input[name=route][value=api]');
   // A model chosen on the page for this route, instead of the one in the settings.
-  await page.fill('#route-model', 'chosen-model');
-  await page.press('#route-model', 'Tab');
+  // A model from the provider's list and a thinking level, instead of the model in the settings.
+  await page.waitForSelector('#route-model option[value="chosen-model"]', { state: 'attached' });
+  await page.selectOption('#route-model', 'chosen-model');
   await saved((settings) => settings.routeModels?.api === 'chosen-model');
+  await page.selectOption('#route-effort', 'high');
+  await saved((settings) => settings.routeEfforts?.api === 'high');
   await page.click('#run-summary');
   await page.waitForSelector('#summary h1:text("测试视频")', { timeout: 60_000 });
   assert.equal(model.requests[0].model, 'chosen-model');
+  assert.equal(model.requests[0].reasoning_effort, 'high');
   assert.equal(await page.isHidden('#route-model-label'), false);
-  await page.fill('#route-model', '');
-  await page.press('#route-model', 'Tab');
+  // A model not in the list is typed in.
+  await page.selectOption('#route-model', { label: '自定义…' });
+  await page.fill('#route-model-custom', 'typed-model');
+  await page.press('#route-model-custom', 'Tab');
+  await saved((settings) => settings.routeModels?.api === 'typed-model');
+  await page.selectOption('#route-model', '');
+  await page.selectOption('#route-effort', '');
+  await saved((settings) => !settings.routeModels?.api && !settings.routeEfforts?.api);
   assert.equal(model.requests.length, 2);
   assert.equal(model.requests[0].tools[0].function.name, 'frame');
   assert.equal(model.requests[1].messages.at(-1).content[1].type, 'image_url');
@@ -418,7 +430,7 @@ devTest('logs record every job and never the API key', async () => {
   await page.waitForSelector('#logs[open] .log-entry');
   const titles = await page.locator('.log-entry').allTextContents();
   assert.ok(titles.some((text) => /处理：sample clip \[e2e\]\.mp4.*完成/.test(text)), titles.join(' | '));
-  assert.ok(titles.some((text) => text.includes('总结（模型 API · chosen-model）')));
+  assert.ok(titles.some((text) => text.includes('总结（模型 API · chosen-model · high）')));
   await page.locator('.log-entry', { hasText: '处理：' }).first().click(); // newest of the two processing runs
   await page.waitForFunction(() => document.querySelector('#log-view').textContent.includes('evidence saved'));
   await page.click('#close-logs');

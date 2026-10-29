@@ -145,10 +145,12 @@
                 <label><input type="radio" name="route" value="api" /> 模型 API</label>
               </div>
               <p id="route-note" class="muted"></p>
-              <label id="route-model-label" class="route-model" hidden>模型
-                <input id="route-model" type="text" list="route-models" spellcheck="false" title="留空用它自己的默认模型；合集页用同一种方式时也用这个模型" />
-              </label>
-              <datalist id="route-models"></datalist>
+              <div id="route-model-label" class="route-model" hidden title="合集页用同一种方式时也用这里选的">
+                <label>模型<select id="route-model"></select></label>
+                <input id="route-model-custom" type="text" spellcheck="false" placeholder="模型名" hidden />
+                <label id="route-effort-label">思考强度<select id="route-effort"></select></label>
+                <span id="route-model-note" class="muted small-text"></span>
+              </div>
               <textarea id="summary-request" rows="2" placeholder="对总结的要求（可不填），例如：写详细一点，重点讲数据"></textarea>
               <div class="row">
                 <button id="run-summary" class="primary">生成总结</button>
