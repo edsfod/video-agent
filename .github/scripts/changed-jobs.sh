@@ -66,7 +66,9 @@ fi
 # code it carries passed on the commit before, so only the cli job's check that every file agrees runs, and the
 # release workflow builds the installer itself (user request, 2026-10-29: releasing took ten minutes).
 if [ -n "$base" ] && [ "$gui$installer" != falsefalse ]; then
-  bumped=$(python3 .github/scripts/version_only.py "$base" 2>/dev/null || true)
+  # python3 on Linux; on Windows that name may be only the Store's placeholder, so uv's Python then.
+  if python3 -c '' 2>/dev/null; then py=(python3); else py=(uv run --no-project --quiet python); fi
+  bumped=$("${py[@]}" .github/scripts/version_only.py "$base" 2>/dev/null || true)
   if [ "$bumped" = yes ]; then
     echo "only the version changed: the cli job checks that every file agrees; gui and installer have nothing new to test"
     cli=true gui=false installer=false
