@@ -40,6 +40,7 @@ Agents and shells           other agents follow it        commands
 | `collection.py` | Collections, and following a list for new videos. |
 | `compress.py` | `compress`: AV1 re-encoding in place. |
 | `files.py` | The per-folder lock and writes that readers never see half done. |
+| `contract.py` | The types of everything printed with `--json`, of `manifest.json` and of `collection.json`. |
 | `settings.py` | CLI settings and API keys (Windows Credential Manager). |
 
 ### Desktop app (`gui/`)
@@ -48,6 +49,8 @@ Agents and shells           other agents follow it        commands
 | --- | --- |
 | `src/main.js` | Main process: settings, IPC handlers, building CLI and Agent command lines, plugin and skill installs, tray, windows. |
 | `src/tasks.js` | The task queue and which tasks may run together; free of Electron. |
+| `src/access.js` | Which CLI commands the page runs itself and which paths it may open; free of Electron. |
+| `src/cli-types.d.ts` | The CLI's JSON types for the app, written from `contract.py` by `scripts/cli_types.py`. |
 | `src/accounts.js` | Site logins and their cookies for downloads. |
 | `src/models.js` | The models and thinking levels each summary route offers. |
 | `src/updater.js`, `update-plan.js`, `update-signature.js` | Updates: sources, differential downloads, the signature on `latest.yml`. |
@@ -99,14 +102,14 @@ The folder and file names, Chinese ones included, are read by the app, the skill
 
 ## Boundaries
 
-- **App and CLI.** The app runs the CLI as a child process (`cli:json` parses its `--json` output, `cli:text` returns its text; API keys go on stdin). What the JSON holds is defined only by the code on each side so far; see [Front-end types](docs/decisions/front-end-types.md) for the plan.
-- **Page and main process.** The page runs sandboxed with context isolation and a strict CSP and reaches the main process only through `window.va` (`preload.js`). Markdown is rendered with marked and sanitized with DOMPurify; `fs:read` reads only inside the workspace.
+- **App and CLI.** The app runs the CLI as a child process (`cli:json` parses its `--json` output, `cli:text` returns its text; API keys go on stdin). What the JSON holds is `src/video_agent/contract.py`: mypy checks the code that builds it, the tests check every value the CLI prints against it, and the app's copy, `gui/src/cli-types.d.ts`, is written from it. `tools --json` gives `json_version`, and the window says when a CLI set in the settings prints another. The page runs only reading and editing commands itself (`gui/src/access.js`); downloads, processing, compression and model summaries go through the task queue.
+- **Page and main process.** The page runs sandboxed with context isolation and a strict CSP and reaches the main process only through `window.va` (`preload.js`). Markdown is rendered with marked and sanitized with DOMPurify; `fs:read` reads only inside the workspace, and `shell:open` opens only the workspace, the summary templates, the licence files and videos, not whatever path a summary links.
 - **Concurrency.** Jobs are separate processes that share files. The CLI locks a video's folder while writing and writes files atomically; the app's queue keeps one processing or summary task per video and limits each kind. Details: [Concurrent jobs](docs/decisions/concurrent-jobs.md).
 - **Outside tools.** yt-dlp, FFmpeg and AutoSlides Extractor are run as programs, never copied in; a copy on `PATH` comes first.
 
 ## Build, release, update
 
-- **Tests**: `tests/` (pytest; real FFmpeg on generated clips, BCut against a local server) and `gui/test/` (`node --test`; the queue rules, the updater, and Playwright end-to-end tests on the real window). The pre-push hook runs those a change touches; GitHub runs them by changed path (`.github/scripts/changed-jobs.sh`), Windows only.
+- **Tests**: `tests/` (pytest and mypy; real FFmpeg on generated clips, BCut against a local server) and `gui/test/` (`node --test`; the queue rules, the updater, and Playwright end-to-end tests on the real window). The pre-push hook runs those a change touches; GitHub runs them by changed path (`.github/scripts/changed-jobs.sh`), Windows only.
 - **Installer**: `packaging/build_cli.py` freezes the CLI with PyInstaller, yt-dlp and an LGPL FFmpeg built by `packaging/ffmpeg/build.sh`; electron-builder makes an unsigned NSIS installer that shows `PRIVACY.md` first and puts the CLI on the user's `PATH`.
 - **Release**: a `v<version>` tag makes `.github/workflows/release.yml` build, test the packaged app, sign `latest.yml` with Ed25519 and create a draft with the FFmpeg sources; it is published by hand after checking.
 - **Update**: the app reads `latest.yml` from github.com, the GitHub API or mirrors, accepts it only with a valid signature, downloads the changed blocks and reinstalls silently.
@@ -118,4 +121,4 @@ The folder and file names, Chinese ones included, are read by the app, the skill
 - Code signing postponed (user decision, 2026-10-27): the SignPath application form at signpath.org/apply did not work for the user. Preparation notes are in `notes/` (local); the update signature on `latest.yml` does not depend on it.
 - Representative frames can include black frames (fade-ins); detecting them needs image analysis.
 - Site accounts: the cookie export, a cookies.txt import, ordering and hiding are tested (end-to-end test); a real login, Google's in particular, and a download with it need the user's account.
-- The steps in [Front-end types](docs/decisions/front-end-types.md).
+- Steps 2 to 4 of [Front-end types](docs/decisions/front-end-types.md): type checking in the app, splitting `app.js`, then deciding on TypeScript.

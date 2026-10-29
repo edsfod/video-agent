@@ -6,7 +6,7 @@ import json
 import sys
 from pathlib import Path
 
-from . import collection, corrections, files, processor, settings, templates, transcript, versions
+from . import collection, contract, corrections, files, processor, settings, templates, transcript, versions
 from . import compress as compression
 from . import summarize as summaries
 from .download import DownloadError, clean_url, download_urls
@@ -430,7 +430,7 @@ def build_parser():
   return parser
 
 
-def _config(args):
+def _config(args) -> int:
   data = settings.load()
   name = args.provider or data['provider']
   entry = data['providers'].setdefault(name, {})
@@ -452,15 +452,15 @@ def _config(args):
   if args.delete_key:
     print('Key deleted' if settings.delete_key(name) else 'No saved key')
   defaults = settings.PROVIDERS[name]
-  shown = {
+  shown: contract.Config = {
     'provider': name,
     'model': entry.get('model') or defaults['model'],
-    'base_url': entry.get('base_url') or defaults['base_url'],
+    'base_url': entry.get('base_url') or defaults['base_url'] or '',
     'key': settings.key_source(name),
     'settings': str(settings.settings_path()),
   }
   if args.json:
-    _emit(shown)
+    _emit(shown, contract.Config)
     return 0
   print(f'provider: {name}')
   print(f'model:    {shown["model"] or "(not set; pass --model)"}')
@@ -477,11 +477,14 @@ def _progress(args):
   return print
 
 
-def _emit(value):
-  print(json.dumps(value, ensure_ascii=False), flush=True)
+def _emit(value, shape, indent=None):
+  """Prints a JSON result, of the type `shape` in contract.py; the tests check that it is."""
+  if contract.CHECK:
+    contract.check(value, shape)
+  print(json.dumps(value, ensure_ascii=False, indent=indent), flush=True)
 
 
-def _show(args):
+def _show(args) -> int:
   video, info = probe(args.video)
   asset = asset_folder(args.output, video)
   manifest = asset / 'manifest.json'
@@ -490,24 +493,23 @@ def _show(args):
     path = asset / name
     return str(path) if path.is_file() else None
 
-  _emit(
-    {
-      'video': str(video),
-      'duration_s': duration(info),
-      'folder': str(asset),
-      'processed': manifest.is_file(),
-      'manifest': json.loads(manifest.read_text(encoding='utf-8')) if manifest.is_file() else None,
-      'summary': existing('总结.md'),
-      'context': existing('summary-context.md'),
-      'transcript': str(corrections.in_use(asset)) if corrections.in_use(asset) else None,
-      'transcript_original': existing('transcript.txt'),
-      'corrections': [list(pair) for pair in corrections.load(asset)],
-      'extra_frames': sorted(str(path) for path in (asset / 'frames' / 'extra').glob('frame-*.jpg')),
-      # Where processing would take subtitles from without asking, so the window can ask about BCut first.
-      'subtitles': _subtitles_here(video, info),
-      'compression': _compression(video, info),
-    }
-  )
+  shown: contract.Show = {
+    'video': str(video),
+    'duration_s': duration(info),
+    'folder': str(asset),
+    'processed': manifest.is_file(),
+    'manifest': json.loads(manifest.read_text(encoding='utf-8')) if manifest.is_file() else None,
+    'summary': existing('总结.md'),
+    'context': existing('summary-context.md'),
+    'transcript': str(corrections.in_use(asset)) if corrections.in_use(asset) else None,
+    'transcript_original': existing('transcript.txt'),
+    'corrections': [list(pair) for pair in corrections.load(asset)],
+    'extra_frames': sorted(str(path) for path in (asset / 'frames' / 'extra').glob('frame-*.jpg')),
+    # Where processing would take subtitles from without asking, so the window can ask about BCut first.
+    'subtitles': _subtitles_here(video, info),
+    'compression': _compression(video, info),
+  }
+  _emit(shown, contract.Show)
   return 0
 
 
@@ -534,7 +536,7 @@ def _subtitles_here(video, info):
 def _collection(args):
   workspace, action = args.output, args.action
   if action == 'list':
-    _emit([collection.status(workspace, name) for name in collection.names(workspace)])
+    _emit([collection.status(workspace, name) for name in collection.names(workspace)], list[contract.Collection])
     return 0
   if action == 'create':
     collection.create(workspace, args.name, args.videos)
@@ -564,12 +566,13 @@ def _collection(args):
     collection.unfollow(workspace, args.name)
   elif action == 'update':
     return _update(args)
-  _emit(collection.status(workspace, args.name))
+  _emit(collection.status(workspace, args.name), contract.Collection)
   return 0
 
 
-def _tools():
-  """Where each external program would come from; the window shows which optional ones are missing."""
+def _tools() -> contract.Tools:
+  """Where each external program would come from; the window shows which optional ones are missing. With them, the
+  version of the JSON the CLI prints, so the window can tell a CLI it does not fit."""
   from . import download, media, slide_extractor
 
   def first(find):
@@ -581,6 +584,7 @@ def _tools():
   yt_dlp = first(download.executable)
   extractor = first(slide_extractor.find_extractor)
   return {
+    'json_version': contract.JSON_VERSION,
     'ffmpeg': first(lambda: media.tool('ffmpeg')),
     'ffprobe': first(lambda: media.tool('ffprobe')),
     'yt_dlp': ' '.join(yt_dlp) if yt_dlp else None,
@@ -627,7 +631,7 @@ def _versions(args):
       versions.delete(target, args.delete)
   found = versions.listing(target)
   if args.json:
-    _emit(found)
+    _emit(found, contract.Versions)
     return 0
   rows = ([found['current']] if found['current'] else []) + found['versions']
   for row in rows:
@@ -668,16 +672,16 @@ def _update(args):
     return 1
   for path in paths:
     if args.json:
-      _emit({'path': str(path), 'new': path not in before})
+      _emit({'path': str(path), 'new': path not in before}, contract.Saved)
   data = collection.checked(workspace, name, paths)
   print(f'{data["source"]["new"]} new videos in collection {name}', file=sys.stderr)
   if args.json:
-    _emit(collection.status(workspace, name))
+    _emit(collection.status(workspace, name), contract.Collection)
   # yt-dlp reports a failure for one entry of a list as a failure of the whole run; what it saved is kept.
   return 1 if failures and not paths else 0
 
 
-def _fix(args):
+def _fix(args) -> int:
   video, _ = probe(args.video)
   asset = asset_folder(args.output, video)
   manifest_path = asset / 'manifest.json'
@@ -694,16 +698,15 @@ def _fix(args):
   text = ' '.join(row[2] for row in corrections.original_rows(asset))
   unmatched = [wrong for wrong, _ in args.replace if not corrections._pattern(wrong).search(text)]
   if args.json:
-    _emit(
-      {
-        'corrections': [list(pair) for pair in pairs],
-        'unmatched': unmatched,
-        'changed_lines': len(changes),
-        'changes': [
-          {'time': transcript_clock(start), 'before': before, 'after': after} for start, before, after in changes
-        ],
-      }
-    )
+    fixed: contract.Fixed = {
+      'corrections': [list(pair) for pair in pairs],
+      'unmatched': unmatched,
+      'changed_lines': len(changes),
+      'changes': [
+        {'time': transcript_clock(start), 'before': before, 'after': after} for start, before, after in changes
+      ],
+    }
+    _emit(fixed, contract.Fixed)
     return 0
   for start, before, after in changes[:40]:
     print(f'[{transcript_clock(start)}] {before}\n           {after}')
@@ -741,7 +744,7 @@ def run(args):
         config_path=args.yt_dlp_config,
         cookies_path=args.cookies,
         status=_progress(args),
-        found_list=(lambda found: _emit({'playlist': found})) if args.json else None,
+        found_list=(lambda found: _emit({'playlist': found}, contract.PlaylistFound)) if args.json else None,
         archive_path=collection.archive(args.workspace, args.collection) if following else None,
       )
     except DownloadError as error:
@@ -750,7 +753,7 @@ def run(args):
     for path in paths:
       if args.json:
         # A video yt-dlp found already saved is listed too; `new` tells the window not to process it again.
-        _emit({'path': str(path), 'new': path not in before})
+        _emit({'path': str(path), 'new': path not in before}, contract.Saved)
       else:
         print(f'Next: process this local file separately: {path}')
     if following:
@@ -766,20 +769,20 @@ def run(args):
   if args.command == 'tools':
     found = _tools()
     if args.json:
-      _emit(found)
+      _emit(found, contract.Tools)
     else:
       for name, where in found.items():
+        if name == 'json_version':
+          continue
         print(f'{name}: {where or "not found"}')
     return 0
 
   if args.command == 'inspect':
     video, info = probe(args.video)
-    print(
-      json.dumps(
-        {'path': str(video), 'duration_s': duration(info), 'streams': info.get('streams', [])},
-        ensure_ascii=False,
-        indent=2,
-      )
+    _emit(
+      {'path': str(video), 'duration_s': duration(info), 'streams': info.get('streams', [])},
+      contract.Inspected,
+      indent=2,
     )
     return 0
 
@@ -801,7 +804,7 @@ def run(args):
         if not args.json:
           print(f'{video}: ERROR: {error}')
       if args.json:
-        _emit(result)
+        _emit(result, contract.Compressed | contract.Checked | contract.Failed)
     return 1 if failures else 0
 
   if args.command == 'show':
@@ -809,9 +812,9 @@ def run(args):
 
   if args.command == 'template':
     if args.list:
-      _emit(templates.listing())
+      _emit(templates.listing(), list[contract.Template])
     elif args.copy is not None:
-      _emit(templates.copy(args.name, args.copy))
+      _emit(templates.copy(args.name, args.copy), contract.Template)
     elif args.use and not args.name:
       raise ValueError('template --use needs the name of a template')
     else:
@@ -819,7 +822,7 @@ def run(args):
       action |= {'accept': templates.accept, 'info': templates.info}
       chosen = next((name for name in action if getattr(args, name)), None)
       if chosen:
-        _emit(action[chosen](args.name))
+        _emit(action[chosen](args.name), contract.Template | contract.TemplateDeleted)
       elif args.default:
         name = args.name or templates.current()
         if name not in templates.BUILT_IN:
@@ -889,7 +892,10 @@ def run(args):
   if args.command == 'models':
     where = settings.endpoint(args.provider, args.base_url)
     found = list_models(where, settings.get_key(where['provider']))
-    print(json.dumps(found) if args.json else '\n'.join(found))
+    if args.json:
+      _emit(found, list[str])
+    else:
+      print('\n'.join(found))
     return 0
 
   if args.command == 'summarize' and args.collection:
@@ -979,14 +985,14 @@ def run(args):
       )
     except (OSError, MediaError, RuntimeError, ValueError) as error:
       if args.json:
-        _emit({'video': str(video), 'error': str(error)})
+        _emit({'video': str(video), 'error': str(error)}, contract.Failed)
       else:
         print(f'{video}: ERROR: {error}')
       failures += 1
       continue
     failures += bool(result['transcript_error']) + bool(result['slide_error'])
     if args.json:
-      _emit({'video': str(video), **result, 'asset': str(result['asset'])})
+      _emit({'video': str(video), **result, 'asset': str(result['asset'])}, contract.Processed)
       continue
     print(
       f'{video}: {result["rows"]} transcript segments, {result["frames"]} representative frames, '

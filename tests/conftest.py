@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from video_agent import contract
 from video_agent.media import tool
 
 SUBTITLES = """1
@@ -18,6 +19,12 @@ SUBTITLES = """1
 00:00:03,000 --> 00:00:05,000
 我们看看这张图表
 """
+
+
+@pytest.fixture(autouse=True)
+def checked_json(monkeypatch):
+  """Every JSON value the CLI prints is checked against its type in contract.py."""
+  monkeypatch.setattr(contract, 'CHECK', True)
 
 
 @pytest.fixture(autouse=True)

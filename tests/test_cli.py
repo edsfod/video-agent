@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from video_agent import cli, download, layout, media, processor, settings, transcript
+from video_agent import cli, contract, download, layout, media, processor, settings, transcript
 from video_agent.processor import asset_folder
 
 VTT = 'WEBVTT\n\nNOTE skipped\n\n00:01.000 --> 00:02.500\nfirst\n\n1\n00:00:03.000 --> 00:00:04.000\nsecond\nline\n'
@@ -663,7 +663,8 @@ def test_tools_reports_each_program_or_null(monkeypatch, capsys):
   monkeypatch.setattr(slide_extractor, 'find_extractor', missing)
   assert cli.main(['tools', '--json']) == 0
   found = json.loads(capsys.readouterr().out)
-  assert set(found) == {'ffmpeg', 'ffprobe', 'yt_dlp', 'slide_extractor'}
+  assert set(found) == {'json_version', 'ffmpeg', 'ffprobe', 'yt_dlp', 'slide_extractor'}
+  assert found['json_version'] == contract.JSON_VERSION
   assert found['ffmpeg'] and found['slide_extractor'] is None
 
 

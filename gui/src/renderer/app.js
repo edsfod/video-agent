@@ -3,6 +3,8 @@
 const $ = (id) => document.getElementById(id);
 // Task kinds whose number at once the settings set (tasks.js DEFAULT_LIMITS).
 const LIMITED = ['download', 'process', 'summary', 'compress'];
+// The version of the CLI's JSON this window reads (contract.py JSON_VERSION; tests/test_contract.py keeps them equal).
+const CLI_JSON_VERSION = 1;
 const state = {
   settings: null,
   env: null,
@@ -1109,6 +1111,13 @@ async function loadCollections() {
   }
 }
 
+// A CLI set in the settings may be older or newer than this window, and print what it does not read.
+function cliMismatch(found) {
+  if (found.error || found.json_version === CLI_JSON_VERSION) return null;
+  const age = (found.json_version ?? 0) < CLI_JSON_VERSION ? '旧' : '新';
+  return `用的 Video Agent 命令行比桌面程序${age}，两边的数据格式对不上，有些内容可能显示不出来或出错。在设置里清空「Video Agent 命令」，就会改用安装包自带的。`;
+}
+
 async function readCollections() {
   const result = await window.va.cliJson(collectionArgs('list'));
   clearTimeout(collectionRetry);
@@ -1130,6 +1139,7 @@ function renderCollectionList() {
   const failed = state.collectionsError
     ? [element('p', { className: 'muted small-text collection-error', textContent: `合集列表这次没读到，几秒后再读：${state.collectionsError.split('\n').pop().slice(0, 160)}` })]
     : [];
+  if (state.cliMismatch) failed.unshift(element('p', { className: 'muted small-text collection-error', textContent: state.cliMismatch }));
   $('collection-list').replaceChildren(
     ...failed,
     ...state.collections.map((item) => {
@@ -2200,6 +2210,8 @@ async function init() {
   await loadCollections();
   window.va.cliJson(['tools', '--json']).then((found) => {
     state.tools = found.error ? null : found;
+    state.cliMismatch = cliMismatch(found);
+    renderList();
     if (state.view === 'video') renderVideo();
   });
   await Promise.all(state.videos.map(refresh));

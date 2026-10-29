@@ -11,7 +11,7 @@ import hashlib
 import re
 from importlib import resources
 
-from . import files, settings
+from . import contract, files, settings
 
 STANDARD = '标准'
 BUILT_IN = {STANDARD: 'summary.md', '命题分析': 'propositions.md'}
@@ -99,13 +99,20 @@ def text(name=None):
   return _body(path) if path.is_file() else built_in(name)
 
 
-def info(name=None):
+def info(name=None) -> contract.Template:
   """Where a template is, whether it is built in, whether the user changed it, and whether the built-in one changed
   since it was copied. For an outdated copy, the current built-in is written to `default` for comparing."""
   name = _known(name)
   path = _path(name)
-  entry = {'name': name, 'path': str(path), 'builtin': name in BUILT_IN, 'customized': False, 'outdated': False}
-  entry |= {'default': None, 'current': name == current()}
+  entry: contract.Template = {
+    'name': name,
+    'path': str(path),
+    'builtin': name in BUILT_IN,
+    'customized': False,
+    'outdated': False,
+    'default': None,
+    'current': name == current(),
+  }
   if name in BUILT_IN and path.is_file():
     found = BASE_MARK.match(path.read_text(encoding='utf-8-sig'))
     entry['customized'] = True
@@ -115,16 +122,16 @@ def info(name=None):
   return entry
 
 
-def listing():
+def listing() -> list[contract.Template]:
   return [info(name) for name in names()]
 
 
-def use(name):
+def use(name) -> contract.Template:
   _choose(_known(name))
   return info(name)
 
 
-def edit(name=None):
+def edit(name=None) -> contract.Template:
   """The file to edit: for a built-in template, the user's copy, made from it the first time."""
   name = _known(name)
   path = _path(name)
@@ -133,7 +140,7 @@ def edit(name=None):
   return info(name)
 
 
-def copy(name, new):
+def copy(name, new) -> contract.Template:
   """A new template of the user's own, starting from another one's text."""
   new = (new or '').strip()
   if not new or BAD_NAME.search(new) or new.startswith('.') or new.endswith('.') or len(new) > 60:
@@ -144,7 +151,7 @@ def copy(name, new):
   return info(new)
 
 
-def accept(name=None):
+def accept(name=None) -> contract.Template:
   """Marks the user's copy of a built-in template as up to date with it (after merging its changes by hand)."""
   name = _known(name)
   path = _path(name)
@@ -153,7 +160,7 @@ def accept(name=None):
   return info(name)
 
 
-def reset(name=None):
+def reset(name=None) -> contract.Template | contract.TemplateDeleted:
   """Removes the user's file: a built-in template goes back to as it ships, one of the user's own is deleted (and the
   standard one chosen, if it was the chosen one)."""
   name = _known(name)

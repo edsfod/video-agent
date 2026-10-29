@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
-from . import media
+from . import contract, media
 
 # Query parameters that only record where a shared link came from (Bilibili's share and recommendation marks, YouTube's
 # share id, utm_*). They are dropped; parameters that pick the content, such as ?p=2 or ?t=90, stay.
@@ -88,7 +88,7 @@ def _base_command(program, config, cookies):
   return command
 
 
-def _list_info(program, url, config, cookies):
+def _list_info(program, url, config, cookies) -> contract.Playlist | None:
   """The list a URL stands for even without --playlist (a series, a season, a channel), or None for one video."""
   command = [
     *_base_command(program, config, cookies),

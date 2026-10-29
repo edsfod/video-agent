@@ -11,7 +11,7 @@ import shutil
 from datetime import datetime
 from pathlib import Path
 
-from . import files
+from . import contract, files
 
 
 class VersionError(RuntimeError):
@@ -144,15 +144,18 @@ def set_note(target, name, note):
   _save(target, data)
 
 
-def listing(target):
+def listing(target) -> contract.Versions:
   """The current text and the other versions, newest first, each with its file, time, source and note."""
   target = Path(target)
   data = _load(target)
-  current = {'file': target.name, **data['current']} if target.is_file() and data['current'] else None
+
+  def entry(file, meta) -> contract.Version:
+    path = target.with_name(file)
+    return {'file': file, 'created': meta['created'], 'source': meta['source'], 'note': meta['note'], 'path': str(path)}
+
+  current = entry(target.name, data['current']) if target.is_file() and data['current'] else None
   versions = [
-    {**version, 'path': str(target.with_name(version['file']))}
-    for version in data['versions']
-    if target.with_name(version['file']).is_file()
+    entry(version['file'], version) for version in data['versions'] if target.with_name(version['file']).is_file()
   ]
   versions.sort(key=lambda version: version['created'], reverse=True)
-  return {'current': current and {**current, 'path': str(target)}, 'versions': versions}
+  return {'current': current, 'versions': versions}

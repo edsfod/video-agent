@@ -6,7 +6,7 @@ import os
 from ctypes import wintypes
 from pathlib import Path
 
-PROVIDERS = {
+PROVIDERS: dict[str, dict[str, str | None]] = {
   'anthropic': {'base_url': 'https://api.anthropic.com', 'model': 'claude-sonnet-5-5', 'env': 'ANTHROPIC_API_KEY'},
   'openai': {'base_url': 'https://api.openai.com/v1', 'model': None, 'env': 'OPENAI_API_KEY'},
 }

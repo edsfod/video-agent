@@ -17,7 +17,7 @@ import subprocess
 from itertools import pairwise
 from pathlib import Path
 
-from . import files, media, settings
+from . import contract, files, media, settings
 
 MARK = 'video-agent compressed'
 CRF = 40
@@ -104,7 +104,7 @@ def known(video):
   return False, None
 
 
-def check(video):
+def check(video) -> contract.CompressionState:
   """The video's state, from the cache or else by probing it (and keeping what was found)."""
   found, value = known(video)
   if found:
@@ -142,7 +142,7 @@ def _audio_options(info):
   return ['-c:a', 'aac', '-b:a', f'{AUDIO_KBPS}k']
 
 
-def compress(video, *, status=print):
+def compress(video, *, status=print) -> contract.Compressed:
   """Compresses the video in place. Returns {'video', 'skipped' (a reason or None), 'before', 'after', 'still'}."""
   video, info = media.probe(video)
   before = video.stat().st_size

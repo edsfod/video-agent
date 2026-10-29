@@ -17,7 +17,7 @@ import shutil
 from datetime import UTC, datetime
 from pathlib import Path
 
-from . import compress, corrections, files, processor
+from . import compress, contract, corrections, files, processor
 
 FOLDER = '合集'
 DATA = 'collection.json'
@@ -59,6 +59,8 @@ def load(workspace, name):
   if not path.is_file():
     raise CollectionError(f'no collection {name!r} in {workspace}; create it with: video-agent collection create')
   data = json.loads(path.read_text(encoding='utf-8'))
+  if data.get('schema_version', 1) > contract.COLLECTION_VERSION:
+    raise CollectionError(f'collection {name!r} was written by a newer video-agent; update this one to use it')
   data.setdefault('videos', [])
   data.setdefault('terms', [])
   data.setdefault('skipped', {})
@@ -66,6 +68,7 @@ def load(workspace, name):
 
 
 def _save(workspace, data):
+  data = {'schema_version': contract.COLLECTION_VERSION, **data}
   files.write_text(folder(workspace, data['name']) / DATA, json.dumps(data, ensure_ascii=False, indent=2) + '\n')
 
 
@@ -157,12 +160,12 @@ def set_terms(workspace, name, replace=(), remove=()):
   return data
 
 
-def status(workspace, name):
+def status(workspace, name) -> contract.Collection:
   """The collection with one entry per video: whether it is processed and summarized, its length, how much of it is
   speech, whether it may be empty, and whether it was skipped; and which videos' summaries changed after the overview
   and the study guide were written (`overview_behind`, `guide_behind`), so they can be brought up to date."""
   data = load(workspace, name)
-  members = []
+  members: list[contract.Member] = []
   for index, video in enumerate(data['videos'], 1):
     asset = _asset(workspace, video)
     manifest_path = asset / 'manifest.json'
@@ -181,7 +184,7 @@ def status(workspace, name):
         'summary': str(asset / '总结.md') if (asset / '总结.md').is_file() else None,
         'duration_s': length,
         'speech_share': round(share, 3) if share is not None else None,
-        'maybe_empty': bool(manifest) and (length < SHORT_S or (share or 0) < LITTLE_SPEECH),
+        'maybe_empty': length is not None and (length < SHORT_S or (share or 0) < LITTLE_SPEECH),
         'skipped': data['skipped'].get(video),
         'compression': compress.known(video)[1] if Path(video).is_file() else None,  # the cache only
       }
