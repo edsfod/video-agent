@@ -771,11 +771,13 @@ function registerIpc() {
   ipcMain.handle('cli:json', async (_, args) => {
     const [command, ...prefix] = cliCommand();
     const { code, out, err } = await runToEnd(command, [...prefix, ...args]);
-    if (code !== 0) return { error: (err || out).trim() || `exit ${code}` };
+    // Logged, so a list that failed to show can be traced (the window only shows the last line).
+    const failed = (error) => (logs.line('warn', `cli ${args.slice(0, 2).join(' ')} failed: ${error.slice(0, 500)}`), { error });
+    if (code !== 0) return failed((err || out).trim() || `exit ${code}`);
     try {
       return JSON.parse(out);
     } catch {
-      return { error: `unexpected output: ${out.slice(0, 300)}` };
+      return failed(`unexpected output: ${out.slice(0, 300)}${err ? ` / ${err.trim().slice(0, 200)}` : ''}`);
     }
   });
   ipcMain.handle('cli:text', (_, { args, stdin }) => {

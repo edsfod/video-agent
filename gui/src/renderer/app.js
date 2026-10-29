@@ -1079,9 +1079,40 @@ $('import-dialog').addEventListener('close', async () => {
 const collectionArgs = (...args) => ['collection', ...args, '-o', state.settings.workspace];
 const currentCollection = () => state.collections.find((item) => item.name === state.collection) || null;
 
+// A list that could not be read keeps the collections shown before (user report, 2026-10-29: one failed read while
+// many tasks ended emptied 合集 and put every episode under 视频); it says so and is read again a little later.
+// One read at a time: every video refreshed at start and every task that ends asks for one, and dozens running at once
+// finished in any order, an older answer last. Asks that come while one runs share a single read after it.
+let collectionRetry = null;
+let collectionRead = null;
+let collectionAgain = false;
 async function loadCollections() {
+  if (collectionRead) {
+    collectionAgain = true;
+    return collectionRead;
+  }
+  collectionRead = readCollections();
+  try {
+    await collectionRead;
+  } finally {
+    collectionRead = null;
+  }
+  if (collectionAgain) {
+    collectionAgain = false;
+    await loadCollections();
+  }
+}
+
+async function readCollections() {
   const result = await window.va.cliJson(collectionArgs('list'));
-  state.collections = Array.isArray(result) ? result : [];
+  clearTimeout(collectionRetry);
+  if (Array.isArray(result)) {
+    state.collections = result;
+    state.collectionsError = null;
+  } else {
+    state.collectionsError = result?.error || '没有读到';
+    collectionRetry = setTimeout(loadCollections, 5000);
+  }
   renderList(); // also the collections
   if (state.view === 'collection') renderVideo();
 }
@@ -1090,7 +1121,11 @@ async function loadCollections() {
 // The sidebar lists collections only; their videos are opened from the collection's page, where there is room
 // (user request, 2026-10-28). A collection holding the video shown is marked as well.
 function renderCollectionList() {
+  const failed = state.collectionsError
+    ? [element('p', { className: 'muted small-text collection-error', textContent: `合集列表这次没读到，几秒后再读：${state.collectionsError.split('\n').pop().slice(0, 160)}` })]
+    : [];
   $('collection-list').replaceChildren(
+    ...failed,
     ...state.collections.map((item) => {
       const holdsCurrent = state.view === 'video' && item.videos.some((member) => isVideo(member.video, current()));
       const active = (state.view === 'collection' && item.name === state.collection) || holdsCurrent;

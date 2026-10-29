@@ -363,6 +363,17 @@ devTest('a collection lists its videos and copies the material for its overview'
   await page.waitForSelector('#video:not([hidden])');
   assert.equal(await page.isVisible('#collection-list .collection-item.active'), true, 'its collection is marked');
   assert.match(await page.textContent('#video-collection'), /测试合集 · 第 1 集/);
+  // A list that cannot be read keeps what was shown and is read again (user report, 2026-10-29: one failed read put
+  // every episode under 视频).
+  const stored = path.join(WORKSPACE, '合集', '测试合集', 'collection.json');
+  const good = fs.readFileSync(stored, 'utf8');
+  fs.writeFileSync(stored, '{ broken');
+  await page.evaluate(() => loadCollections());
+  await page.waitForSelector('#collection-list .collection-error');
+  assert.equal(await page.$$eval('#collection-list .collection-item', (all) => all.length), 1, 'the collection stays');
+  assert.equal(await page.$$eval('#video-list .video-item', (all) => all.length), 0, 'its video stays out of 视频');
+  fs.writeFileSync(stored, good);
+  await page.waitForSelector('#collection-list .collection-error', { state: 'detached', timeout: 15_000 });
   await page.click('#video-collection');
   await page.click('#collection-members .member button:text("移出")');
   await page.waitForSelector('#video-list .video-item');
