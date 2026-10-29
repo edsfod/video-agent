@@ -77,5 +77,5 @@ def test_the_apps_types_are_written_from_the_contract():
 
 
 def test_the_window_reads_the_json_version_the_cli_prints():
-  app = (ROOT / 'gui' / 'src' / 'renderer' / 'app.js').read_text(encoding='utf-8')
+  app = (ROOT / 'gui' / 'src' / 'renderer' / 'state.js').read_text(encoding='utf-8')
   assert f'const CLI_JSON_VERSION = {contract.JSON_VERSION};' in app

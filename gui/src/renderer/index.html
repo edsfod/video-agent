@@ -178,7 +178,7 @@
           <div class="panel terminal-panel" data-panel="terminal" hidden>
             <div class="toolbar">
               <select id="shell-choice"></select>
-              <button id="new-terminal">新建终端</button>
+              <button id="new-terminal">启动终端</button>
               <span class="muted">在这个视频的处理结果文件夹里打开；可以运行 video-agent，或交互式的 claude、codex。</span>
             </div>
             <div id="terminal" class="terminal"></div>
@@ -533,6 +533,6 @@
     <script src="../../node_modules/dompurify/dist/purify.min.js"></script>
     <script src="../../node_modules/@xterm/xterm/lib/xterm.js"></script>
     <script src="../../node_modules/@xterm/addon-fit/lib/addon-fit.js"></script>
-    <script src="app.js"></script>
+    <script type="module" src="app.js"></script>
   </body>
 </html>

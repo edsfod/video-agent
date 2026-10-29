@@ -3,6 +3,7 @@
 interface Window {
   va: import('../va').Va;
   __screenshot?: (options: { select?: string; tab?: string }) => Promise<void>;
+  vaPage: { loadCollections: () => Promise<void> };
 }
 
 declare const marked: typeof import('marked').marked;

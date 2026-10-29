@@ -14,3 +14,6 @@ Implemented in `gui/` (2026-10-27). The first release ships the CLI, skill and G
 
 - GUI (`gui/`, Electron 45, xterm.js 6, node-pty 1.1) with tray and logs. Tray (user request): closing the window hides it while jobs keep running (setting, on by default); a second launch shows the existing window. Logs (user request): `<userData>/logs/main.log` (rolls at 5 MB) and one file per job (newest 200), viewable in the 日志 window; stdin, where API keys travel, is never written. No notifications or balloons (the user rejected them).
 - **Startup** (user report, 2026-10-29): nothing is opened at start, where the first video, and with it its collection, used to be; the list is drawn once the collections are known, since before that every collection's videos showed under 视频 for a moment.
+- **Back to the start page** (user report, 2026-10-29: once a video or collection was open there was no way back to the start page). Clicking the open video or collection in the sidebar again closes it; while one of a collection's videos is open, its collection's row opens the collection's page as before.
+- **The terminal starts when asked for** (user request, 2026-10-29): opening the 终端 tab no longer starts a shell; 启动终端 does, and becomes 新建终端 while one runs.
+

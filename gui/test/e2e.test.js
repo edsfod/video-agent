@@ -359,7 +359,7 @@ devTest('a collection lists its videos and copies the material for its overview'
   const stored = path.join(WORKSPACE, '合集', '测试合集', 'collection.json');
   const good = fs.readFileSync(stored, 'utf8');
   fs.writeFileSync(stored, '{ broken');
-  await page.evaluate(() => loadCollections());
+  await page.evaluate(() => window.vaPage.loadCollections());
   await page.waitForSelector('#collection-list .collection-error');
   assert.equal(await page.$$eval('#collection-list .collection-item', (all) => all.length), 1, 'the collection stays');
   assert.equal(await page.$$eval('#video-list .video-item', (all) => all.length), 0, 'its video stays out of 视频');
@@ -368,6 +368,15 @@ devTest('a collection lists its videos and copies the material for its overview'
   await page.click('#video-collection');
   await page.click('#collection-members .member button:text("移出")');
   await page.waitForSelector('#video-list .video-item');
+  await page.click('#video-list .video-item');
+  await page.waitForSelector('#video:not([hidden])');
+  // Clicking the open video or collection again goes back to the start page (user request, 2026-10-29).
+  await page.click('#video-list .video-item.active');
+  await page.waitForSelector('#empty:not([hidden])');
+  await page.click('#collection-list .collection-item');
+  await page.waitForSelector('#collection:not([hidden])');
+  await page.click('#collection-list .collection-item.active');
+  await page.waitForSelector('#empty:not([hidden])');
   await page.click('#video-list .video-item');
   await page.waitForSelector('#video:not([hidden])');
 });
@@ -494,7 +503,13 @@ test('closing the window keeps the app in the tray', async () => {
 
 test('embedded terminal runs a command in the video folder', async () => {
   await page.click('.tabs button[data-tab=terminal]');
+  // Nothing starts until asked for.
+  await page.waitForSelector('#terminal .terminal-note');
+  assert.equal(await page.locator('.xterm-rows').count(), 0);
+  assert.equal(await page.textContent('#new-terminal'), '启动终端');
+  await page.click('#new-terminal');
   await page.waitForSelector('.xterm-rows');
+  assert.equal(await page.textContent('#new-terminal'), '新建终端');
   await page.waitForFunction(() => document.querySelector('.xterm-rows').textContent.includes('>'), null, { timeout: 30_000 });
   await page.click('#terminal');
   await page.keyboard.type('echo va-e2e-%CD%');

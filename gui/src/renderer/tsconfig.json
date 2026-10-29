@@ -3,7 +3,8 @@
   "compilerOptions": {
     "lib": ["es2023", "dom", "dom.iterable"],
     "types": [],
-    "strictNullChecks": false
+    "module": "preserve",
+    "moduleResolution": "bundler"
   },
-  "include": ["app.js", "globals.d.ts"]
+  "include": ["*.js", "globals.d.ts"]
 }

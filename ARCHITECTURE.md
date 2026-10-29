@@ -56,7 +56,7 @@ Agents and shells           other agents follow it        commands
 | `src/updater.js`, `update-plan.js`, `update-signature.js` | Updates: sources, differential downloads, the signature on `latest.yml`. |
 | `src/logs.js` | The app log and one log per task. |
 | `src/preload.js` | `window.va`, the page's only way to the main process. |
-| `src/renderer/` | The page: `index.html`, `style.css`, `app.js` (all views and their state). |
+| `src/renderer/` | The page: `index.html`, `style.css`, and ES modules: `app.js` starts it, `state.js` holds the state and shared helpers, and one module per view (`video-list`, `video-view`, `summary`, `collections`, `lists`, `terminal`, `task-panel`, `site-accounts`, `settings`, `templates`, `updates`, `log-window`). |
 | `installer/` | NSIS additions: the PATH page and script. |
 
 ### Agent skill
@@ -121,4 +121,4 @@ The folder and file names, Chinese ones included, are read by the app, the skill
 - Code signing postponed (user decision, 2026-10-27): the SignPath application form at signpath.org/apply did not work for the user. Preparation notes are in `notes/` (local); the update signature on `latest.yml` does not depend on it.
 - Representative frames can include black frames (fade-ins); detecting them needs image analysis.
 - Site accounts: the cookie export, a cookies.txt import, ordering and hiding are tested (end-to-end test); a real login, Google's in particular, and a download with it need the user's account.
-- Steps 3 and 4 of [Front-end types](docs/decisions/front-end-types.md): splitting `app.js` (and checking it for null), then deciding on TypeScript.
+- Step 4 of [Front-end types](docs/decisions/front-end-types.md): deciding on TypeScript.
