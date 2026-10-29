@@ -393,7 +393,7 @@ test('settings list the summary templates, a new one shows on the summary page, 
   await app.evaluate(() => globalThis.vaRestoreDialogs());
   await page.click('#skill-view');
   await page.waitForSelector('#skill-dialog[open] #skill-text h2');
-  assert.match(await page.textContent('#skill-text'), /Summarize a video/);
+  assert.match(await page.textContent('#skill-text'), /A collection/);
   await page.click('#close-skill');
   await page.click('#settings button[value=cancel]');
 });
