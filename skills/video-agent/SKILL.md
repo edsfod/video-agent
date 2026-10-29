@@ -1,12 +1,12 @@
 ---
 name: video-agent
 description: Summarize any video from a local file or a link with the Video Agent CLI - it prepares the transcript and pictures; you look at them and write a timestamped summary. Use for requests to summarize, take notes on, or answer questions about a video, lecture recording, talk, tutorial or news clip, given as a file path or a URL.
-allowed-tools: Bash(video-agent *), Bash(uvx --from https://github.com/edsfod/video-agent/releases/download/v1.0.0/video_agent-1.0.0-py3-none-any.whl video-agent *)
+allowed-tools: Bash(video-agent *), Bash(uvx --from https://github.com/edsfod/video-agent/releases/download/v1.1.0/video_agent-1.1.0-py3-none-any.whl video-agent *)
 ---
 
 # Video Agent
 
-`<video-agent>` is `video-agent` when it is on `PATH`, otherwise `uvx --from https://github.com/edsfod/video-agent/releases/download/v1.0.0/video_agent-1.0.0-py3-none-any.whl video-agent` (needs uv: `winget install astral-sh.uv`, or install the desktop app from https://github.com/edsfod/video-agent/releases). Run each command on its own, paths quoted, without `cd`, `&&` or pipes. When a command fails or asks for something, tell the user what it said; do not call FFmpeg, yt-dlp or BCut yourself. `<video-agent> <command> --help` explains each command.
+`<video-agent>` is `video-agent` when it is on `PATH`, otherwise `uvx --from https://github.com/edsfod/video-agent/releases/download/v1.1.0/video_agent-1.1.0-py3-none-any.whl video-agent` (needs uv: `winget install astral-sh.uv`, or install the desktop app from https://github.com/edsfod/video-agent/releases). Run each command on its own, paths quoted, without `cd`, `&&` or pipes. When a command fails or asks for something, tell the user what it said; do not call FFmpeg, yt-dlp or BCut yourself. `<video-agent> <command> --help` explains each command.
 
 ## A video
 

@@ -229,7 +229,7 @@ export interface Source {
   new: number;
 }
 
-/** collection.json. Files written before 1.0.1 have no schema_version. */
+/** collection.json. Files written before 1.1.0 have no schema_version. */
 export interface CollectionData {
   schema_version?: number;
   name: string;

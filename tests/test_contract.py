@@ -60,7 +60,7 @@ def test_collection_json_carries_its_version_and_a_newer_one_is_refused(tmp_path
   assert data['schema_version'] == contract.COLLECTION_VERSION
   contract.check(data, contract.CollectionData)
 
-  del data['schema_version']  # as written before 1.0.1
+  del data['schema_version']  # as written before 1.1.0
   path.write_text(json.dumps(data), encoding='utf-8')
   assert collection.load(tmp_path, '课')['name'] == '课'
   path.write_text(json.dumps({**data, 'schema_version': contract.COLLECTION_VERSION + 1}), encoding='utf-8')

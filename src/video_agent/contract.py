@@ -262,7 +262,7 @@ class Source(TypedDict):
 
 
 class CollectionData(TypedDict):
-  """collection.json. Files written before 1.0.1 have no schema_version."""
+  """collection.json. Files written before 1.1.0 have no schema_version."""
 
   schema_version: NotRequired[int]
   name: str
