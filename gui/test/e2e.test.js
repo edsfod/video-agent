@@ -410,9 +410,10 @@ test('settings show the version, the licence and PRIVACY.md', async () => {
   assert.match(text, /检查更新/);
   assert.doesNotMatch(text, /隐私和使用须知/); // the title is the dialog's, not repeated
   await page.click('#close-privacy');
+  // The notices exist in a source tree only after a CLI build.
+  if (process.env.VA_E2E_EXE) assert.equal(await page.isVisible('#about-notices'), true);
   await page.click('#settings button[value=cancel]');
   if (!process.env.VA_E2E_EXE) return;
-  assert.equal(await page.isVisible('#about-notices'), true);
   // The installer's licence page: NSIS reads it as UTF-8 only after a byte order mark, and wants CRLF line ends.
   const licencePage = fs.readFileSync(path.join(path.dirname(process.env.VA_E2E_EXE), 'PRIVACY.txt'));
   assert.deepEqual([...licencePage.subarray(0, 3)], [0xef, 0xbb, 0xbf]);
