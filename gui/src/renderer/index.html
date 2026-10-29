@@ -35,6 +35,7 @@
       <main>
         <section id="empty" class="empty">
           <h1>总结任何视频</h1>
+          <p id="empty-pick" hidden>从左边选一个合集或视频。</p>
           <p>添加本地视频，或粘贴链接下载，也可以把视频文件拖进窗口。</p>
           <p class="muted">处理时先找视频自带的字幕；没有字幕时，可以选择用必剪转录（会上传音频）。</p>
         </section>
@@ -381,6 +382,28 @@
         <div class="row end">
           <button value="cancel" class="ghost">取消</button>
           <button id="import-save" value="save" class="primary">导入</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="cookie-dialog">
+      <form method="dialog" class="settings">
+        <h2 id="cookie-title">从浏览器导入</h2>
+        <p class="muted small-text">把你在浏览器里的登录状态拿过来：只留<span class="cookie-site"></span>的 Cookie，存在本机，只在下载这个网站的视频时交给 yt-dlp。</p>
+        <h3>直接读取浏览器</h3>
+        <span id="cookie-browsers" class="row"></span>
+        <p class="muted small-text">Firefox 可以直接读。Edge 开着时读不了，要先完全关掉（包括托盘里的）；新版 Chrome 把 Cookie 加密成只有它自己能读，读不出来，用下面的办法。</p>
+        <p id="cookie-state" class="small-text" hidden></p>
+        <h3>用扩展导出 cookies.txt</h3>
+        <ol class="small-text cookie-steps">
+          <li>在 Chrome 或 Edge 里安装扩展 <a href="https://chromewebstore.google.com/detail/cclelndahbckbenkjhflpdbgdldlbecc">Get cookies.txt LOCALLY</a>（<a href="https://github.com/kairi003/Get-cookies.txt-LOCALLY">开源</a>，说明里写明不把数据发出去；Firefox 版在<a href="https://addons.mozilla.org/firefox/addon/get-cookies-txt-locally/">这里</a>）。</li>
+          <li>在浏览器里打开<span class="cookie-site"></span>（<a id="cookie-home" href="#"></a>）并登录。</li>
+          <li>点浏览器右上角的扩展图标，选 Get cookies.txt LOCALLY，格式选 Netscape，点 Export，存成一个 .txt 文件。</li>
+          <li>点下面的「选择 cookies.txt…」选这个文件。导入后可以删掉它：里面有你的登录状态。</li>
+        </ol>
+        <div class="row end">
+          <button id="cookie-file" type="button">选择 cookies.txt…</button>
+          <button value="close" class="primary">关闭</button>
         </div>
       </form>
     </dialog>

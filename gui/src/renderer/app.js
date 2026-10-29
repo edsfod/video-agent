@@ -363,6 +363,7 @@ function renderVideo() {
   const video = current();
   $('empty').hidden = !!video;
   $('video').hidden = !video;
+  $('empty-pick').hidden = !(state.videos.length || state.collections.length);
   if (!video) return;
   $('video-name').textContent = baseName(video.path);
   $('video-path').textContent = video.path;
@@ -442,6 +443,11 @@ function renderProcess(video) {
     $('process-state').textContent = info.processed ? '已处理过；再次处理会重新抽取画面，已有字幕保留。' : '';
     $('run-process').textContent = info.processed ? '重新处理' : '开始处理';
   }
+  // A video that needs no compressing says so on the button instead of offering it.
+  const done = COMPRESSION[info?.compression];
+  $('run-compress').disabled = !!done;
+  $('run-compress').textContent = done ? done[0] : '压缩这个视频…';
+  $('run-compress').title = done ? done[1] : '用 AV1 重新编码并替换这个视频文件，分辨率不变';
   renderLayout(video);
   $('facts').replaceChildren(
     ...facts.map(([label, value, size, hint]) =>
@@ -1085,13 +1091,21 @@ async function collectionCommand(args, done = '') {
   return !result.error;
 }
 
+// `compress --check` states that need no compressing: the button's text and its explanation.
+const COMPRESSION = {
+  compressed: ['已压缩', '本程序已经压缩过这个视频'],
+  efficient: ['不用压缩', '已经是 AV1、HEVC 或 VP9 编码，再压缩省不了多少'],
+  'not-smaller': ['压缩过，没变小', '试过一次，压出来没有变小，原文件保留了'],
+};
+
 function memberBadges(member) {
   const badges = [];
-  const add = (text, kind = '') => badges.push(element('span', { className: `badge ${kind}`, textContent: text }));
+  const add = (text, kind = '', title = '') => badges.push(element('span', { className: `badge ${kind}`, textContent: text, title }));
   if (member.skipped) add(`已跳过：${member.skipped}`);
   else if (member.summary) add('已总结', 'done');
   else add(member.processed ? '已处理' : '未处理');
   if (member.maybe_empty && !member.skipped) add('可能是空的', 'busy');
+  if (COMPRESSION[member.compression]) add(...COMPRESSION[member.compression].slice(0, 1), 'muted', COMPRESSION[member.compression][1]);
   return badges;
 }
 
@@ -1263,7 +1277,19 @@ $('collection-add-files').onclick = async () => {
 // Every video of the collection; compress itself skips those compressed before or already efficient. Videos that are
 // not this program's downloads are the user's own files: replaced only with the setting on, or after asking here.
 $('collection-compress-all').onclick = async () => {
-  const members = currentCollection().videos.filter((entry) => !entry.skipped);
+  // Checked first (user request, 2026-10-29): those compressed already, or not worth it, are not queued at all.
+  const candidates = currentCollection().videos.filter((entry) => !entry.skipped);
+  $('collection-state').textContent = '正在检查哪些已经压缩过…';
+  const checked = candidates.length ? await window.va.cliText(['compress', '--check', '--json', ...candidates.map((member) => member.video)]) : { out: '' };
+  const states = new Map(
+    checked.out.split('\n').filter((line) => line.trim().startsWith('{')).map((line) => JSON.parse(line)).map((entry) => [entry.video.toLowerCase(), entry]),
+  );
+  const members = candidates.filter((member) => {
+    const entry = states.get(member.video.toLowerCase());
+    return entry && !entry.error && !COMPRESSION[entry.state];
+  });
+  const done = candidates.length - members.length;
+  loadCollections(); // the badges follow what was found
   const own = members.filter((member) => !downloaded({ path: member.video }));
   if (own.length && !state.settings.compressLocal) {
     const asked = `其中 ${own.length} 集不是本程序下载的，是你电脑上的文件。压缩会用压缩后的文件替换它们，原文件不保留。也压缩这几集吗？\n\n选「取消」只压缩本程序下载的 ${members.length - own.length} 集。`;
@@ -1273,7 +1299,8 @@ $('collection-compress-all').onclick = async () => {
     if (!state.videos.some((video) => sameVideo(video.path, member.video))) await addVideos([member.video], { show: false });
     await addTask({ kind: 'compress', title: `压缩：${baseName(member.video)}`, video: member.video });
   }
-  $('collection-state').textContent = members.length ? `已把 ${members.length} 集排进压缩；压缩过的会自动跳过。` : '没有要压缩的。';
+  const skipped = done ? `${done} 集已经压缩过、不用压缩或找不到文件，没有排进去。` : '';
+  $('collection-state').textContent = members.length ? `已把 ${members.length} 集排进压缩。${skipped}` : `没有要压缩的。${skipped}`;
 };
 
 $('collection-process-all').onclick = async () => {
@@ -1493,12 +1520,9 @@ function accountState({ loggedIn, ready, user }) {
 }
 
 async function accountAction(key, action) {
-  const result = await action(key);
-  if (!result) return; // a file dialog cancelled
-  const status = result.status || result;
+  const status = await action(key);
   state.accounts = state.accounts.map((account) => (account.key === key ? status : account));
   renderAccounts();
-  if (result.count !== undefined) alert(result.count ? `导入了 ${result.count} 条${status.name}的 Cookie。` : `文件里没有${status.name}的 Cookie。`);
 }
 
 function renderAccounts() {
@@ -1524,7 +1548,7 @@ function renderAccounts() {
         ]),
         element('span', { className: 'row account-buttons' }, [
           button(account.loggedIn ? '重新登录' : key === 'douyin' && !account.ready ? '打开' : '登录', () => accountAction(key, window.va.accountLogin)),
-          button('导入 cookies.txt…', () => accountAction(key, window.va.accountImport), { className: 'ghost', title: '从浏览器扩展导出的 Netscape 格式 Cookie 文件' }),
+          button('从浏览器导入…', () => openCookieDialog(key), { className: 'ghost', title: '读取浏览器里的登录状态，或导入扩展导出的 cookies.txt' }),
           ...(account.ready || account.loggedIn ? [button('退出登录', () => accountAction(key, window.va.accountLogout), { className: 'ghost' })] : []),
           button('↑', () => move(key, -1), { className: 'ghost small', title: '往前', disabled: i === 0 }),
           button('↓', () => move(key, 1), { className: 'ghost small', title: '往后', disabled: i === shown.length - 1 }),
@@ -1546,6 +1570,55 @@ function renderAccounts() {
     }),
   );
   renderDownloadHint();
+}
+
+// One site's import: from a browser yt-dlp can read, or from a cookies.txt an extension exported (user request,
+// 2026-10-29: show how, or read a chosen browser in one click).
+let cookieSite = null;
+async function openCookieDialog(key) {
+  cookieSite = key;
+  const account = state.accounts.find((item) => item.key === key);
+  $('cookie-title').textContent = `导入${account.name}的登录状态`;
+  for (const span of document.querySelectorAll('#cookie-dialog .cookie-site')) span.textContent = account.name;
+  $('cookie-home').textContent = account.home;
+  $('cookie-home').href = account.home;
+  $('cookie-state').hidden = true;
+  const browsers = await window.va.browsers();
+  $('cookie-browsers').replaceChildren(
+    ...(browsers.length
+      ? browsers.map((browser) => {
+          const pick = element('button', { type: 'button', textContent: `从 ${browser.name} 读取` });
+          pick.onclick = () => cookieImport(window.va.accountFromBrowser(key, browser.key), `正在读取 ${browser.name}…`);
+          return pick;
+        })
+      : [element('span', { className: 'muted small-text', textContent: '没有找到 Firefox、Edge、Chrome 或 Brave。' })]),
+  );
+  $('cookie-dialog').showModal();
+}
+
+async function cookieImport(pending, waiting) {
+  const line = $('cookie-state');
+  line.hidden = false;
+  line.className = 'small-text';
+  line.textContent = waiting || '';
+  const result = await pending;
+  if (!result) return (line.hidden = true); // the file dialog was cancelled
+  if (result.error) {
+    line.className = 'small-text warn';
+    line.textContent = result.error;
+    return;
+  }
+  state.accounts = state.accounts.map((account) => (account.key === cookieSite ? result.status : account));
+  renderAccounts();
+  const name = result.status.name;
+  if (!result.count) line.textContent = `没有找到${name}的 Cookie：先在那个浏览器里打开${name}并登录，再试一次。`;
+  else if (!result.status.ready && cookieSite !== 'douyin') line.textContent = `导入了 ${result.count} 条${name}的 Cookie，但里面没有登录状态：那个浏览器没有登录${name}。先在浏览器里登录，再试一次。`;
+  else line.textContent = `导入了 ${result.count} 条${name}的 Cookie，现在${accountState(result.status)}。`;
+}
+
+$('cookie-file').onclick = () => cookieImport(window.va.accountImport(cookieSite));
+for (const link of document.querySelectorAll('#cookie-dialog a')) {
+  link.onclick = (event) => (event.preventDefault(), /^https?:/.test(link.href) && window.va.external(link.href));
 }
 
 function renderDownloadHint() {
@@ -1978,10 +2051,10 @@ async function init() {
   state.tasks = await window.va.tasks();
   $('download-then-process').checked = state.settings.processAfterDownload !== false; // on unless turned off
   renderTasks();
-  renderList();
-  if (state.videos.length) select(state.videos[0].path);
-  else renderVideo();
-  loadCollections();
+  // Nothing is opened at start (user request, 2026-10-29: the first collection was). The list waits for the
+  // collections, which hide their videos from 视频; drawn before, it showed every video for a moment.
+  renderVideo();
+  await loadCollections();
   window.va.cliJson(['tools', '--json']).then((found) => {
     state.tools = found.error ? null : found;
     if (state.view === 'video') renderVideo();

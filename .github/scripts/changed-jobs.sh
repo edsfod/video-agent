@@ -56,6 +56,17 @@ else
   done < <(git diff --name-only "$base" HEAD)
 fi
 
+# A release commit (scripts/bump_version.py and its notes) changes nothing but the version where it is written; the
+# code it carries passed on the commit before, so only the cli job's check that every file agrees runs, and the
+# release workflow builds the installer itself (user request, 2026-10-29: releasing took ten minutes).
+if [ -n "$base" ] && [ "$gui$installer" != falsefalse ]; then
+  bumped=$(python3 .github/scripts/version_only.py "$base" 2>/dev/null || true)
+  if [ "$bumped" = yes ]; then
+    echo "only the version changed: the cli job checks that every file agrees; gui and installer have nothing new to test"
+    cli=true gui=false installer=false
+  fi
+fi
+
 if [ -n "$base" ] && [ "${EVENT:-}" = push ] && [ "${REF:-}" = main ] && [ -n "${SHA:-}" ]; then
   tested=$(gh api "repos/$REPO/actions/runs?head_sha=$SHA&status=success&per_page=30" \
     --jq '[.workflow_runs[] | select(.name == "test" and .head_branch != "main")] | length' 2>/dev/null || echo 0)

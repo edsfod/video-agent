@@ -17,7 +17,7 @@ import shutil
 from datetime import UTC, datetime
 from pathlib import Path
 
-from . import corrections, files, processor
+from . import compress, corrections, files, processor
 
 FOLDER = '合集'
 DATA = 'collection.json'
@@ -182,6 +182,7 @@ def status(workspace, name):
         'speech_share': round(share, 3) if share is not None else None,
         'maybe_empty': bool(manifest) and (length < SHORT_S or (share or 0) < LITTLE_SPEECH),
         'skipped': data['skipped'].get(video),
+        'compression': compress.known(video)[1] if Path(video).is_file() else None,  # the cache only
       }
     )
   place = folder(workspace, name)

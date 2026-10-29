@@ -670,7 +670,33 @@ function registerIpc() {
   ipcMain.handle('skill:read', () => fs.readFileSync(path.join(pluginRoot(), 'skills', 'video-agent', 'SKILL.md'), 'utf8'));
 
   ipcMain.handle('accounts:list', () => accounts.list());
-  ipcMain.handle('accounts:login', (_, key) => accounts.login(key, win));
+  ipcMain.handle('accounts:login', (_, key) => accounts.login(key));
+  ipcMain.handle('accounts:browsers', () => accounts.browsers());
+  // yt-dlp reads the browser's cookies (--cookies-from-browser) and writes them to a file the site's are taken from;
+  // the page it is pointed at only gives it something to do, nothing is downloaded.
+  ipcMain.handle('accounts:from-browser', async (_, key, browser) => {
+    const [command, ...prefix] = cliCommand();
+    const tools = await runToEnd(command, [...prefix, 'tools', '--json']);
+    let ytdlp = null;
+    try {
+      ytdlp = JSON.parse(tools.out).yt_dlp;
+    } catch {
+      // reported below
+    }
+    if (!ytdlp) return { error: '没找到 yt-dlp，读不了浏览器的 Cookie。' };
+    const file = path.join(cookiesDir(), `from-${browser}-${Date.now()}.txt`);
+    fs.mkdirSync(cookiesDir(), { recursive: true });
+    try {
+      const { err } = await runToEnd(ytdlp, [
+        '--cookies-from-browser', browser, '--cookies', file,
+        '--skip-download', '--simulate', '--no-warnings', '--playlist-items', '0', accounts.SITES[key].home,
+      ]);
+      if (!fs.existsSync(file) || /ERROR:.*cookie|decrypt/i.test(err)) return { error: accounts.browserError(browser, err) };
+      return await accounts.importCookies(key, file);
+    } finally {
+      fs.rmSync(file, { force: true });
+    }
+  });
   ipcMain.handle('accounts:logout', (_, key) => accounts.logout(key));
   ipcMain.handle('accounts:import', async (_, key) => {
     const picked = await dialog.showOpenDialog(win, {

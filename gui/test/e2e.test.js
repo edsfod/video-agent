@@ -15,7 +15,12 @@ const ROOT = fs.mkdtempSync(path.join(os.tmpdir(), 'va-e2e-'));
 const WORKSPACE = path.join(ROOT, 'workspace');
 const APPDATA = path.join(ROOT, 'appdata');
 const VIDEO = path.join(ROOT, 'media', 'sample clip [e2e].mp4');
-const ENV = { ...process.env, VA_E2E_BACKGROUND: '1', APPDATA, NO_PROXY: '127.0.0.1,localhost', no_proxy: '127.0.0.1,localhost' };
+// From a checkout, the repository's own CLI (.venv) comes first on PATH: an installed Video Agent's copy, which the
+// installer puts on PATH for agents and the terminal, would otherwise answer for an older version.
+const VENV = path.resolve(GUI, '..', '.venv', 'Scripts');
+const PATH_KEY = Object.keys(process.env).find((key) => key.toUpperCase() === 'PATH') || 'PATH';
+const SEARCH = fs.existsSync(VENV) && !process.env.VA_E2E_EXE ? `${VENV};${process.env[PATH_KEY]}` : process.env[PATH_KEY];
+const ENV = { ...process.env, [PATH_KEY]: SEARCH, VA_E2E_BACKGROUND: '1', APPDATA, NO_PROXY: '127.0.0.1,localhost', no_proxy: '127.0.0.1,localhost' };
 const SUMMARY = '# 测试视频\n\n## 概要\n\n一段测试视频。[画面](frames/extra/frame-00-00-03.jpg)\n';
 
 function cli(args) {
@@ -95,6 +100,10 @@ test.before(async () => {
   page = await app.firstWindow();
   page.on('dialog', (dialog) => (refuse ? dialog.dismiss() : dialog.accept()));
   await page.waitForSelector('#video-list .video-item .badge:text("未处理")');
+  // Nothing is open at start; the tests work on the one video.
+  assert.equal(await page.isVisible('#empty-pick'), true);
+  await page.click('#video-list .video-item');
+  await page.waitForSelector('#video:not([hidden])');
 });
 
 // A test that fails halfway can leave a dialog open or a stub in place, which would fail every test after it.
@@ -500,9 +509,13 @@ devTest('accounts are listed in an order of one\'s own, can be hidden, and take 
     globalThis.vaRestoreDialogs = () => Object.assign(dialog, { showOpenDialog: open });
     dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [chosen] });
   }, exported);
-  await page.click('#accounts .account[data-account=youtube] button:text("导入 cookies.txt…")'); // its alert is accepted
+  await page.click('#accounts .account[data-account=youtube] button:text("从浏览器导入…")');
+  await page.waitForSelector('#cookie-dialog[open] #cookie-home:text("https://www.youtube.com/")');
+  await page.click('#cookie-file');
+  await page.waitForSelector('#cookie-state:text("导入了 2 条YouTube的 Cookie")');
   await page.waitForSelector('#accounts .account[data-account=youtube] .account-state:text("已登录")');
   await app.evaluate(() => globalThis.vaRestoreDialogs());
+  await page.click('#cookie-dialog button[value=close]');
   const file = path.join(ROOT, 'cookies', 'youtube.txt');
   await app.evaluate(({}, file) => global.vaAccounts.writeCookies('youtube', file), file);
   const text = fs.readFileSync(file, 'utf8');

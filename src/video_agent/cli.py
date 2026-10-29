@@ -165,6 +165,12 @@ def build_parser():
   )
   shrink.add_argument('videos', nargs='+', type=Path)
   shrink.add_argument('--json', action='store_true', help='print one JSON object per video; progress to stderr')
+  shrink.add_argument(
+    '--check',
+    action='store_true',
+    help="only tell each video's state without compressing: compressed, efficient (already AV1, HEVC or VP9), "
+    'not-smaller (tried before) or null (worth compressing)',
+  )
   frame = commands.add_parser('frame', help="save frames at chosen times into the video's processing workspace")
   frame.add_argument('video', type=Path)
   frame.add_argument('times', nargs='+', type=clock_value, help='seconds, MM:SS or HH:MM:SS')
@@ -467,9 +473,21 @@ def _show(args):
       'extra_frames': sorted(str(path) for path in (asset / 'frames' / 'extra').glob('frame-*.jpg')),
       # Where processing would take subtitles from without asking, so the window can ask about BCut first.
       'subtitles': _subtitles_here(video, info),
+      'compression': _compression(video, info),
     }
   )
   return 0
+
+
+def _compression(video, info):
+  """The state `compress --check` gives; 'not-smaller' only the cache knows."""
+  found, cached = compression.known(video)
+  if found and cached == 'not-smaller':
+    return cached
+  value = compression.state(info)
+  if not found or cached != value:
+    compression.remember(video, value)
+  return value
 
 
 def _subtitles_here(video, info):
@@ -738,7 +756,12 @@ def run(args):
     failures = 0
     for video in args.videos:
       try:
-        result = compression.compress(video, status=_progress(args))
+        if args.check:
+          result = {'video': str(video), 'state': compression.check(video)}
+          if not args.json:
+            print(f'{video}: {result["state"] or "worth compressing"}')
+        else:
+          result = compression.compress(video, status=_progress(args))
       except (OSError, MediaError, compression.CompressError) as error:
         result, failures = {'video': str(video), 'error': str(error)}, failures + 1
         if not args.json:

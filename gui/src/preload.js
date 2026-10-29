@@ -19,6 +19,8 @@ contextBridge.exposeInMainWorld('va', {
   accountLogin: (key) => ipcRenderer.invoke('accounts:login', key),
   accountLogout: (key) => ipcRenderer.invoke('accounts:logout', key),
   accountImport: (key) => ipcRenderer.invoke('accounts:import', key),
+  browsers: () => ipcRenderer.invoke('accounts:browsers'),
+  accountFromBrowser: (key, browser) => ipcRenderer.invoke('accounts:from-browser', key, browser),
   updateState: () => ipcRenderer.invoke('update:state'),
   checkUpdate: () => ipcRenderer.invoke('update:check'),
   downloadUpdate: () => ipcRenderer.invoke('update:download'),

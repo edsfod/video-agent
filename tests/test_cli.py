@@ -679,3 +679,28 @@ def test_compress_replaces_the_video_once_and_leaves_efficient_ones(sample_video
   assert json.loads(capsys.readouterr().out)['skipped'] == 'already compressed by Video Agent'
   assert [path for path in tmp_path.iterdir() if '.part' in path.name] == [other], 'the leftover is gone'
   assert compress.skip_reason({'streams': [{'codec_type': 'video', 'codec_name': 'hevc'}]}).startswith('already HEVC')
+  # The state is kept, so a collection's list knows it without opening the file.
+  assert compress.known(video) == (True, 'compressed')
+  workspace = tmp_path / 'ws'
+  assert cli.main(['collection', 'create', '课', str(video), '-o', str(workspace)]) == 0
+  capsys.readouterr()
+  assert cli.main(['collection', 'list', '-o', str(workspace)]) == 0
+  assert json.loads(capsys.readouterr().out)[0]['videos'][0]['compression'] == 'compressed'
+
+
+def test_compress_check_tells_the_state_and_forgets_it_when_the_file_changes(sample_video, tmp_path, capsys):
+  from video_agent import compress
+
+  video = tmp_path / 'clip.mp4'
+  video.write_bytes(sample_video.read_bytes())
+  capsys.readouterr()
+  assert cli.main(['compress', '--check', '--json', str(video)]) == 0
+  assert json.loads(capsys.readouterr().out) == {'video': str(video), 'state': None}
+  assert compress.known(video) == (True, None)
+  assert cli.main(['show', str(video), '-o', str(tmp_path / 'ws')]) == 0
+  assert json.loads(capsys.readouterr().out)['compression'] is None
+  compress.remember(video, 'not-smaller')  # as after a try whose copy came out larger
+  assert cli.main(['compress', '--check', '--json', str(video)]) == 0
+  assert json.loads(capsys.readouterr().out)['state'] == 'not-smaller'
+  video.write_bytes(video.read_bytes() + b'\0')  # another file now
+  assert compress.known(video) == (False, None)

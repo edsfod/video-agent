@@ -6,12 +6,18 @@ classroom camera recording (H.264, 1.75 Mbps) to 59 % at CRF 40 (VMAF 94.7); see
 video already in AV1, HEVC or VP9, such as Bilibili's, is left alone: it gains little. The new file is written beside
 the old one and replaces it only when its duration matches and it is smaller; the path stays the same, so the video's
 processing folder and summaries still belong to it. A tag in the file marks it, so compressing again does nothing.
+
+Each video's state is also kept in a cache beside the settings, keyed by path, size and modification time (user
+request, 2026-10-29: shown in the window, and checked before 压缩各集 queues anything), so a collection's list can
+say which are done without opening every file.
 """
 
+import json
 import subprocess
 from itertools import pairwise
+from pathlib import Path
 
-from . import files, media
+from . import files, media, settings
 
 MARK = 'video-agent compressed'
 CRF = 40
@@ -36,14 +42,77 @@ def _tags(info):
   return {key.lower(): value for key, value in ((info.get('format') or {}).get('tags') or {}).items()}
 
 
+def state(info):
+  """'compressed' (by this program), 'efficient' (already AV1, HEVC or VP9), or None: worth compressing."""
+  if MARK in _tags(info).get('comment', ''):
+    return 'compressed'
+  video = next(stream for stream in info.get('streams') or [] if stream.get('codec_type') == 'video')  # probe checked
+  return 'efficient' if video.get('codec_name') in EFFICIENT else None
+
+
 def skip_reason(info):
   """Why this video is not compressed, or None."""
-  if MARK in _tags(info).get('comment', ''):
+  found = state(info)
+  if found == 'compressed':
     return 'already compressed by Video Agent'
-  video = next(stream for stream in info.get('streams') or [] if stream.get('codec_type') == 'video')  # probe checked
-  if video.get('codec_name') in EFFICIENT:
+  if found == 'efficient':
+    video = next(stream for stream in info['streams'] if stream.get('codec_type') == 'video')
     return f'already {video["codec_name"].upper()}, which gains little from compressing again'
   return None
+
+
+# States: those above, and 'not-smaller' (tried; the copy came out larger, so the file was kept and is not tried again).
+DONE = {'compressed', 'efficient', 'not-smaller'}
+
+
+def _cache_path():
+  return settings.settings_path().parent / 'compression.json'
+
+
+def _stamp(video):
+  found = Path(video).stat()
+  return [found.st_size, found.st_mtime_ns]
+
+
+def _read_cache():
+  try:
+    return json.loads(_cache_path().read_text(encoding='utf-8'))
+  except (OSError, ValueError):
+    return {}
+
+
+def remember(video, found):
+  """Keeps the video's state for its present size and time; any change to the file makes it unknown again."""
+  video = Path(video).resolve()
+  cache = _read_cache()
+  cache[str(video).lower()] = {'stamp': _stamp(video), 'state': found}
+  try:
+    files.write_text(_cache_path(), json.dumps(cache, ensure_ascii=False, indent=1))
+  except OSError:
+    pass  # only a cache
+
+
+def known(video):
+  """(True, state) when the cache knows the video as it is now, else (False, None). Opens nothing but the cache."""
+  video = Path(video).resolve()
+  entry = _read_cache().get(str(video).lower())
+  try:
+    if entry and entry['stamp'] == _stamp(video):
+      return True, entry['state']
+  except OSError:
+    pass
+  return False, None
+
+
+def check(video):
+  """The video's state, from the cache or else by probing it (and keeping what was found)."""
+  found, value = known(video)
+  if found:
+    return value
+  _, info = media.probe(video)
+  value = state(info)
+  remember(video, value)
+  return value
 
 
 def mostly_still(video, length):
@@ -78,6 +147,7 @@ def compress(video, *, status=print):
   video, info = media.probe(video)
   before = video.stat().st_size
   reason = skip_reason(info)
+  remember(video, state(info))
   if reason:
     status(f'{video.name}: not compressed: {reason}')
     return {'video': str(video), 'skipped': reason, 'before': before, 'after': before, 'still': None}
@@ -111,8 +181,10 @@ def compress(video, *, status=print):
       raise CompressError(f'the compressed copy of {video.name} lasts {media.duration(done):.1f}s, not {length:.1f}s')
     if after >= before:
       status(f'{video.name}: not replaced: the compressed copy is not smaller')
+      remember(video, 'not-smaller')
       return {'video': str(video), 'skipped': 'not smaller', 'before': before, 'after': before, 'still': still}
     files.replace(temporary, video)
+    remember(video, 'compressed')
   finally:
     temporary.unlink(missing_ok=True)
   status(f'{video.name}: {before / 1e6:.0f} MB -> {after / 1e6:.0f} MB ({after / before:.0%})')

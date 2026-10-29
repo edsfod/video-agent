@@ -117,10 +117,12 @@ video-agent process "D:\Videos\lecture.mp4" `
 ### `compress`
 
 ```powershell
-video-agent compress VIDEO... [--json]
+video-agent compress VIDEO... [--json] [--check]
 ```
 
 Re-encodes each video in place with SVT-AV1 (CRF 40) at its source resolution; a picture that hardly moves (a screen recording) goes to 10 frames a second. Audio that is AAC at 96 kbps or less is copied, other audio becomes AAC at 64 kbps; subtitles and metadata are kept. The new file replaces the old one only when its duration matches within a second and it is smaller. Videos already in AV1, HEVC or VP9, and videos this command compressed before (a tag in the file), are left alone. Needs an FFmpeg with `libsvtav1`, as the desktop installer's has.
+
+`--check` compresses nothing and tells each video's state: `compressed`, `efficient` (already AV1, HEVC or VP9), `not-smaller` (tried before; the copy was larger) or `null` (worth compressing). The state is kept in `compression.json` beside the settings, keyed by path, size and modification time, so `show` reports it as `compression` and `collection list` gives each video's from that file without opening the videos.
 
 ### `frame`
 

@@ -36,6 +36,7 @@ for (const agent of ['claude', 'codex', ...OTHERS]) {
     try {
       const page = await app.firstWindow();
       await page.waitForSelector('#video-list .video-item .badge:text("已处理")');
+      await page.click('#video-list .video-item');
       await page.click('.tabs button[data-tab=summary]');
       await page.check(`input[name=route][value=${agent}]`);
       await page.fill('#summary-request', '写得简短一些');

@@ -7,8 +7,9 @@
 // What each site needs, from yt-dlp's source (2026.10.26): Bilibili lists subtitles, AI ones included, only to a
 // logged-in account; Douyin refuses without fresh cookies, "not necessarily logged in", which visiting the site sets
 // (`s_v_web_id`); YouTube needs them for age-restricted and members-only videos and when it asks to "confirm you're not
-// a bot". Google may refuse to sign in inside an embedded browser, so a cookies.txt exported from a browser can be
-// imported instead, for any site.
+// a bot". Google may refuse to sign in inside an embedded browser, so a site's cookies can also come from a browser:
+// read by yt-dlp (`--cookies-from-browser`), which works for Firefox but not for a running Edge (locked database) or
+// Chrome 127 and later (app-bound encryption; tried 2026-10-29), or from a cookies.txt an extension exported.
 
 const { BrowserWindow, session, shell } = require('electron');
 const fs = require('node:fs');
@@ -21,6 +22,7 @@ const SITES = {
     name: '哔哩哔哩',
     why: 'B 站只给登录的账号看字幕（包括 AI 字幕）。登录后下载 B 站视频会把字幕一起存下来，处理时直接用，不用转录。',
     loginUrl: 'https://passport.bilibili.com/login',
+    home: 'https://www.bilibili.com/',
     ready: 'SESSDATA',
     account: 'SESSDATA',
     cookies: /(^|\.)bilibili\.com$/,
@@ -30,6 +32,7 @@ const SITES = {
     name: '抖音',
     why: '不先打开一次抖音网页，yt-dlp 下载抖音视频会被拒绝；打开就行，不一定要登录，网页加载完关掉窗口即可。',
     loginUrl: 'https://www.douyin.com/',
+    home: 'https://www.douyin.com/',
     ready: 's_v_web_id',
     account: 'sessionid',
     cookies: /(^|\.)douyin\.com$/,
@@ -39,6 +42,7 @@ const SITES = {
     name: 'YouTube',
     why: '一般的视频和字幕不用登录；年龄限制、会员视频，以及 YouTube 要求“登录以确认你不是机器人”时才需要。Google 可能不让在这里登录，那就从浏览器导出 cookies.txt 再导入。',
     loginUrl: 'https://accounts.google.com/ServiceLogin?service=youtube&continue=https%3A%2F%2Fwww.youtube.com%2F',
+    home: 'https://www.youtube.com/',
     ready: 'SAPISID',
     account: 'SAPISID',
     cookies: /(^|\.)youtube\.com$/,
@@ -69,7 +73,7 @@ async function cookie(key, name) {
 // login still counts.
 async function status(key) {
   const site = SITES[key];
-  const base = { key, name: site.name, why: site.why, urls: site.urls.source }; // the window tells links apart too
+  const base = { key, name: site.name, why: site.why, home: site.home, urls: site.urls.source }; // the window tells links apart too
   const ready = !!(await cookie(key, site.ready));
   const loggedIn = !!(await cookie(key, site.account));
   if (key !== 'bilibili' || !loggedIn) return { ...base, ready, loggedIn };
@@ -85,13 +89,12 @@ async function status(key) {
 
 const list = () => Promise.all(Object.keys(SITES).map(status));
 
-// Opens the site's login page and resolves with `status()` once the login cookie appears or the window is closed.
-function login(key, parent) {
+// Opens the site's login page and resolves with `status()` once the login cookie appears or the window is closed. A
+// window of its own, not a child of the main one, so it minimizes alone (user report, 2026-10-29).
+function login(key) {
   const site = SITES[key];
   return new Promise((resolve) => {
     const window = new BrowserWindow({
-      parent,
-      modal: true,
       width: 960,
       height: 720,
       title: `登录${site.name}`,
@@ -177,4 +180,25 @@ async function writeCookies(key, file) {
   return file;
 }
 
-module.exports = { SITES, siteOf, status, list, login, logout, importCookies, writeCookies };
+// Browsers yt-dlp can be asked for (its names), when they are installed.
+const BROWSERS = [
+  { key: 'firefox', name: 'Firefox', folder: () => path.join(process.env.APPDATA || '', 'Mozilla', 'Firefox', 'Profiles') },
+  { key: 'edge', name: 'Edge', folder: () => path.join(process.env.LOCALAPPDATA || '', 'Microsoft', 'Edge', 'User Data') },
+  { key: 'chrome', name: 'Chrome', folder: () => path.join(process.env.LOCALAPPDATA || '', 'Google', 'Chrome', 'User Data') },
+  { key: 'brave', name: 'Brave', folder: () => path.join(process.env.LOCALAPPDATA || '', 'BraveSoftware', 'Brave-Browser', 'User Data') },
+];
+const browsers = () => BROWSERS.filter((browser) => fs.existsSync(browser.folder())).map(({ key, name }) => ({ key, name }));
+
+// What to tell the user when yt-dlp could not read a browser's cookies, from its error.
+function browserError(browser, text) {
+  const name = BROWSERS.find((item) => item.key === browser)?.name || browser;
+  if (/Could not copy .*cookie database/i.test(text)) return `${name} 正开着，Cookie 文件被它锁住了。完全关掉 ${name}（包括托盘里的）再试。`;
+  if (/decrypt|app.bound/i.test(text)) {
+    return `新版 ${name} 把 Cookie 加密成只有它自己能读，读不出来。可以改用 Firefox 导入、点「登录」在本程序里登录，或者照下面的步骤用扩展导出 cookies.txt。`;
+  }
+  return `没有读到 ${name} 的 Cookie：${(text.trim().split('\n').pop() || '').slice(0, 200)}`;
+}
+
+module.exports = {
+  browsers,
+  browserError, SITES, siteOf, status, list, login, logout, importCookies, writeCookies };
