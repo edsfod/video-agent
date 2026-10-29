@@ -5,6 +5,7 @@ import json
 import os
 import shutil
 import subprocess
+import tempfile
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
@@ -107,10 +108,18 @@ def _timeline(slide_folder):
 
 
 def extract(video, output_parent, *, executable=None, status=print):
+  """Runs AutoSlides Extractor on `video` and copies its slides into a new folder in `output_parent` as import_folder
+  does. It runs in a short temporary folder: the names it writes carry the video's name twice, and inside a video's
+  folder they passed Windows' 260-character path limit, so its files could not be read back (2026-10-29)."""
   program = find_extractor(executable)
   run_id = datetime.now(UTC).strftime('%Y%m%dT%H%M%SZ') + '-' + uuid.uuid4().hex[:6]
-  output_root = Path(output_parent) / run_id
-  output_root.mkdir(parents=True, exist_ok=False)
+  with tempfile.TemporaryDirectory(prefix='va-') as work:
+    folder = _run(program, video, Path(work), status)
+    return import_folder(folder, Path(output_parent) / run_id)
+
+
+def _run(program, video, output_root, status):
+  """Runs the Extractor with its output in `output_root`; returns the slides_* folder it wrote."""
   command = [
     str(program),
     '--video',
@@ -179,13 +188,8 @@ def extract(video, output_parent, *, executable=None, status=print):
   except OSError as error:
     raise SlideExtractorError(f'Could not start AutoSlides Extractor: {error}') from error
   if code != 0:
-    raise SlideExtractorError(f'AutoSlides Extractor exited with code {code}; its output is in {output_root}')
+    raise SlideExtractorError(f'AutoSlides Extractor exited with code {code}')
   folders = sorted(path for path in output_root.glob('slides_*') if path.is_dir())
   if not folders:
-    raise SlideExtractorError(f'AutoSlides Extractor completed without a slides_* folder; inspect {output_root}')
-  folder = folders[0]
-  slides = _timeline(folder)
-  if not slides:
-    images = sorted([*folder.glob('*.jpg'), *folder.glob('*.jpeg'), *folder.glob('*.png')])
-    slides = [{'time_s': None, 'path': image} for image in images]
-  return {'output_root': output_root, 'folder': folder, 'timeline': folder / 'timeline.json', 'slides': slides}
+    raise SlideExtractorError('AutoSlides Extractor completed without a slides_* folder')
+  return folders[0]

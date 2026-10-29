@@ -782,8 +782,8 @@ def test_autoslides_extractor_finds_the_screen_pages_where_installed(sample_vide
   assert manifest['slide_extraction']['enabled'] and manifest['screen_pages'] == [], 'its slides stand for the pages'
   # The step with a line added joins the first slide, keeping its time and the fuller picture.
   assert [(item['time_s'], Path(item['path']).name) for item in slides] == [
-    (0.0, 'slide_002.jpg'),
-    (5.0, 'slide_003.jpg'),
+    (0.0, 'slide-002.jpg'),
+    (5.0, 'slide-003.jpg'),
   ]
   assert cli.main(['process', str(sample_video), '-o', str(workspace), '--json', '--force', '--no-extract-slides']) == 0
   manifest = json.loads((asset_folder(workspace, sample_video.resolve()) / 'manifest.json').read_text(encoding='utf-8'))

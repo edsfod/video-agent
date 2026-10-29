@@ -497,7 +497,9 @@ def _process_locked(
         )
       except (slide_extractor.SlideExtractorError, media.MediaError) as error:
         slide_error = str(error)
-        status(f'{video.name}: slide extraction failed: {slide_error}')
+        # Asked for by default, a failure falls back to our own page search and is noted, not a failed run.
+        fallback = " (using this program's own page search)" if extract_slides is None else ''
+        status(f'{video.name}: slide extraction failed: {slide_error}{fallback}')
 
     pages, pages_found, shown_s = [], 0, None
     # In a video without a screen region, such as stock footage with a chart or a screenshot now and then, the
@@ -615,6 +617,6 @@ def _process_locked(
     'frames': len(frames),
     'slides': len(slides),
     'transcript_error': transcript_error,
-    'slide_error': slide_error,
+    'slide_error': slide_error if extract_slides is not None or imported else '',
     'source': transcript_source,
   }
