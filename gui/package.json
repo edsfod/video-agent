@@ -1,7 +1,7 @@
 {
   "name": "video-agent-gui",
   "productName": "Video Agent",
-  "version": "0.9.3",
+  "version": "1.0.0",
   "description": "Desktop front end for the Video Agent CLI",
   "main": "src/main.js",
   "private": true,
