@@ -119,13 +119,15 @@ async function saved(check, timeout = 15_000) {
     if (Date.now() > end) assert.fail(`the settings were not saved as expected: ${JSON.stringify(settings).slice(0, 500)}`);
   }
 }
-// The parts of chat.deepseek.com that deepseek.js drives. The second file of the first message fails to upload once;
+// The parts of chat.deepseek.com that deepseek.js drives. The second file of the first message shows Server busy once,
+// and goes when its card is clicked, as on the real page;
 // the first message hangs at 正在分析图片 and the second gets a busy notice, as DeepSeek's servers give at times; then
 // the answer asks for pictures in a 画面调整 section, and the next round's (its prompt starts with the candidates taken),
 // its 复查 finding nothing more and the sections it leaves out said, ends the rounds. Each answer takes the place of the
 // oldest one on the page, as the real page drops earlier answers, and its last line comes a second after the rest.
 // What it was sent and every file attached are kept in localStorage, which outlives loading the page again. A test sets
-// what comes of the next messages there (plan: hang, busy, refuse, wrong, late) and of uploads (uploads: refuse, fail).
+// what comes of the next messages there (plan: hang, busy, refuse, wrong, late) and of uploads (uploads: refuse, fail;
+// busyLeft: this many tries end in Server busy).
 const FAKE_DEEPSEEK = `<!doctype html><meta charset="utf-8"><title>DeepSeek</title>
 <div id="chat"></div>
 <div><div><div><div><div><div>
@@ -142,26 +144,39 @@ const FAKE_DEEPSEEK = `<!doctype html><meta charset="utf-8"><title>DeepSeek</tit
   const attachments = document.getElementById('attachments');
   window.sent = JSON.parse(localStorage.getItem('sent') || '[]');
   window.attached = JSON.parse(localStorage.getItem('attached') || '[]');
+  window.retried = JSON.parse(localStorage.getItem('retried') || '[]');
   document.querySelector('input').onchange = (event) => {
     for (const file of event.target.files) {
       const item = document.createElement('div');
       item.className = 'ds-animated-size-item';
       item.innerHTML = '<div role="button" tabindex="0"><img><div tabindex="0">×</div></div>';
       item.querySelector('img').alt = file.name;
-      item.querySelector('[tabindex="0"] [tabindex="0"]').onclick = () => item.remove();
+      item.querySelector('[tabindex="0"] [tabindex="0"]').onclick = (click) => (click.stopPropagation(), item.remove());
       attachments.append(item);
       window.attached.push(file.name);
-      const uploads = localStorage.getItem('uploads');
-      const fails = window.attached.length === 2 || uploads === 'fail';
-      const refused = uploads === 'refuse';
-      if (refused) localStorage.removeItem('uploads');
-      fetch('__API__/api/v0/file/upload_file' + (refused ? '?refuse' : ''), { method: 'POST', body: file.name });
-      item.dataset.uploading = '';
-      setTimeout(() => {
-        delete item.dataset.uploading;
-        if (fails) item.append('Upload failed');
-        else if (refused) item.append('Server busy');
-      }, 300);
+      const upload = (first) => {
+        const uploads = localStorage.getItem('uploads');
+        const left = Number(localStorage.getItem('busyLeft')) || 0;
+        const busy = (first && window.attached.length === 2) || left > 0;
+        if (left > 0) localStorage.setItem('busyLeft', String(left - 1));
+        const refused = uploads === 'refuse';
+        if (refused) localStorage.removeItem('uploads');
+        fetch('__API__/api/v0/file/upload_file' + (refused ? '?refuse' : ''), { method: 'POST', body: file.name });
+        item.dataset.uploading = '';
+        setTimeout(() => {
+          delete item.dataset.uploading;
+          item.querySelector('.state')?.remove();
+          const said = uploads === 'fail' ? 'Upload failed' : busy || refused ? 'Server busy' : '';
+          if (said) item.insertAdjacentHTML('beforeend', '<div class="state">' + said + '</div>');
+        }, 300);
+      };
+      item.querySelector('[role=button]').onclick = () => {
+        if (!item.querySelector('.state')) return;
+        window.retried.push(file.name);
+        localStorage.setItem('retried', JSON.stringify(window.retried));
+        upload(false);
+      };
+      upload(true);
     }
     localStorage.setItem('attached', JSON.stringify(window.attached));
     event.target.value = ''; // the same file can be chosen again, as on the real page
@@ -393,8 +408,11 @@ devTest('summary through DeepSeek\'s web chat, in rounds until it asks for no mo
   const attached = await app.evaluate(({ BrowserWindow }) =>
     BrowserWindow.getAllWindows().find((win) => win.getTitle() === 'DeepSeek').webContents.executeJavaScript('window.attached'));
   assert.deepEqual([...sent[0].files].sort(), [...sent[2].files].sort(), 'the file that failed to upload went with the rest');
-  assert.equal(attached.slice(0, sent[0].files.length + 1).filter((name) => name === attached[1]).length, 2, 'only that file attached again');
-  assert.ok(output.some(([, text]) => text.includes('单独重新上传')), 'the upload retry is in the task output');
+  assert.equal(attached.slice(0, sent[0].files.length).filter((name) => name === attached[1]).length, 1, 'not chosen anew');
+  const retried = await app.evaluate(({ BrowserWindow }) =>
+    BrowserWindow.getAllWindows().find((win) => win.getTitle() === 'DeepSeek').webContents.executeJavaScript('window.retried'));
+  assert.deepEqual(retried, [attached[1]], 'that card clicked, once');
+  assert.ok(output.some(([, text]) => text.includes('点重试')), 'the upload retry is in the task output');
   assert.match(sent[3].text, /^我照你上一稿/, 'the second answer found, though the page kept no more answers than before');
   assert.ok(sent[3].files.length >= 1 && sent[3].files.every((name) => name.includes('补截')));
   assert.ok(output.some(([, text]) => text.includes('正在分析图片')), 'the hang is in the task output');
@@ -791,7 +809,8 @@ devTest('a DeepSeek task waits out a refusal for sending too often and checks wh
 devTest('a long conversation goes on in a new one, with what the next round needs', async () => {
   const before = deepseekApi.messages.length;
   await app.evaluate(() => (process.env.VA_DEEPSEEK_NEW_CHAT_CHARS = '1'));
-  const { task, output } = await runDeepSeek({ plan: '[]', sent: '[]', attached: '[]' });
+  // Server busy on every try at first: past the tries it is waited out, not a failure.
+  const { task, output } = await runDeepSeek({ plan: '[]', sent: '[]', attached: '[]', busyLeft: '20' });
   await app.evaluate(() => delete process.env.VA_DEEPSEEK_NEW_CHAT_CHARS);
   assert.equal(task.status, 'done', output.slice(-1500));
   assert.match(output, /第 2 轮：对话太长，换一个新对话/);

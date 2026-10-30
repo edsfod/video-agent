@@ -8,7 +8,9 @@
 // (.ds-button--primary.ds-button--circle), disabled while uploads run or the box is empty, whose icon turns into a
 // stop square while an answer is written; each answer, and the thinking before it, in a .ds-markdown block, where a
 // code block is a <pre> whose text is the Markdown as written; each attachment, a .ds-animated-size-item in the composer
-// with the file's name as its picture's alt text, a line saying the upload failed when it did, and a button removing it.
+// with the file's name as its picture's alt text and a line saying the upload failed when it did. A picture is a card
+// ([role=button]) that, once failed, tries again when clicked, without the file being chosen anew: the page keeps it,
+// and if it has reached the server asks only after it (user report, 2026-10-30; in the page's script as retryFile).
 // Until the attached pictures are read, the answer's place says 正在分析图片 (Analyzing image) with no .ds-markdown yet.
 // The page only draws while Chromium counts the window as seen, which main.js and backgroundThrottling see to.
 //
@@ -66,9 +68,10 @@ const COMPOSER = `(() => { let box = document.querySelector('textarea'); for (le
 const SEND = `[...(${COMPOSER})?.querySelectorAll('.ds-button--primary.ds-button--circle') || []].pop()`;
 
 // DeepSeek's servers are sometimes busy (user report, 2026-10-29): an upload fails or never ends, or the answer is only
-// a busy notice. A failed upload is removed and that file alone attached again (user report, 2026-10-30: all 49 again
-// failed three times over), up to TRIES times, after which the whole message is tried again: it never goes without a
-// file, as the import takes what was sent and not linked for pictures looked at and not needed. Uploads that never end,
+// a busy notice. A failed upload is tried again from its card (user report, 2026-10-30: all 49 again failed three times
+// over), up to TRIES times, after which the whole message is tried again: it never goes without a file, as the import
+// takes what was sent and not linked for pictures looked at and not needed. Still Server busy by then is waited out as a
+// refusal is, for the same user report: it says nothing is wrong with the file. Uploads that never end,
 // busy notices and answers that never start (user report, 2026-10-30: 正在分析图片 for 8 minutes, the message not on the
 // server) are tried again whole, up to TRIES times, the page loaded again first, which keeps the conversation and
 // empties the box.
@@ -80,6 +83,7 @@ const SEND = `[...(${COMPOSER})?.querySelectorAll('.ds-button--primary.ds-button
 const TRIES = 3;
 const BUSY = /服务器繁忙|稍后再试|server is busy|try again later|并发请求过多|too many concurrent requests/i;
 const UPLOAD_FAILED = /上传失败|重新上传|upload failed|failed to upload|服务器繁忙|server (?:is )?busy/i;
+const UPLOAD_BUSY = /服务器繁忙|server (?:is )?busy/i;
 const REFUSED = /"finish_reason":"rate_limit_reached"|"biz_msg":"rate limit reached"/;
 const WATCHED = /\/api\/v\d+\/(?:chat\/completion|file\/upload_file)\b/;
 const SENDING = /\/api\/v\d+\/chat\/completion\b/;
@@ -210,12 +214,11 @@ function conversation() {
     await debug.sendCommand('DOM.setFileInputFiles', { nodeId, files });
   }
 
-  /** Removes the attachments whose upload failed; returns their file names. */
-  const removeFailed = () =>
-    page(`${ATTACHMENTS}.filter((item) => ${UPLOAD_FAILED}.test(item.innerText)).map((item) => {
-      item.querySelector('[role=button] [tabindex="0"]')?.click();
-      return (${NAME})(item);
-    })`);
+  /** The attachments whose upload failed. @returns {Promise<{ name: string, busy: boolean }[]>} */
+  const failedUploads = () =>
+    page(`${ATTACHMENTS}.filter((item) => ${UPLOAD_FAILED}.test(item.innerText)).map((item) => ({ name: (${NAME})(item), busy: ${UPLOAD_BUSY}.test(item.innerText) }))`);
+  const retryUploads = () =>
+    page(`${ATTACHMENTS}.filter((item) => ${UPLOAD_FAILED}.test(item.innerText)).forEach((item) => item.querySelector('[role=button]')?.click())`);
 
   /** Attaches the files and types the text; resolves once the send button may be pressed. */
   async function compose(text, files, onStatus) {
@@ -229,19 +232,17 @@ function conversation() {
     for (;;) {
       if (stopped) throw new Error('已停止');
       if (wire.refused) throw Object.assign(new Error('DeepSeek 限流'), { refused: true });
-      const failed = await removeFailed();
+      const failed = await failedUploads();
       if (failed.length) {
-        const again = files.filter((file) => failed.includes(path.basename(file)) && tries.get(path.basename(file)) < TRIES);
-        const lost = failed.filter((name) => !again.some((file) => path.basename(file) === name));
-        if (lost.length) throw Object.assign(new Error(`${lost.join('、')} 上传 ${TRIES} 次都失败`), { again: true });
-        if (again.length) {
-          const attempt = Math.max(...again.map((file) => tries.get(path.basename(file)))) + 1;
-          onStatus(`${again.length} 张图片上传失败，单独重新上传（第 ${attempt} 次）`);
-          for (const file of again) tries.set(path.basename(file), tries.get(path.basename(file)) + 1);
-          await pause(UPLOAD_PAUSE_MS);
-          await attach(again);
-          await pause(1000); // until the page has taken them, the send button still says what it said before
-        }
+        const lost = failed.filter(({ name }) => (tries.get(name) || TRIES) >= TRIES);
+        if (lost.length && lost.every(({ busy }) => busy)) throw Object.assign(new Error('DeepSeek 上传繁忙'), { refused: true });
+        if (lost.length) throw Object.assign(new Error(`${lost.map(({ name }) => name).join('、')} 上传 ${TRIES} 次都失败`), { again: true });
+        const attempt = Math.max(...failed.map(({ name }) => tries.get(name))) + 1;
+        onStatus(`${failed.length} 张图片上传失败，点重试（第 ${attempt} 次）`);
+        for (const { name } of failed) tries.set(name, tries.get(name) + 1);
+        await pause(UPLOAD_PAUSE_MS);
+        await retryUploads();
+        await pause(1000); // until the page has taken it, the send button still says what it said before
         continue;
       }
       if (await page(ready)) return;
