@@ -615,15 +615,23 @@ def test_a_next_round_in_a_new_conversation_carries_what_it_needs(processed, cap
   prompt = (folder / '提示词.md').read_text(encoding='utf-8')
   # The rules, the transcript, the round's request and the draft, in the order the words 「前面的字幕」 need.
   assert prompt.startswith(packing.NEW_CHAT_NOTE)
-  assert prompt.index('# Writing a video summary') < prompt.index('请对照前面的字幕复查上一稿') < prompt.index('上一稿特有的句子')
+  assert (
+    prompt.index('# Writing a video summary')
+    < prompt.index('请对照前面的字幕复查上一稿')
+    < prompt.index('上一稿特有的句子')
+  )
   # The set in use alone, each picture sharp, and the candidates, none of them sharing a printed number.
   names = sorted(path.name for path in folder.iterdir() if path.name != packing.PROMPT_NAME)
-  assert sum('补截' in name for name in names) >= 1 and sum('补截' not in name for name in names) == len(pictures.members(asset))
+  assert sum('补截' in name for name in names) >= 1 and sum('补截' not in name for name in names) == len(
+    pictures.members(asset)
+  )
   assert not any('总图' in name for name in names)
   numbers = re.findall(r'#(\d+) \d\d:\d\d:\d\d frames/', prompt)
   assert len(numbers) == len(set(numbers)) == len(names)
   # What is sent now is what the next import judges, not the first round's pictures.
-  assert set(json.loads((asset / 'picture-review.json').read_text(encoding='utf-8'))['sent']) == set(pictures.members(asset))
+  assert set(json.loads((asset / 'picture-review.json').read_text(encoding='utf-8'))['sent']) == set(
+    pictures.members(asset)
+  )
 
 
 def test_a_chat_ais_later_rounds_overwrite_the_round_before(processed):
