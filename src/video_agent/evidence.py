@@ -1,6 +1,6 @@
 """A processed video's evidence as the summary routes use it: its folder and manifest, the 视频 line, and which pictures
-go to a model or a chat AI within a number of images. Every screen page goes, one per image or several on a contact
-sheet when there are too many; the representative and extra frames fill the room left.
+go to a model or a chat AI within a number of images. Every screen page and frame goes, one per image or several on
+a contact sheet when there are too many.
 """
 
 import json
@@ -14,8 +14,9 @@ from .processor import asset_folder
 
 SUMMARY_NAME = '总结.md'
 EXTRA_NAME = re.compile(r'frame-(\d{2})-(\d{2})-(\d{2})\.jpg$')
-SHEET_SIDES = (1, 2, 3)  # pages per row on a contact sheet; 1 sends each page alone
-MIN_FRAMES = 8  # representative frames kept beside the pages, for the speaker and the room
+# (screen pages, frames) per row on contact sheets, tried in turn: 1 sends each alone; pages, which carry text, stay
+# larger than frames.
+LAYOUTS = ((1, 1), (1, 2), (2, 2), (2, 3), (3, 3))
 
 # yt-dlp puts look-alike characters into file names for those Windows forbids; these two read as odd in a title.
 FILENAME_LOOKALIKES = str.maketrans({'⧸': '/', '⧹': '\\'})
@@ -78,47 +79,57 @@ def pages(manifest):
   return [] if kind == 'frame' else [(item['time_s'], item['path']) for item in items]
 
 
+def _thin(items, count):
+  """`count` of the items, spread evenly."""
+  return items if len(items) <= count else [items[int(index * len(items) / count)] for index in range(count)]
+
+
 def plan(asset, manifest, budget, work_dir, source=None):
-  """What goes into `budget` images: every screen page, alone or on 2x2 or 3x3 contact sheets when there are too
-  many, then representative and extra frames in the room left (at least MIN_FRAMES where there are). Pages are
-  dropped, evenly, only when even 3x3 sheets do not fit. Returns ('page' | 'sheet' | 'frame', file, [(second,
-  relative)]) per image, pages per row, and the number of pages left out. `source(relative)` gives the file to use for
-  a picture (default: the picture itself), such as a copy with a label printed on it."""
+  """What goes into `budget` images: every screen page and every frame, each alone or on contact sheets, with the
+  first of LAYOUTS that fits (user decision, 2026-10-30: frames thinned to fit the room left after the pages left 66 of
+  a video's 115 pictures never sent, so never judged). Only when even 3x3 sheets do not fit are pictures left out,
+  evenly: frames down to one sheet, then pages. Returns ('page' | 'sheet' | 'frame' | 'frame-sheet', file, [(second,
+  relative)]) per image, (pages, frames) per row, and the number of pictures left out. `source(relative)` gives the
+  file to use for a picture (default: the picture itself), such as a copy with a label printed on it."""
   source = source or (lambda relative: asset / relative)
   shown = pages(manifest)
   found = frames(asset, manifest, 10**6)
-  room = max(1, budget - min(len(found), MIN_FRAMES))
-  side = next((value for value in SHEET_SIDES if math.ceil(len(shown) / value**2) <= room), SHEET_SIDES[-1])
-  per = side * side
-  dropped = 0
-  if math.ceil(len(shown) / per) > room:
-    dropped = len(shown) - room * per
-    step = len(shown) / (room * per)
-    shown = [shown[int(index * step)] for index in range(room * per)]
+  every = len(shown) + len(found)
+
+  def images(page_side, frame_side):
+    return math.ceil(len(shown) / page_side**2) + math.ceil(len(found) / frame_side**2)
+
+  sides = next((layout for layout in LAYOUTS if images(*layout) <= budget), LAYOUTS[-1])
+  if images(*sides) > budget:
+    per = sides[0] ** 2
+    shown = _thin(shown, max(1, budget - min(len(found), 1)) * per)
+    found = _thin(found, max(0, budget - math.ceil(len(shown) / per)) * sides[1] ** 2)
   chosen = []
-  if side == 1:
-    chosen = [('page', source(relative), [(second, relative)]) for second, relative in shown]
-  elif shown:
-    for index, sheet in enumerate(media.sheets([source(relative) for _, relative in shown], side, work_dir)):
-      chosen.append(('sheet', sheet, shown[index * per : (index + 1) * per]))
-  left = max(0, budget - len(chosen))
-  if len(found) > left:
-    found = [found[int(index * len(found) / left)] for index in range(left)] if left else []
-  chosen += [('frame', source(relative), [(second, relative)]) for second, relative in found]
-  return chosen, side, dropped
+  for kind, items, side in (('page', shown, sides[0]), ('frame', found, sides[1])):
+    if side == 1:
+      chosen += [(kind, source(relative), [(second, relative)]) for second, relative in items]
+    elif items:
+      per = side * side
+      made = media.sheets([source(relative) for _, relative in items], side, Path(work_dir) / f'{kind}-sheets')
+      chosen += [
+        ('sheet' if kind == 'page' else 'frame-sheet', sheet, items[index * per : (index + 1) * per])
+        for index, sheet in enumerate(made)
+      ]
+  return chosen, sides, every - len(shown) - len(found)
 
 
 def evidence_images(asset, manifest, budget, work_dir):
-  """(label, file) pairs within `budget` images, as `plan` chooses them, and the number of pages left out."""
-  chosen, side, dropped = plan(asset, manifest, budget, work_dir)
+  """(label, file) pairs within `budget` images, as `plan` chooses them, and the number of pictures left out."""
+  chosen, sides, dropped = plan(asset, manifest, budget, work_dir)
   images = []
-  first = 1
+  first = {'sheet': 1, 'frame-sheet': 1}
   for kind, path, shown in chosen:
-    if kind == 'sheet':
+    if kind in first:
       listing = '; '.join(f'{clock(second)} {relative}' for second, relative in shown)
-      last = first + len(shown) - 1
-      label = f'Screen pages {first}-{last} on one sheet, {side} per row, left to right then top to bottom: {listing}'
-      first = last + 1
+      last = first[kind] + len(shown) - 1
+      what, side = ('Screen pages', sides[0]) if kind == 'sheet' else ('Frames', sides[1])
+      label = f'{what} {first[kind]}-{last} on one sheet, {side} per row, left to right then top to bottom: {listing}'
+      first[kind] = last + 1
     else:
       ((second, relative),) = shown
       label = f'{"Screen page" if kind == "page" else "Frame"} at {clock(second)}, file {relative}:'

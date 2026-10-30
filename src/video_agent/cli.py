@@ -228,7 +228,8 @@ def build_parser():
     '--max-images',
     type=positive_int,
     default=60,
-    help='images sent with the first request; screen pages go on contact sheets when they need more (default: 60)',
+    help='images sent with the first request; screen pages and frames go on contact sheets when they need more '
+    '(default: 60)',
   )
   summarize.add_argument(
     '--max-extra-frames',

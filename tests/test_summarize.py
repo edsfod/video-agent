@@ -296,9 +296,12 @@ def test_pack_folder_fits_the_prompt_and_numbered_pictures_in_a_file_limit(proce
   first, second = sorted(out.iterdir())
   assert first.name == 'sample clip [test]-材料' and second.name == 'sample clip [test]-材料 (2)'
   names = sorted(path.name for path in first.iterdir())
-  assert len(names) == 3 and names[0].startswith('001-屏幕页-') and names[1].startswith('002-画面-')
+  # The page alone, every frame on a sheet: none is left out to fit.
+  assert len(names) == 3 and names[0].startswith('001-屏幕页-') and names[1].startswith('002-画面总图-')
   assert names[2] == '提示词.md'
   prompt = (first / '提示词.md').read_text(encoding='utf-8')
+  assert all(frame['path'] in prompt for frame in manifest['representative_frames'])
+  assert '整幅画面，拼在 1 张总图里（每张 2×2 张' in prompt and '没有附上' not in prompt
   assert f'- {names[0]}：#1 00:00:{round(page["time_s"]):02d} {page["path"]}' in prompt
   assert '链接右边的路径' in prompt and '我们看看这张图表' in prompt
   with pytest.raises(SystemExit):
@@ -306,7 +309,7 @@ def test_pack_folder_fits_the_prompt_and_numbered_pictures_in_a_file_limit(proce
   assert 'room for the prompt' in capsys.readouterr().err
 
 
-def test_screen_pages_go_on_contact_sheets_when_they_exceed_the_budget(tmp_path):
+def test_screen_pages_and_frames_go_on_contact_sheets_when_they_exceed_the_budget(tmp_path):
   import subprocess
 
   from video_agent import media
@@ -339,6 +342,15 @@ def test_screen_pages_go_on_contact_sheets_when_they_exceed_the_budget(tmp_path)
 
   squeezed, dropped = evidence_images(tmp_path, manifest, 3, tmp_path / 'c')
   assert len(squeezed) == 3 and dropped == 3 and '3 per row' in squeezed[0][0]
+
+  # Frames as well: the pages stay larger than the frames, and none is thinned out while sheets fit.
+  frames = [{'time_s': float(index), 'path': f'frames/run/screen/p-{index % 30 + 1:03d}.jpg'} for index in range(40)]
+  both, dropped = evidence_images(tmp_path, {**manifest, 'representative_frames': frames}, 13, tmp_path / 'e')
+  labels = [label for label, _ in both]
+  assert len(both) == 13 and dropped == 0
+  assert sum(label.startswith('Screen pages') and '2 per row' in label for label in labels) == 8
+  assert sum(label.startswith('Frames') and '3 per row' in label for label in labels) == 5
+  assert labels[8].startswith('Frames 1-9 on one sheet') and labels[-1].startswith('Frames 37-40 on one sheet')
 
   # The same choice with numbered names, for a chat AI that takes few files
   entries, note, _ = numbered_pictures(tmp_path, manifest, 12, tmp_path / 'd')

@@ -188,7 +188,7 @@ video-agent summarize --collection NAME [--guide] [-o WORKSPACE] [...]
 | `--model NAME` | Set with `config`; `claude-sonnet-5-5` for Anthropic | Must accept images. `openai` has no default model. |
 | `--base-url URL` | Set with `config`, else the provider's official URL | For example `http://127.0.0.1:11434/v1` for Ollama. |
 | `--request TEXT` | None | The user's wishes, such as depth or focus, passed to the model. |
-| `--max-images N` | 40 | Frames sent with the first request; more are thinned evenly. |
+| `--max-images N` | 60 | Images sent with the first request; screen pages and frames go on contact sheets to fit, and are left out evenly only when 3x3 sheets do not fit. |
 | `--max-extra-frames N` | 8 | Frames the model may request through tool calling; `0` allows none. |
 | `--no-tools` | Off | Send no tool definition, for models without tool calling. |
 | `--template NAME` | The chosen one | The summary template to follow for this summary (see `template --list`). |
@@ -285,7 +285,7 @@ video-agent pack VIDEO [-o WORKSPACE] [--request TEXT] [--template NAME] [--foll
 video-agent pack --collection NAME [--guide] [...]
 ```
 
-The summary prompt for a chat AI on the web, which cannot run commands: the rules, the template and the evidence, with the answer asked for in one Markdown code block. Alone it prints the prompt; `--zip FILE` writes `提示词.md` and the pictures into a zip, the frames keeping their relative paths, so the summary's links work once imported; `--folder PARENT` writes `提示词.md` and numbered pictures into a new folder, for chat AIs that take no zip and a limited number of files: with more than `--max-files` (default 50, the prompt included), screen pages go on contact sheets to fit. Every picture carries its number and time in its lower left corner. `--max-images` (default 40) caps the whole frames put in besides every screen page.
+The summary prompt for a chat AI on the web, which cannot run commands: the rules, the template and the evidence, with the answer asked for in one Markdown code block. Alone it prints the prompt; `--zip FILE` writes `提示词.md` and the pictures into a zip, the frames keeping their relative paths, so the summary's links work once imported; `--folder PARENT` writes `提示词.md` and numbered pictures into a new folder, for chat AIs that take no zip and a limited number of files: with more than `--max-files` (default 50, the prompt included), screen pages and whole frames go on contact sheets to fit, the pages kept larger. Every picture carries its number and time in its lower left corner. `--max-images` (default 40) caps the whole frames put in besides every screen page.
 
 `--follow-up` gives the next round after an imported answer that needs one (see `summarize`): the 复查 of the summary as saved, what the checks found and the candidates taken for the pictures asked for, to rewrite. The answer goes back with `summarize --import`. The desktop app's 「DeepSeek 网页」 route runs these rounds itself in a DeepSeek window.
 

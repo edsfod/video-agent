@@ -82,9 +82,7 @@ def _summarize_locked(
   with tempfile.TemporaryDirectory(prefix='video-agent-') as work_dir:
     images, dropped = evidence_images(asset, manifest, max_images, Path(work_dir))
     if dropped:
-      status(
-        f'{video.name}: {dropped} screen pages do not fit in {max_images} images even on sheets; pass --max-images'
-      )
+      status(f'{video.name}: {dropped} pictures do not fit in {max_images} images even on sheets; pass --max-images')
     text = _ask(
       video, info, asset, config, key, request, images, max_extra_frames, use_tools, context_path, target, status, rules
     )

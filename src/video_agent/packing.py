@@ -18,7 +18,7 @@ from .model_api import SummaryError
 
 PROMPT_NAME = '提示词.md'
 SHEET_FOLDER = '总图'
-PICTURE_KINDS = {'page': '屏幕页', 'sheet': '屏幕页总图', 'frame': '画面'}
+PICTURE_KINDS = {'page': '屏幕页', 'sheet': '屏幕页总图', 'frame': '画面', 'frame-sheet': '画面总图'}
 
 # A chat AI is asked to put the whole file in one code block (OUTPUT_FENCE), so its copy button gives the Markdown as
 # written; four backticks, so the ``` blocks inside stay inside. Any fence of three or more is taken off on import.
@@ -139,26 +139,31 @@ def numbered_pictures(asset, manifest, budget, work_dir):
   """At most `budget` pictures with numbered names, for a chat AI that takes a limited number of files, the note that
   says which frames each one shows and which paths to link, and the paths of the pictures they show."""
   labels = Labels(asset, pages(manifest) + frames(asset, manifest, 10**6), work_dir)
-  chosen, side, dropped = plan(asset, manifest, budget, work_dir, labels.path)
+  chosen, sides, dropped = plan(asset, manifest, budget, work_dir, labels.path)
   entries, lines = [], []
   for number, (kind, path, shown) in enumerate(chosen, 1):
     name = f'{number:03d}-{PICTURE_KINDS[kind]}-{clock(shown[0][0]).replace(":", "-")}.jpg'
     entries.append((name, path))
     lines.append(f'- {name}：' + '、'.join(labels.entry(second, relative) for second, relative in shown))
-  page_count = sum(len(shown) for kind, _, shown in chosen if kind != 'frame')
-  frame_count = sum(kind == 'frame' for kind, _, _ in chosen)
-  sheets = ''
-  if side > 1:
-    count = sum(kind == 'sheet' for kind, _, _ in chosen)
-    sheets = f'，拼在 {count} 张总图里（每张 {side}×{side} 页，从左到右、从上到下）'
+
+  def counted(alone, sheet, side, unit):
+    count = sum(len(shown) for kind, _, shown in chosen if kind in (alone, sheet))
+    made = sum(kind == sheet for kind, _, _ in chosen)
+    return (
+      count,
+      f'，拼在 {made} 张总图里（每张 {side}×{side} {unit}，从左到右、从上到下）' if side > 1 and count else '',
+    )
+
+  page_count, page_sheets = counted('page', 'sheet', sides[0], '页')
+  frame_count, frame_sheets = counted('frame', 'frame-sheet', sides[1], '张')
   note = (
-    f'我附上了 {len(entries)} 张图片：这个视频的 {page_count} 张屏幕页（幻灯片、代码、文档）{sheets}，'
-    f'和 {frame_count} 张整幅画面。'
+    f'我附上了 {len(entries)} 张图片：这个视频的 {page_count} 张屏幕页（幻灯片、代码、文档）{page_sheets}，'
+    f'和 {frame_count} 张整幅画面{frame_sheets}。'
     '上传后的文件名不是总结里要用的路径：下表左边是图片的文件名，右边是它显示的画面的编号、时间和路径（总图按顺'
     '序列出每一页）。写总结时链接右边的路径，链接到画面所在的那一页；没有出现在表里的画面不要链接。' + LABEL_NOTE
   )
   if dropped:
-    note += f'屏幕页太多，有 {dropped} 页没有附上，材料里提到它们时你看不到。'
+    note += f'画面太多，有 {dropped} 张没有附上，材料里提到它们时你看不到。'
   sent = [relative for _, _, shown in chosen for _, relative in shown]
   return entries, note + '\n\n' + '\n'.join(lines), sent
 
