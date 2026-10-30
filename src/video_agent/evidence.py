@@ -128,7 +128,10 @@ def evidence_images(asset, manifest, budget, work_dir):
       listing = '; '.join(f'{clock(second)} {relative}' for second, relative in shown)
       last = first[kind] + len(shown) - 1
       what, side = ('Screen pages', sides[0]) if kind == 'sheet' else ('Frames', sides[1])
-      label = f'{what} {first[kind]}-{last} on one sheet, {side} per row, left to right then top to bottom: {listing}'
+      label = (
+        f'{what} {first[kind]}-{last} on one sheet, {side} per row, left to right then top to bottom; each cell, set off '
+        f'by white space, is one picture, even when split into parts such as a camera beside a screen: {listing}'
+      )
       first[kind] = last + 1
     else:
       ((second, relative),) = shown

@@ -302,6 +302,7 @@ def test_pack_folder_fits_the_prompt_and_numbered_pictures_in_a_file_limit(proce
   prompt = (first / '提示词.md').read_text(encoding='utf-8')
   assert all(frame['path'] in prompt for frame in manifest['representative_frames'])
   assert '整幅画面，拼在 1 张总图里（每张 2×2 张' in prompt and '没有附上' not in prompt
+  assert '分屏、画中画）仍是同一张图' in prompt and '链接打开的是那张图的原图' in prompt
   assert f'- {names[0]}：#1 00:00:{round(page["time_s"]):02d} {page["path"]}' in prompt
   assert '链接右边的路径' in prompt and '我们看看这张图表' in prompt
   with pytest.raises(SystemExit):

@@ -133,6 +133,13 @@ LABEL_NOTE = (
   '每张图（总图里的每一页）左下角印着编号和时间，如「#12 00:03:14」。认图以图上印的编号为准，不要按上传的先后顺序去'
   '对；写总结时链接那个编号在下表里对应的路径。'
 )
+# Pictures go on contact sheets only to fit a file limit; the summary links each picture itself (user decision,
+# 2026-10-30), and a split screen inside one cell is not two pictures.
+SHEET_NOTE = (
+  '总图只是为了凑进文件数：总图里一格是一张图，每格左下角都有它自己的编号和时间，按编号和时间分格。一格里分成几块的'
+  '（讲者和屏幕并排的分屏、画中画）仍是同一张图：没有自己编号和时间的那一块不是另一张图，不要拆成两张来描述或链接。'
+  '链接写下表里那张图的路径，导入后链接打开的是那张图的原图，不是总图。'
+)
 
 
 def numbered_pictures(asset, manifest, budget, work_dir):
@@ -162,6 +169,8 @@ def numbered_pictures(asset, manifest, budget, work_dir):
     '上传后的文件名不是总结里要用的路径：下表左边是图片的文件名，右边是它显示的画面的编号、时间和路径（总图按顺'
     '序列出每一页）。写总结时链接右边的路径，链接到画面所在的那一页；没有出现在表里的画面不要链接。' + LABEL_NOTE
   )
+  if any(kind in ('sheet', 'frame-sheet') for kind, _, _ in chosen):
+    note += SHEET_NOTE
   if dropped:
     note += f'画面太多，有 {dropped} 张没有附上，材料里提到它们时你看不到。'
   sent = [relative for _, _, shown in chosen for _, relative in shown]
@@ -205,7 +214,7 @@ def material(video, workspace, *, request='', max_images=40, work_dir=None, max_
         lines.append(f'- {name}：' + '、'.join(labels.entry(second, relative) for second, relative in group))
       notes.append(
         f'如果一次收不了这么多图片，就看 {SHEET_FOLDER}/ 里的 {len(sheets)} 张总图：每张拼了 4 页屏幕页，从左到右、'
-        '从上到下，对应下表。链接时仍写原来的屏幕页路径。\n\n' + '\n'.join(lines)
+        '从上到下，对应下表。链接时仍写原来的屏幕页路径。' + SHEET_NOTE + '\n\n' + '\n'.join(lines)
       )
   text = '\n\n'.join(
     part
