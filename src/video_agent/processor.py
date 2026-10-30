@@ -96,7 +96,7 @@ def _copy_candidates(candidates, target, prefix):
   return result
 
 
-# Runaway limits, not targets (AGENTS.md): the frames follow the video, and reaching a limit is reported.
+# Runaway limits, not targets (docs/product-rules.md): the frames follow the video, and reaching a limit is reported.
 MAX_FRAMES = 500
 MAX_PAGES = 500
 
