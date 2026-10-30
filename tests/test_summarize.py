@@ -590,6 +590,22 @@ def test_the_checks_name_what_a_chat_ais_summary_leaves_out(processed):
   import_summary(video, workspace, text.replace('`00:09:00` 结束', '结束') + review, rounds=True)
   state = summary_review.load(asset)
   assert state['problems'] == [] and not state['again'] and state['review']['skipped'] == [[3, 5]]
+  # Each linked picture needs a word in the 复查 on what it shows beyond the transcript: a link with none is taken out
+  # and the picture not offered again, a picture with no line at all is named.
+  from video_agent import picture_review
+
+  manifest = json.loads((asset / 'manifest.json').read_text(encoding='utf-8'))
+  shown, card, silent = (frame['path'] for frame in manifest['representative_frames'][:3])
+  linked = text.replace('彩条，', f'彩条 [表格：色块]({shown}) [截图：彩条]({card})，').replace(
+    '## 概要\n\n测试。', f'## 概要\n\n测试。 [画面]({silent})'
+  )
+  lines = f'- 画面：`{shown}` 七个色块的顺序\n- 画面：{card} 无（字就是字幕）\n'
+  target, _ = import_summary(video, workspace, linked.replace('`00:09:00` 结束', '结束') + review + lines, rounds=True)
+  saved = target.read_text(encoding='utf-8')
+  assert shown in saved and card not in saved and '彩条 [表格：色块]' in saved
+  assert picture_review.load(asset)['unused'] == [card]
+  (problem,) = summary_review.load(asset)['problems']
+  assert silent in problem and shown not in problem
   # An Agent's draft has no rounds; what an earlier chat AI's round left is cleared.
   import_summary(video, workspace, text, overwrite=True)
   assert summary_review.load(asset) == {}

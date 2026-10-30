@@ -114,6 +114,10 @@ def import_summary(
   if len(text.strip()) < 40:
     raise SummaryError('The summary to import is empty or too short')
   text = repair_links(text, asset)
+  text, empty = summary_review.drop_links(text, review)
+  if empty:
+    status(f'去掉 {len(empty)} 张图的链接：复查说图上没有字幕以外的内容')
+    unused += empty  # not offered again
   length = manifest.get('duration_s') or media.duration(info)
   line = video_line(video, length)
   text = re.sub(r'^视频：.*?时长：[0-9:]+', lambda _: line, text, count=1, flags=re.MULTILINE)
