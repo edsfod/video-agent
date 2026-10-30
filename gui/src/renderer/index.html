@@ -130,6 +130,11 @@
               <button id="import-slides" type="button" class="ghost" title="选一个放着课件图片（PNG、JPEG）的文件夹，例如 AutoSlides 的 slides_… 文件夹；没有时间表的按画面对上时间">导入课件…</button>
               <span class="muted">屏幕页是屏幕区域里出现过的每一页；整幅画面按间隔和场景变化抽取，需要时按时间补截。</span>
             </form>
+            <div id="picture-sets" class="route-model" hidden>
+              <label title="总结拿到的画面：处理得到的全部，或网页 AI 筛过、你手动改过的某一套">画面<select id="picture-set"></select></label>
+              <button id="picture-set-use" type="button" class="ghost" title="以后的总结，不管哪种方式，都只拿这套里的画面">以后的总结用这套</button>
+              <label class="check"><input id="picture-show-dropped" type="checkbox" /><span id="picture-dropped-label">显示不用的画面</span></label>
+            </div>
             <h3 id="pages-title" class="frames-title" hidden></h3>
             <div id="pages" class="frames pages"></div>
             <h3 id="frames-title" class="frames-title">整幅画面</h3>
@@ -146,6 +151,7 @@
                 <label><input type="radio" name="route" value="api" /> 模型 API</label>
               </div>
               <p id="route-note" class="muted"></p>
+              <p id="summary-pictures" class="muted small-text" hidden></p>
               <div class="route-model" title="合集页的合集总结和学习提纲也用这里选的模板">
                 <label>模板<select id="route-template"></select></label>
                 <span id="route-template-note" class="muted small-text"></span>

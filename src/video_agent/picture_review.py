@@ -1,7 +1,8 @@
 """The 画面调整 section a chat AI writes at the end of a summary, since it cannot look at the video itself: pictures it
-does not need (stock footage, the speaker, a blank screen), which are not offered to anyone again, and spans in which
-it misses a picture, in which the import takes a few different candidates for the next round (`pack --follow-up`) to
-choose from. The state between rounds is in picture-review.json in the video's folder.
+does not need (stock footage, the speaker, a blank screen), which the import drops from the current set of pictures
+(pictures.py), and spans in which it misses a picture, in which the import takes a few different candidates for the
+next round (`pack --follow-up`) to choose from. The requests between rounds are in picture-review.json in the video's
+folder.
 """
 
 import json
@@ -52,28 +53,7 @@ def load(asset):
   try:
     return json.loads((Path(asset) / NAME).read_text(encoding='utf-8'))
   except (OSError, ValueError):
-    return {'unused': [], 'requests': [], 'draft': None}
-
-
-def unused(asset):
-  return set(load(asset).get('unused') or [])
-
-
-def without_unused(asset, manifest):
-  """The manifest without the pictures a chat AI said it does not need."""
-  skip = unused(asset)
-  if not skip:
-    return manifest
-  manifest = dict(manifest)
-  for key in ('representative_frames', 'screen_pages'):
-    manifest[key] = [item for item in manifest.get(key) or [] if item['path'] not in skip]
-  if manifest.get('slide_extraction'):
-    slides = manifest['slide_extraction'].get('slides') or []
-    manifest['slide_extraction'] = {
-      **manifest['slide_extraction'],
-      'slides': [i for i in slides if i['path'] not in skip],
-    }
-  return manifest
+    return {'requests': [], 'draft': None}
 
 
 def candidates(video, asset, start, end, length):
@@ -107,15 +87,12 @@ def candidates(video, asset, start, end, length):
   return taken
 
 
-def apply(video, asset, draft, unused_paths, wanted, length, status=lambda message: None):
-  """Records what the section asked for and takes the candidates; `draft` is the file the summary was saved as. The
-  caller holds the video's lock. Returns the new state. A picture the summary links stays in use, whatever the
-  section says (DeepSeek linked a picture and listed it as 不用 in one answer, 2026-10-29)."""
+def apply(video, asset, draft, wanted, length, status=lambda message: None):
+  """Takes the candidates for the spans the section asked for and records them; `draft` is the file the summary was
+  saved as. The caller holds the video's lock. Returns the new state."""
   asset = Path(asset)
   state = load(asset)
-  linked = Path(draft).read_text(encoding='utf-8')
-  known = [path for path in unused_paths if (asset / path).is_file() and path not in linked]
-  state['unused'] = sorted(set(state.get('unused') or []) | set(known))
+  state.pop('unused', None)  # kept in pictures.py's tree now
   requests = []
   for start, end, what in wanted:
     try:
@@ -127,7 +104,5 @@ def apply(video, asset, draft, unused_paths, wanted, length, status=lambda messa
     requests.append({'start_s': start, 'end_s': end, 'what': what, 'candidates': taken})
   state['requests'] = requests
   state['draft'] = Path(draft).name
-  if known:
-    status(f'不再使用 {len(known)} 张画面')
   files.write_text(asset / NAME, json.dumps(state, ensure_ascii=False, indent=2) + '\n')
   return state

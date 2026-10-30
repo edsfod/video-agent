@@ -12,6 +12,7 @@ from . import (
   corrections,
   files,
   picture_review,
+  pictures,
   processor,
   settings,
   summary_review,
@@ -289,6 +290,24 @@ def build_parser():
   )
   history.add_argument('--json', action='store_true', help='print the versions as JSON')
 
+  sets = commands.add_parser(
+    'pictures',
+    help="the sets of a video's pictures a summary is given: list them, choose one, drop or restore pictures",
+  )
+  sets.add_argument('video', type=Path)
+  sets.add_argument(
+    '-o',
+    '--output',
+    type=Path,
+    default=Path.cwd() / 'video-agent-output',
+    help='the workspace passed to process (default: video-agent-output)',
+  )
+  sets.add_argument('--use', metavar='SET', help='give later summaries this set (0 is every picture)')
+  sets.add_argument('--drop', nargs='+', default=[], metavar='PATH', help='a new set without these pictures')
+  sets.add_argument('--restore', nargs='+', default=[], metavar='PATH', help='a new set with these pictures again')
+  sets.add_argument('--from', dest='base', metavar='SET', help='with --drop or --restore: start from this set')
+  sets.add_argument('--json', action='store_true', help='print the sets as JSON')
+
   packing = commands.add_parser(
     'pack', help='the summary prompt for a chat AI: print it, or zip it with the frames (--zip)'
   )
@@ -463,6 +482,7 @@ def build_parser():
     frame: _frame,
     summarize: _summarize,
     history: _versions_command,
+    sets: _pictures,
     packing: _pack,
     models: _models,
     config: _config,
@@ -685,6 +705,33 @@ def _versions(args):
     print(f'{mark} {row["created"]}  {row["file"]}  {row["source"]}  {row["note"]}'.rstrip())
   if not rows:
     print(f'{target.name} has no versions yet')
+  return 0
+
+
+def _pictures(args):
+  video, _ = probe(args.video)
+  asset = asset_folder(args.output, video)
+  if not (asset / 'manifest.json').is_file():
+    raise ValueError(f'{video.name} has not been processed in {args.output}; run process with the same --output first')
+  with files.video_lock(asset, 'change the pictures'):
+    if args.use:
+      pictures.use(asset, args.use)
+    if args.drop or args.restore:
+      if args.base:
+        pictures.use(asset, args.base)
+      pictures.branch(asset, args.drop, args.restore, source='手动')
+    if args.use or args.drop or args.restore:
+      processor.write_context(asset)
+  found = pictures.listing(asset)
+  if args.json:
+    _emit(found, contract.Pictures)
+    return 0
+  for node in found['nodes']:
+    mark = '*' if node['id'] == found['current'] else ' '
+    said = ' '.join(item for item in (node['source'], node['note']) if item)
+    print(
+      f'{mark} {node["id"]}  {node["created"][:16]}  {said}  {len(node["members"])} 张，不用 {len(node["dropped"])} 张'
+    )
   return 0
 
 

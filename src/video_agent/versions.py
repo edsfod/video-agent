@@ -48,8 +48,11 @@ def _version_name(target, created):
   return name
 
 
-def _meta(source, note):
-  return {'created': datetime.now().isoformat(timespec='seconds'), 'source': source or '', 'note': note or ''}
+def _meta(source, note, pictures=None):
+  meta = {'created': datetime.now().isoformat(timespec='seconds'), 'source': source or '', 'note': note or ''}
+  if pictures is not None:
+    meta['pictures'] = pictures  # the set of pictures it was written with (pictures.py)
+  return meta
 
 
 def _keep_current(target, data):
@@ -61,12 +64,13 @@ def _keep_current(target, data):
   return kept
 
 
-def save(target, text, *, source='', note='', make_current=False):
+def save(target, text, *, source='', note='', make_current=False, pictures=None):
   """Writes a new text. The first one, or one asked to be current, becomes the current text (the one it replaces is
-  kept as a version); otherwise it is kept as a version beside the current one. Returns (path written, is current)."""
+  kept as a version); otherwise it is kept as a version beside the current one. `pictures` names the set of pictures
+  it was written with. Returns (path written, is current)."""
   target = Path(target)
   data = _load(target)
-  meta = _meta(source, note)
+  meta = _meta(source, note, pictures)
   if target.is_file() and not make_current:
     path = _version_name(target, meta['created'])
     files.write_text(path, text)
@@ -81,7 +85,7 @@ def save(target, text, *, source='', note='', make_current=False):
   return target, True
 
 
-def overwrite(target, name, text, *, source='', note='', make_current=False):
+def overwrite(target, name, text, *, source='', note='', make_current=False, pictures=None):
   """Writes a new text over an earlier one, the current text (`name` the target's own name) or a version, keeping
   neither: a chat AI's later round over the round before (user request, 2026-10-30: the rounds of one summary
   overwrite each other, whether or not they become current). A version written over takes the new time in its name;
@@ -90,13 +94,13 @@ def overwrite(target, name, text, *, source='', note='', make_current=False):
   data = _load(target)
   if name == target.name:
     files.write_text(target, text)
-    data['current'] = _meta(source, note)
+    data['current'] = _meta(source, note, pictures)
     _save(target, data)
     return target, True
   data['versions'].remove(_find(target, data, name))
   target.with_name(name).unlink(missing_ok=True)
   _save(target, data)
-  return save(target, text, source=source, note=note, make_current=make_current)
+  return save(target, text, source=source, note=note, make_current=make_current, pictures=pictures)
 
 
 def keep(target, *, source=''):
@@ -135,7 +139,7 @@ def use(target, name):
   files.write_text(target, text)
   target.with_name(name).unlink()
   data['versions'].remove(chosen)
-  data['current'] = {key: chosen[key] for key in ('created', 'source', 'note')}
+  data['current'] = {key: chosen[key] for key in ('created', 'source', 'note', 'pictures') if key in chosen}
   _save(target, data)
 
 
@@ -169,7 +173,14 @@ def listing(target) -> contract.Versions:
 
   def entry(file, meta) -> contract.Version:
     path = target.with_name(file)
-    return {'file': file, 'created': meta['created'], 'source': meta['source'], 'note': meta['note'], 'path': str(path)}
+    return {
+      'file': file,
+      'created': meta['created'],
+      'source': meta['source'],
+      'note': meta['note'],
+      'path': str(path),
+      'pictures': meta.get('pictures'),
+    }
 
   current = entry(target.name, data['current']) if target.is_file() and data['current'] else None
   versions = [

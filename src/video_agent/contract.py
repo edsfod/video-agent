@@ -220,6 +220,7 @@ class Version(TypedDict):
   source: str
   note: str
   path: str
+  pictures: str | None  # the set of pictures it was written with (`pictures --json`), None when not recorded
 
 
 class Versions(TypedDict):
@@ -227,6 +228,23 @@ class Versions(TypedDict):
 
   current: Version | None
   versions: list[Version]
+
+
+class PictureNode(TypedDict):
+  id: str
+  parent: str | None
+  created: str
+  source: str
+  note: str
+  members: list[str]  # the pictures in this set, relative to the video's folder
+  dropped: list[str]  # the video's other pictures
+
+
+class Pictures(TypedDict):
+  """`pictures --json`: the sets of a video's pictures, the root (every picture) first, and the one in use."""
+
+  current: str
+  nodes: list[PictureNode]
 
 
 class Template(TypedDict):
@@ -319,6 +337,7 @@ OUTPUTS: dict[str, Any] = {
   'fix': Fixed,
   'compress': Compressed | Checked | Failed,
   'versions': Versions,
+  'pictures': Pictures,
   'template': Template | TemplateDeleted | list[Template],
   'collection': Collection | list[Collection] | Saved,
   'models': list[str],

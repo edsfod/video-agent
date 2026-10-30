@@ -222,6 +222,10 @@ main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 .frame img { width: 100%; display: block; aspect-ratio: 16 / 9; object-fit: cover; background: #000; }
 .frame div { padding: 4px 10px; font-family: var(--mono); font-size: 12px; color: var(--text-muted); }
 .frame.extra div::after { content: ' · 补截'; font-family: inherit; }
+.frame { position: relative; }
+.frame.dropped img { opacity: 0.35; }
+.frame .frame-toggle { position: absolute; top: 6px; right: 6px; padding: 2px 8px; font-size: 12px; opacity: 0; }
+.frame:hover .frame-toggle, .frame.dropped .frame-toggle { opacity: 1; }
 .frames-title { font-size: 13px; color: var(--text-muted); margin: 16px 0 8px; font-weight: 600; }
 .pages .frame img { object-fit: contain; }
 .layout-card { margin-top: 12px; }

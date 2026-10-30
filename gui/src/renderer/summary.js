@@ -6,7 +6,7 @@ import { ACTIVE, addTask, logAppend, sameVideo } from './task-panel.js';
 import { chosenTemplate } from './templates.js';
 import { when } from './updates.js';
 import { refresh } from './video-list.js';
-import { showImage } from './video-view.js';
+import { pictureSetLabel, showImage } from './video-view.js';
 
 const ROUTE_NOTES = {
   claude: '在后台运行 Claude Code，按 video-agent skill 写总结，会按需补截画面。使用你的 Claude 订阅。',
@@ -119,6 +119,19 @@ function renderRoutes() {
   renderModel();
 }
 
+// Which set of pictures the next summary is given, by any route (pictures.py); the 画面 tab chooses it.
+async function renderPictureSet(video) {
+  const line = $('summary-pictures');
+  line.hidden = true;
+  if (!video.info?.processed) return;
+  const sets = await window.va.cliJson(['pictures', video.path, '-o', state.settings.workspace, '--json']);
+  if (failed(sets) || pageVideo() !== video) return;
+  const node = sets.nodes.find((item) => item.id === sets.current);
+  if (!node) return;
+  line.textContent = `画面：用「${pictureSetLabel(node)}」这套，在「画面」里可以换。`;
+  line.hidden = false;
+}
+
 export async function renderSummary(video) {
   renderRoutes();
   const article = $('summary');
@@ -129,6 +142,7 @@ export async function renderSummary(video) {
   const copying = state.route === 'copy' && !!info?.processed;
   for (const id of ['export-zip', 'export-folder', 'export-limit-label', 'import-summary']) $(id).hidden = !copying;
   $('export-limit').value = state.settings.webFiles || 50;
+  renderPictureSet(video);
   if (!info?.processed) {
     $('summary-versions').hidden = true;
     article.replaceChildren(element('p', { className: 'placeholder', textContent: '先在「处理」里处理这个视频，再生成总结。' }));

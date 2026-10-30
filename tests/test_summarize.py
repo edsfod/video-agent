@@ -505,7 +505,7 @@ def test_the_picture_section_is_read_in_the_forms_chat_ais_write():
 
 
 def test_a_chat_ai_drops_pictures_and_asks_for_others_over_rounds(processed, capsys):
-  from video_agent import cli, picture_review
+  from video_agent import cli, picture_review, pictures
 
   video, workspace = processed
   asset = asset_folder(workspace, video.resolve())
@@ -524,7 +524,8 @@ def test_a_chat_ai_drops_pictures_and_asks_for_others_over_rounds(processed, cap
   assert '--follow-up' in told and '下一轮：复查上一稿；2 处补截的候选' in told
   assert '画面调整' not in (asset / '总结.md').read_text(encoding='utf-8')
   state = picture_review.load(asset)
-  assert state['unused'] == [dropped], 'a picture the summary links stays in use'
+  kept = pictures.members(asset)
+  assert dropped not in kept and linked in kept, 'a picture the summary links stays in use'
   wanted, beyond = state['requests']
   assert 1 <= len(wanted['candidates']) <= picture_review.CANDIDATES
   assert all((asset / path).is_file() for path in wanted['candidates']) and beyond['candidates'] == []
@@ -564,7 +565,11 @@ def test_a_chat_ai_drops_pictures_and_asks_for_others_over_rounds(processed, cap
   assert cli.main(['summarize', str(video), '-o', str(workspace), '--import', str(answer), '--make-current']) == 0
   told = capsys.readouterr().err
   assert '改正 1 处，但稿子和上一稿一样' in told and '--follow-up' not in told
-  assert picture_review.load(asset)['unused'] == [dropped], 'what was dropped stays dropped'
+  assert dropped not in pictures.members(asset), 'what was dropped stays dropped'
+  # Every picture again from the root of the tree, and the dropped one back by hand.
+  assert cli.main(['pictures', str(video), '-o', str(workspace), '--use', '0']) == 0
+  assert dropped in (asset / 'summary-context.md').read_text(encoding='utf-8')
+  capsys.readouterr()
   with pytest.raises(SystemExit):
     cli.main(['pack', str(video), '-o', str(workspace), '--follow-up'])
   assert 'no next round' in capsys.readouterr().err
@@ -597,6 +602,45 @@ def test_a_chat_ais_later_rounds_overwrite_the_round_before(processed):
   assert len(versions.listing(asset / '总结.md')['versions']) == 2
 
 
+def test_the_pictures_a_summary_is_given_grow_as_a_tree(processed, capsys):
+  from video_agent import cli, pictures, versions
+  from video_agent.importer import import_summary
+
+  video, workspace = processed
+  asset = asset_folder(workspace, video.resolve())
+  every = pictures.members(asset)
+  first, second, third = every[:3]
+  body = '# 标题\n\n## 概要\n\n测试总结，讲了彩条和测试图案各自的用途，以及怎样看出画面偏色。{}\n'
+  # A round drops two pictures; the next links one of them again, which brings it back.
+  import_summary(
+    video,
+    workspace,
+    body.format('') + f'\n## 画面调整\n\n- 不用：{first}\n- 不用：{second}\n',
+    rounds=True,
+    note='第 1 轮',
+  )
+  sorted_once = pictures.current(asset)
+  assert sorted_once != pictures.ROOT and first not in pictures.members(asset) and second not in pictures.members(asset)
+  current = versions.listing(asset / '总结.md')['current']
+  assert current and current['pictures'] == sorted_once, 'the version names the set it was written with'
+  linked = body.format(f' [表格：色块]({second})') + '\n## 画面调整\n\n无\n\n## 复查\n\n- 补上：色块\n'
+  import_summary(video, workspace, linked + f'- 画面：{second} 色块的顺序\n', rounds=True, note='第 2 轮')
+  assert second in pictures.members(asset) and first not in pictures.members(asset)
+  assert pictures.listing(asset)['nodes'][-1]['parent'] == sorted_once
+  # Later summaries, by any route, are given the current set; an earlier one can be chosen again.
+  assert first not in (asset / 'summary-context.md').read_text(encoding='utf-8')
+  assert cli.main(['pictures', str(video), '-o', str(workspace), '--use', sorted_once]) == 0
+  assert second not in pictures.members(asset)
+  capsys.readouterr()
+  # By hand: a picture dropped from a chosen set, and one restored, each a new set.
+  assert cli.main(['pictures', str(video), '-o', str(workspace), '--from', '0', '--drop', third, '--json']) == 0
+  listed = json.loads(capsys.readouterr().out)
+  assert listed['nodes'][-1]['source'] == '手动' and listed['nodes'][-1]['parent'] == '0'
+  assert third in listed['nodes'][-1]['dropped'] and first in listed['nodes'][-1]['members']
+  assert cli.main(['pictures', str(video), '-o', str(workspace), '--restore', third]) == 0
+  assert pictures.members(asset) == every
+
+
 def test_the_checks_name_what_a_chat_ais_summary_leaves_out(processed):
   from video_agent import summary_review
   from video_agent.importer import import_summary
@@ -621,7 +665,7 @@ def test_the_checks_name_what_a_chat_ais_summary_leaves_out(processed):
   assert state['problems'] == [] and not state['again'] and state['review']['skipped'] == [[3, 5]]
   # Each linked picture needs a word in the 复查 on what it shows beyond the transcript: a link with none is taken out
   # and the picture not offered again, a picture with no line at all is named.
-  from video_agent import picture_review
+  from video_agent import pictures
 
   manifest = json.loads((asset / 'manifest.json').read_text(encoding='utf-8'))
   shown, card, silent = (frame['path'] for frame in manifest['representative_frames'][:3])
@@ -632,7 +676,7 @@ def test_the_checks_name_what_a_chat_ais_summary_leaves_out(processed):
   target, _ = import_summary(video, workspace, linked.replace('`00:09:00` 结束', '结束') + review + lines, rounds=True)
   saved = target.read_text(encoding='utf-8')
   assert shown in saved and card not in saved and '彩条 [表格：色块]' in saved
-  assert picture_review.load(asset)['unused'] == [card]
+  assert card not in pictures.members(asset)
   (problem,) = summary_review.load(asset)['problems']
   assert silent in problem and shown not in problem
   # An Agent's draft has no rounds; what an earlier chat AI's round left is cleared.

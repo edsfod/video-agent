@@ -341,6 +341,34 @@ devTest('summary through DeepSeek\'s web chat, in rounds until it asks for no mo
   assert.deepEqual(versions.map((item) => item.note), ['第 2 轮']);
 });
 
+devTest('the 画面 tab shows one set of pictures, and a picture dropped by hand leaves it as a new set', async () => {
+  await page.click('.tabs button[data-tab=frames]');
+  await page.waitForSelector('#picture-sets:not([hidden])');
+  const count = () => page.$$eval('#frames .frame', (cards) => cards.length);
+  const before = await count();
+  await page.hover('#frames .frame');
+  await page.click('#frames .frame .frame-toggle');
+  await page.waitForFunction((n) => document.querySelectorAll('#frames .frame').length === n - 1, before);
+  const sets = JSON.parse(cli(['pictures', VIDEO, '-o', WORKSPACE, '--json']));
+  const made = sets.nodes.find((node) => node.id === sets.current);
+  const root = sets.nodes[0];
+  assert.equal(made.source, '手动');
+  // Left out besides the one dropped: the candidates DeepSeek was offered and did not link.
+  assert.equal(made.dropped.length, root.dropped.length + 1);
+  assert.match(await page.$eval('#picture-set option:checked', (option) => option.textContent), /手动.*以后的总结用这套/);
+  // The pictures it leaves out show only when asked for, and come back from there.
+  const [dropped] = made.dropped.filter((path) => !root.dropped.includes(path));
+  await page.check('#picture-show-dropped');
+  await page.click(`#frames .frame.dropped[data-path="${dropped}"] .frame-toggle`);
+  await page.waitForSelector(`#frames .frame:not(.dropped)[data-path="${dropped}"]`);
+  await page.uncheck('#picture-show-dropped');
+  await page.waitForFunction(() => !document.querySelector('#frames .frame.dropped'));
+  assert.equal(await count(), before);
+  await page.click('.tabs button[data-tab=summary]');
+  await page.waitForSelector('#summary-pictures:not([hidden])');
+  assert.match(await page.textContent('#summary-pictures'), /手动/);
+});
+
 devTest('copy material puts the rules and transcript on the clipboard', async () => {
   await page.check('input[name=route][value=copy]');
   await page.click('#run-summary');

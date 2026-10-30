@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import quote
 
-from . import corrections, files, layout, media, page_rules, picture_review, slide_extractor, transcript
+from . import corrections, files, layout, media, page_rules, pictures, slide_extractor, transcript
 
 
 def slug(value):
@@ -295,7 +295,7 @@ def write_context(asset):
   """Writes summary-context.md from the manifest and the transcript in use (the cleaned one when there is one), so a
   cleaned transcript reaches every summary route without processing the video again."""
   asset = Path(asset)
-  manifest = picture_review.without_unused(asset, json.loads((asset / 'manifest.json').read_text(encoding='utf-8')))
+  manifest = pictures.filtered(asset, json.loads((asset / 'manifest.json').read_text(encoding='utf-8')))
   files.write_text(asset / 'summary-context.md', _context(manifest, corrections.rows_in_use(asset) or []))
 
 

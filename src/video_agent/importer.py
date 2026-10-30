@@ -8,7 +8,7 @@ import re
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-from . import collection, files, media, picture_review, processor, summary_review, templates, versions
+from . import collection, files, media, picture_review, pictures, processor, summary_review, templates, versions
 from .evidence import SUMMARY_NAME, processed, video_line
 from .model_api import SummaryError
 
@@ -108,7 +108,7 @@ def import_summary(
   written, corrections applied)."""
   video, info, asset, manifest = processed(video, workspace)
   text, pairs = take_corrections(clean(text))
-  pictures = bool(picture_review.SECTION.search(text))
+  adjusted = bool(picture_review.SECTION.search(text))
   text, unused, wanted = picture_review.take(text)
   text, review = summary_review.take(text) if rounds else (text, None)
   if len(text.strip()) < 40:
@@ -117,13 +117,24 @@ def import_summary(
   text, empty = summary_review.drop_links(text, review)
   if empty:
     status(f'去掉 {len(empty)} 张图的链接：复查说图上没有字幕以外的内容')
-    unused += empty  # not offered again
+    unused += empty  # dropped from the set of pictures below
   length = manifest.get('duration_s') or media.duration(info)
   line = video_line(video, length)
   text = re.sub(r'^视频：.*?时长：[0-9:]+', lambda _: line, text, count=1, flags=re.MULTILINE)
   with files.video_lock(asset, 'import the summary'):
     text = _capture_frames(text, video, asset, length, status)
-    written = {'source': source or '导入', 'note': note, 'make_current': overwrite}
+    # A chat AI's round grows a set of pictures from the current one: without those it does not need, with every
+    # picture its draft links (pictures.py).
+    node = pictures.current(asset)
+    if rounds:
+      had = set(pictures.members(asset))
+      linked = [unquote(match[1]) for match in summary_review.LINK.finditer(text)]
+      node = pictures.branch(asset, unused, linked, source=source or '导入', note=note)
+      now = set(pictures.members(asset))
+      if now != had:
+        status(f'画面：去掉 {len(had - now)} 张，加上 {len(now - had)} 张，这个视频以后的总结用剩下的 {len(now)} 张')
+        processor.write_context(asset)
+    written = {'source': source or '导入', 'note': note, 'make_current': overwrite, 'pictures': node}
     # A later round (an answer with a 复查, after an import that asked for another round) overwrites the round before.
     before = summary_review.load(asset) if review is not None else {}
     later = before.get('again') or picture_review.load(asset).get('requests')
@@ -133,10 +144,9 @@ def import_summary(
       target, _ = versions.overwrite(asset / SUMMARY_NAME, before['draft'], text, **written)
     else:
       target, _ = versions.save(asset / SUMMARY_NAME, text, **written)
-    if unused or wanted or (asset / picture_review.NAME).is_file():
-      picture_review.apply(video, asset, target, unused, wanted, length, status)
-      if unused:
-        processor.write_context(asset)
+    if wanted or (asset / picture_review.NAME).is_file():
+      state = picture_review.apply(video, asset, target, wanted, length, status)
+      pictures.candidates(asset, [path for request in state['requests'] for path in request['candidates']])
     if pairs:
       from . import corrections
 
@@ -147,7 +157,7 @@ def import_summary(
       (asset / summary_review.NAME).unlink(missing_ok=True)  # a later round would rewrite an older draft
     else:
       problems = summary_review.check(
-        target.read_text(encoding='utf-8'), asset, templates.text(template), length, pictures=pictures, review=review
+        target.read_text(encoding='utf-8'), asset, templates.text(template), length, pictures=adjusted, review=review
       )
       summary_review.record(asset, target, review, problems, status, before=draft)
   return target, pairs

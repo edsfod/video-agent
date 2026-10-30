@@ -294,44 +294,133 @@ $('corrections-form').onsubmit = async (event) => {
   $('correction-right').value = '';
 };
 
-function frameCard(item) {
-  const card = element('div', { className: 'frame' + (item.extra ? ' extra' : '') }, [
+/** A set of pictures as the window names it (pictures.py). @param {import('../cli-types').PictureNode} node */
+export function pictureSetLabel(node) {
+  if (node.id === '0') return `全部（处理得到的，${node.members.length} 张）`;
+  const when = node.created.slice(5, 16).replace('T', ' ');
+  return [node.source, node.note, when].filter(Boolean).join(' · ') + `（${node.members.length} 张）`;
+}
+
+/**
+ * @param {{ time: number, file: string, extra?: boolean, path?: string, dropped?: boolean }} item
+ * @param {(path: string, dropped: boolean) => void} [toggle] drops the picture from the set shown, or restores it
+ */
+function frameCard(item, toggle) {
+  const card = element('div', { className: 'frame' + (item.extra ? ' extra' : '') + (item.dropped ? ' dropped' : '') }, [
     element('img', { src: fileUrl(item.file), alt: '', loading: 'lazy' }),
     element('div', { textContent: clock(item.time) }),
   ]);
   card.onclick = () => showImage(item.file, clock(item.time));
+  if (toggle && item.path) {
+    const path = item.path;
+    card.dataset.path = path;
+    const button = element('button', {
+      type: 'button',
+      className: 'frame-toggle ghost',
+      textContent: item.dropped ? '恢复' : '不用',
+      title: item.dropped ? '放回这套画面（存成新的一套）' : '从这套画面里去掉（存成新的一套）',
+    });
+    button.onclick = (event) => {
+      event.stopPropagation();
+      toggle(path, !!item.dropped);
+    };
+    card.append(button);
+  }
   return card;
 }
 
-function renderFrames(video) {
+const EXTRA = /frame-(\d\d)-(\d\d)-(\d\d)\.jpg$/;
+
+// The 画面 tab shows one set of pictures (pictures.py): by default the one the summary shown on the 总结 tab was
+// written with, else the one later summaries are given (user request, 2026-10-30: the pictures not needed out of
+// sight). The pictures it leaves out show only when asked for.
+async function renderFrames(video) {
   const box = $('frames');
   const manifest = video.info?.manifest;
-  // Slides taken from a folder (AutoSlides' or one chosen) stand for the screen pages wherever they have times.
-  const slides = (manifest?.slide_extraction?.slides || []).filter((slide) => slide.time_s !== null);
-  const pages = slides.length ? slides : manifest?.screen_pages || [];
-  $('pages-title').hidden = !pages.length;
-  $('pages-title').textContent = slides.length ? `课件（${pages.length}）` : `屏幕页（${pages.length}）`;
-  $('pages').replaceChildren(
-    ...pages.map((page) => frameCard({ time: page.time_s, file: joinPath(video.info.folder, page.path) })),
-  );
   $('frames-title').hidden = !manifest;
+  $('picture-sets').hidden = true;
   if (!manifest) {
+    $('pages-title').hidden = true;
+    $('pages').replaceChildren();
     box.replaceChildren(element('p', { className: 'muted', textContent: '还没有画面。先在「处理」里处理这个视频。' }));
     return;
   }
-  const items = manifest.representative_frames.map((frame) => ({
-    time: frame.time_s,
-    file: joinPath(video.info.folder, frame.path),
-    extra: false,
-  }));
-  for (const file of video.info.extra_frames) {
-    const match = baseName(file).match(/frame-(\d\d)-(\d\d)-(\d\d)\.jpg$/);
-    if (match) items.push({ time: +match[1] * 3600 + +match[2] * 60 + +match[3], file, extra: true });
+  const where = ['-o', state.settings.workspace, '--json'];
+  const [sets, list] = await Promise.all([
+    window.va.cliJson(['pictures', video.path, ...where]),
+    window.va.cliJson(['versions', video.path, ...where]),
+  ]);
+  if (current() !== video) return;
+  if (failed(sets)) {
+    box.replaceChildren(element('p', { className: 'muted', textContent: `读不出画面：${sets.error}` }));
+    return;
   }
-  items.sort((a, b) => a.time - b.time);
-  $('frames-title').textContent = `整幅画面（${items.length}）`;
-  box.replaceChildren(...items.map(frameCard));
+  const shownVersion = state.version;
+  const version = shownVersion && shownVersion.video === video.path ? shownVersion.file : '';
+  const chosen = state.pictureSet;
+  if (!chosen || chosen.video !== video.path || chosen.version !== version || !sets.nodes.some((node) => node.id === chosen.id)) {
+    const versions = failed(list) ? null : list;
+    const written = version ? versions?.versions.find((entry) => entry.file === version)?.pictures : versions?.current?.pictures;
+    const id = written && sets.nodes.some((node) => node.id === written) ? written : sets.current;
+    state.pictureSet = { video: video.path, id, version };
+  }
+  const shownId = /** @type {{ id: string }} */ (state.pictureSet).id;
+  const node = /** @type {import('../cli-types').PictureNode} */ (sets.nodes.find((item) => item.id === shownId));
+  $('picture-sets').hidden = false;
+  $('picture-set').replaceChildren(
+    ...sets.nodes.map((item) =>
+      element('option', { value: item.id, textContent: pictureSetLabel(item) + (item.id === sets.current ? ' · 以后的总结用这套' : '') }),
+    ),
+  );
+  $('picture-set').value = shownId;
+  $('picture-set-use').disabled = shownId === sets.current;
+  $('picture-show-dropped').checked = state.showDropped;
+  $('picture-dropped-label').textContent = `显示不用的 ${node.dropped.length} 张`;
+  const inSet = new Set(node.members);
+  const wanted = (path) => inSet.has(path) || state.showDropped;
+  const toggle = async (path, dropped) => {
+    const result = await window.va.cliJson(['pictures', video.path, '--from', shownId, dropped ? '--restore' : '--drop', path, ...where]);
+    if (failed(result)) return alert(result.error);
+    state.pictureSet = { video: video.path, id: result.current, version };
+    renderFrames(video);
+  };
+  const card = (time, path, extra = false) =>
+    frameCard({ time, file: joinPath(video.info.folder, path), extra, path, dropped: !inSet.has(path) }, toggle);
+  // Slides taken from a folder (AutoSlides' or one chosen) stand for the screen pages wherever they have times.
+  const slides = (manifest.slide_extraction?.slides || []).filter((slide) => slide.time_s !== null);
+  const pages = (slides.length ? slides : manifest.screen_pages || []).filter((page) => wanted(page.path));
+  $('pages-title').hidden = !pages.length;
+  $('pages-title').textContent = slides.length ? `课件（${pages.length}）` : `屏幕页（${pages.length}）`;
+  $('pages').replaceChildren(...pages.map((page) => card(/** @type {number} */ (page.time_s), page.path)));
+  /** @type {[number, string, boolean][]} */
+  const items = manifest.representative_frames.map((frame) => [frame.time_s, frame.path, false]);
+  for (const path of [...node.members, ...node.dropped].filter((item) => item.startsWith('frames/extra/'))) {
+    const match = path.match(EXTRA);
+    if (match) items.push([+match[1] * 3600 + +match[2] * 60 + +match[3], path, true]);
+  }
+  const shown = items.filter(([, path]) => wanted(path)).sort((a, b) => a[0] - b[0]);
+  $('frames-title').textContent = `整幅画面（${shown.length}）`;
+  box.replaceChildren(...shown.map(([time, path, extra]) => card(time, path, extra)));
 }
+
+$('picture-set').onchange = () => {
+  const video = current();
+  if (!video) return;
+  state.pictureSet = { video: video.path, id: $('picture-set').value, version: state.version?.video === video.path ? state.version.file : '' };
+  renderFrames(video);
+};
+$('picture-set-use').onclick = async () => {
+  const video = current();
+  if (!video || !state.pictureSet) return;
+  const result = await window.va.cliJson(['pictures', video.path, '--use', state.pictureSet.id, '-o', state.settings.workspace, '--json']);
+  if (failed(result)) return alert(result.error);
+  renderFrames(video);
+};
+$('picture-show-dropped').onchange = () => {
+  state.showDropped = $('picture-show-dropped').checked;
+  const video = current();
+  if (video) renderFrames(video);
+};
 
 // A folder of slide images, such as AutoSlides' or exported from the PPT; processing runs again with it.
 $('import-slides').onclick = async () => {

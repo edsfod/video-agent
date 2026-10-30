@@ -195,12 +195,29 @@ export interface Version {
   source: string;
   note: string;
   path: string;
+  pictures: string | null;
 }
 
 /** `versions --json`: the current text and the others, newest first. */
 export interface Versions {
   current: Version | null;
   versions: Version[];
+}
+
+export interface PictureNode {
+  id: string;
+  parent: string | null;
+  created: string;
+  source: string;
+  note: string;
+  members: string[];
+  dropped: string[];
+}
+
+/** `pictures --json`: the sets of a video's pictures, the root (every picture) first, and the one in use. */
+export interface Pictures {
+  current: string;
+  nodes: PictureNode[];
 }
 
 /** `template --list` (a list of these), and `template NAME --info|--use|--edit|--accept|--reset|--copy NEW`. */
@@ -284,6 +301,7 @@ export interface CliOutputs {
   fix: Fixed;
   compress: Compressed | Checked | Failed;
   versions: Versions;
+  pictures: Pictures;
   template: Template | TemplateDeleted | Template[];
   collection: Collection | Collection[] | Saved;
   models: string[];

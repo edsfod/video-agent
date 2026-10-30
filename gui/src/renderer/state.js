@@ -60,6 +60,9 @@ export const state = {
   appVersion: '',
   /** @type {import('../cli-types').Versions | null} */
   versionList: null,
+  /** @type {{ video: string, id: string, version: string } | null} */
+  pictureSet: null, // the set of pictures the 画面 tab shows, chosen while that summary version was shown
+  showDropped: false, // the 画面 tab also shows the pictures its set leaves out
 };
 
 // ---------- helpers ----------

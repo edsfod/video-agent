@@ -10,7 +10,7 @@ import json
 import tempfile
 from pathlib import Path
 
-from . import files, media, model_api, processor, templates, versions
+from . import files, media, model_api, pictures, processor, templates, versions
 from .evidence import SUMMARY_NAME, clock, evidence_images, video_line
 from .importer import clean
 from .model_api import SummaryError
@@ -89,7 +89,10 @@ def _summarize_locked(
       video, info, asset, config, key, request, images, max_extra_frames, use_tools, context_path, target, status, rules
     )
   # An existing summary stays current unless the new one is asked to replace it; either way neither is lost.
-  path, _ = versions.save(target, text, source=f'模型 API · {config["model"]}', note=request, make_current=overwrite)
+  source = f'模型 API · {config["model"]}'
+  path, _ = versions.save(
+    target, text, source=source, note=request, make_current=overwrite, pictures=pictures.current(asset)
+  )
   return path
 
 
