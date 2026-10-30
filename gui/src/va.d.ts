@@ -32,6 +32,7 @@ export interface Settings {
   /** Other agents shown as summary routes; null shows the presets found on this computer. */
   agents: { key: string; command?: string }[] | null;
   webFiles: number;
+  webRounds: number;
   theme?: 'system' | 'light' | 'dark';
   accountOrder?: string[];
   hiddenAccounts?: string[];

@@ -11,7 +11,8 @@ const { send } = shared;
 const deepseek = require('./deepseek');
 const { cliCommand, runToEnd } = require('./programs');
 
-// A runaway limit, said when reached: a chat AI whose 复查 keeps finding something stops here (AGENTS.md).
+// A runaway limit, said when reached: a chat AI whose 复查 keeps finding something stops here (AGENTS.md); the user
+// sets it on the summary page (user request, 2026-10-30).
 const MAX_ROUNDS = 6;
 const SOURCE = 'DeepSeek 网页';
 /** The conversations of the running tasks, by task id. @type {Map<string, ReturnType<typeof deepseek.conversation>>} */
@@ -37,11 +38,12 @@ async function startDeepSeek(task) {
   const current = !fs.existsSync(path.join(task.folder, '总结.md'));
   const chat = deepseek.conversation();
   running.set(task.id, chat);
+  const most = task.maxRounds || MAX_ROUNDS;
   let code = 0;
   try {
     for (let round = 1; ; round++) {
-      if (round > MAX_ROUNDS) {
-        say(`已经 ${MAX_ROUNDS} 轮，DeepSeek 的复查还在补上或改正，先停在这里；最后一轮的总结已经保存。`);
+      if (round > most) {
+        say(`已经 ${most} 轮，DeepSeek 的复查还在补上或改正，先停在这里；最后一轮的总结已经保存。`);
         break;
       }
       const args = ['pack', task.video, '-o', task.workspace, '--folder', work, '--max-files', String(task.maxFiles || 50)];

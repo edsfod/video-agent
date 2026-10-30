@@ -12,7 +12,7 @@ const ROUTE_NOTES = {
   claude: '在后台运行 Claude Code，按 video-agent skill 写总结，会按需补截画面。使用你的 Claude 订阅。',
   codex: '在后台运行 Codex，按同一份 skill 写总结。使用你的 Codex 订阅。',
   api: '用设置里的模型 API 写总结（字幕和画面会发给该服务商）。支持工具调用的模型会按需补截画面。',
-  deepseek: '在 DeepSeek 网页版里写总结：程序打开 DeepSeek 窗口（第一次要在里面登录），发去提示词和画面，开着深度思考和智能搜索，写完自动导入。之后每一轮请它对照字幕复查上一稿，补上漏掉的内容，并把程序查出的问题（缺的节、没写到的时间段）和它要补的画面一起发过去，直到复查不再补上或改正，最多 6 轮。每一轮都能在窗口里看到。',
+  deepseek: '在 DeepSeek 网页版里写总结：程序打开 DeepSeek 窗口（第一次要在里面登录），发去提示词和画面，开着深度思考和智能搜索，写完自动导入。之后每一轮请它对照字幕复查上一稿，补上漏掉的内容，并把程序查出的问题（缺的节、没写到的时间段）和它要补的画面一起发过去，直到复查不再补上或改正，最多的轮数在下面设。每一轮都能在窗口里看到。',
   copy: '把规则、模板和字幕材料复制到剪贴板，贴进任何聊天 AI。要连画面一起给，用「导出 zip」；不收 zip、文件数有上限的（如 DeepSeek 网页版最多 50 个），用「导出文件夹」，屏幕页会拼成总图凑进上限。写好后用「导入总结」存回来，画面链接照样能点开。',
 };
 
@@ -142,6 +142,8 @@ export async function renderSummary(video) {
   const copying = state.route === 'copy' && !!info?.processed;
   for (const id of ['export-zip', 'export-folder', 'export-limit-label', 'import-summary']) $(id).hidden = !copying;
   $('export-limit').value = state.settings.webFiles || 50;
+  $('rounds-limit-label').hidden = state.route !== 'deepseek' || !info?.processed;
+  $('rounds-limit').value = state.settings.webRounds || 6;
   renderPictureSet(video);
   if (!info?.processed) {
     $('summary-versions').hidden = true;
@@ -260,6 +262,7 @@ $('run-summary').onclick = async () => {
     route,
     agent: ['api', 'deepseek'].includes(route) ? undefined : route,
     maxFiles: route === 'deepseek' ? state.settings.webFiles || 50 : undefined,
+    maxRounds: route === 'deepseek' ? state.settings.webRounds || 6 : undefined,
     video: video.path,
     folder: info.folder,
     request,
@@ -351,6 +354,13 @@ $('export-folder').onclick = async () => {
   const folder = result.out.trim().replace(/ \(\d+ pictures\)$/, '');
   summaryState(`已导出到 ${baseName(folder)}：把里面的文件全部交给网页 AI，提示词.md 也是其中一个。`);
   window.va.reveal(folder);
+};
+
+// The DeepSeek route's rounds at most (user request, 2026-10-30), kept for the next task.
+$('rounds-limit').onchange = async () => {
+  const limit = Math.max(1, Math.round(Number($('rounds-limit').value)) || 6);
+  $('rounds-limit').value = limit;
+  if (limit !== state.settings.webRounds) state.settings = await window.va.saveSettings({ webRounds: limit });
 };
 
 // A video with a running or queued processing or summary task would be written twice.

@@ -19,7 +19,6 @@ from . import contract, files
 
 NAME = 'pictures.json'
 ROOT = '0'
-OLD_REVIEW = 'picture-review.json'  # where a list of pictures not to use was kept before the tree
 
 
 def _manifest(asset):
@@ -37,21 +36,6 @@ def _extras(asset):
   return sorted(path.relative_to(asset).as_posix() for path in (Path(asset) / 'frames' / 'extra').glob('frame-*.jpg'))
 
 
-def _fresh(asset, manifest):
-  """A tree with only the root; a list of pictures not to use kept before the tree becomes its first node."""
-  tree = {'run': manifest.get('representative_frame_run'), 'current': ROOT, 'nodes': []}
-  try:
-    old = json.loads((Path(asset) / OLD_REVIEW).read_text(encoding='utf-8')).get('unused') or []
-  except (OSError, ValueError):
-    old = []
-  known = set(_processed(manifest)) | set(_extras(asset))
-  drop = sorted(path for path in old if path in known)
-  if drop:
-    tree['nodes'].append(_node('1', ROOT, '网页 AI', '以前去掉的画面', drop, []))
-    tree['current'] = '1'
-  return tree
-
-
 def _node(number, parent, source, note, drop, add):
   created = datetime.now().isoformat(timespec='seconds')
   return {'id': number, 'parent': parent, 'created': created, 'source': source, 'note': note, 'drop': drop, 'add': add}
@@ -66,7 +50,7 @@ def load(asset):
   except (OSError, ValueError):
     tree = None
   if not tree or tree.get('run') != manifest.get('representative_frame_run'):
-    tree = _fresh(asset, manifest)
+    tree = {'run': manifest.get('representative_frame_run'), 'current': ROOT, 'nodes': []}
   return tree
 
 

@@ -358,8 +358,8 @@ async function renderFrames(video) {
   const shownVersion = state.version;
   const version = shownVersion && shownVersion.video === video.path ? shownVersion.file : '';
   const chosen = state.pictureSet;
+  const versions = failed(list) ? null : list;
   if (!chosen || chosen.video !== video.path || chosen.version !== version || !sets.nodes.some((node) => node.id === chosen.id)) {
-    const versions = failed(list) ? null : list;
     const written = version ? versions?.versions.find((entry) => entry.file === version)?.pictures : versions?.current?.pictures;
     const id = written && sets.nodes.some((node) => node.id === written) ? written : sets.current;
     state.pictureSet = { video: video.path, id, version };
@@ -367,9 +367,19 @@ async function renderFrames(video) {
   const shownId = /** @type {{ id: string }} */ (state.pictureSet).id;
   const node = /** @type {import('../cli-types').PictureNode} */ (sets.nodes.find((item) => item.id === shownId));
   $('picture-sets').hidden = false;
+  // A round that changes no picture keeps the set before it, so a set made in round 3 may be the one round 5's summary
+  // was written with (user report, 2026-10-30): each set names the summaries written with it.
+  const summaries = versions ? [versions.current, ...versions.versions].filter((entry) => !!entry) : [];
+  const usedBy = (id) => {
+    const names = summaries.filter((entry) => entry.pictures === id).map((entry) => `「${entry.note || entry.source || '总结'}」`);
+    return names.length ? ` · ${names.join('、')}的总结用的` : '';
+  };
   $('picture-set').replaceChildren(
     ...sets.nodes.map((item) =>
-      element('option', { value: item.id, textContent: pictureSetLabel(item) + (item.id === sets.current ? ' · 以后的总结用这套' : '') }),
+      element('option', {
+        value: item.id,
+        textContent: pictureSetLabel(item) + usedBy(item.id) + (item.id === sets.current ? ' · 以后的总结用这套' : ''),
+      }),
     ),
   );
   $('picture-set').value = shownId;

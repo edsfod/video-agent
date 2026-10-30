@@ -165,6 +165,7 @@
               <textarea id="summary-request" rows="2" placeholder="对总结的要求（可不填），例如：写详细一点，重点讲数据"></textarea>
               <div class="row">
                 <button id="run-summary" class="primary">生成总结</button>
+                <label id="rounds-limit-label" class="limit" hidden title="复查一直在补上或改正时，到这么多轮就停">最多<input id="rounds-limit" type="number" min="1" />轮</label>
                 <button id="export-zip" hidden>导出 zip…</button>
                 <button id="export-folder" hidden title="提示词和图片放在一个文件夹里，图片按上限挑选，屏幕页太多时拼成总图">导出文件夹…</button>
                 <label id="export-limit-label" class="limit" hidden>最多<input id="export-limit" type="number" min="2" max="500" />个文件</label>

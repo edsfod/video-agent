@@ -100,7 +100,6 @@ def apply(video, asset, draft, wanted, length, status=lambda message: None):
   saved as. The caller holds the video's lock. Returns the new state."""
   asset = Path(asset)
   state = load(asset)
-  state.pop('unused', None)  # kept in pictures.py's tree now
   requests = []
   for start, end, what in wanted:
     try:

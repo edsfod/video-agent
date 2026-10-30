@@ -310,6 +310,12 @@ test('summary through the model API, with one frame tool round', async () => {
 devTest('summary through DeepSeek\'s web chat, in rounds until it asks for no more pictures', async () => {
   await page.click('.tabs button[data-tab=summary]');
   await page.check('input[name=route][value=deepseek]');
+  // The rounds at most, kept in the settings and given to the task.
+  await page.waitForSelector('#rounds-limit-label:not([hidden])');
+  assert.equal(await page.inputValue('#rounds-limit'), '6');
+  await page.fill('#rounds-limit', '2');
+  await page.dispatchEvent('#rounds-limit', 'change');
+  await page.waitForFunction(async () => (await window.va.settings()).webRounds === 2);
   await page.click('#run-summary');
   const done = async () => {
     for (const end = Date.now() + 120_000; ; await new Promise((resolve) => setTimeout(resolve, 500))) {
@@ -321,6 +327,7 @@ devTest('summary through DeepSeek\'s web chat, in rounds until it asks for no mo
   const task = await done();
   const output = await page.evaluate((id) => window.va.taskOutput(id), task.id);
   assert.equal(task.status, 'done', JSON.stringify(output).slice(-1500));
+  assert.equal(task.maxRounds, 2);
   const sent = await app.evaluate(({ BrowserWindow }) =>
     BrowserWindow.getAllWindows().find((win) => win.getTitle() === 'DeepSeek').webContents.executeJavaScript('window.sent'));
   assert.equal(sent.length, 4, 'sent again after it hung and after the busy notice; a second round for the pictures, then none');

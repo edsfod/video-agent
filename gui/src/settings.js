@@ -37,6 +37,7 @@ function defaults() {
     // {prompt} stands for the task if it takes no standard input. null shows the presets found on this computer.
     agents: null,
     webFiles: 50, // files a chat AI takes at once, for 导出文件夹 (DeepSeek's web chat: 50)
+    webRounds: 6, // rounds of the DeepSeek route at most, set on the summary page (user request, 2026-10-30)
   };
 }
 
