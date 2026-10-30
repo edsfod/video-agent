@@ -7,9 +7,12 @@
 // --selected) for DeepThink and Search; a hidden input[type=file] that takes many files; a round send button
 // (.ds-button--primary.ds-button--circle), disabled while uploads run or the box is empty, whose icon turns into a
 // stop square while an answer is written; each answer, and the thinking before it, in a .ds-markdown block, where a
-// code block is a <pre> whose text is the Markdown as written.
+// code block is a <pre> whose text is the Markdown as written; each attachment, a .ds-animated-size-item in the composer
+// with the file's name as its picture's alt text, a line saying the upload failed when it did, and a button removing it.
+// The page only draws while Chromium counts the window as seen, which main.js and backgroundThrottling see to.
 
 const { BrowserWindow } = require('electron');
+const path = require('node:path');
 
 const URL = process.env.VA_DEEPSEEK_URL || 'https://chat.deepseek.com/';
 const PARTITION = 'persist:deepseek';
@@ -34,7 +37,7 @@ function open() {
     title: 'DeepSeek',
     show: !BACKGROUND,
     ...(BACKGROUND ? { x: -32000, y: -32000, skipTaskbar: true } : {}),
-    webPreferences: { partition: PARTITION, contextIsolation: true, sandbox: true },
+    webPreferences: { partition: PARTITION, contextIsolation: true, sandbox: true, backgroundThrottling: false },
   });
   win.removeMenu();
   if (BACKGROUND) win.showInactive();
@@ -79,13 +82,26 @@ async function attach(view, files) {
 }
 
 // DeepSeek's servers are sometimes busy (user report, 2026-10-29): an upload fails or never ends, or the answer is only
-// a busy notice. Either is tried again, up to TRIES times; the page is loaded again first, which keeps the
-// conversation and empties the box.
+// a busy notice. A failed upload is removed and that file alone attached again (user report, 2026-10-30: all 49 again
+// failed three times over), up to TRIES times, after which the message goes without it; uploads that never end and
+// busy notices are tried again whole, up to TRIES times, the page loaded again first, which keeps the conversation and
+// empties the box.
 const TRIES = 3;
 const BUSY = /服务器繁忙|稍后再试|server is busy|try again later/i;
-const UPLOAD_FAILED = /上传失败|重新上传|upload failed|failed to upload/i;
+const UPLOAD_FAILED = /上传失败|重新上传|upload failed|failed to upload|服务器繁忙|server is busy/i;
 const UPLOAD_TIMEOUT_MS = 5 * 60 * 1000;
 const BUSY_PAUSE_MS = Number(process.env.VA_DEEPSEEK_RETRY_MS) || 30000; // tests wait less
+const UPLOAD_PAUSE_MS = BUSY_PAUSE_MS / 6;
+
+const ATTACHMENTS = `[...(${COMPOSER})?.querySelectorAll('.ds-animated-size-item') || []]`;
+const NAME = `(item) => item.querySelector('img')?.alt || item.innerText.split('\\n')[0]`;
+
+/** Removes the attachments whose upload failed; returns their file names. */
+const removeFailed = () =>
+  page(`${ATTACHMENTS}.filter((item) => ${UPLOAD_FAILED}.test(item.innerText)).map((item) => {
+    item.querySelector('[role=button] [tabindex="0"]')?.click();
+    return (${NAME})(item);
+  })`);
 
 /** Attaches the files and types the text; resolves once the send button may be pressed. */
 async function compose(view, text, files, onStatus) {
@@ -93,12 +109,25 @@ async function compose(view, text, files, onStatus) {
   await page(`document.querySelector('textarea').focus()`);
   view.webContents.insertText(text);
   const ready = `(() => { const b = ${SEND}; return !!b && !b.classList.contains('ds-button--disabled'); })()`;
-  const failed = `${UPLOAD_FAILED}.test((${COMPOSER})?.innerText || '')`;
+  const tries = new Map(files.map((file) => [path.basename(file), 1]));
   const start = Date.now();
   let told = false;
   for (;;) {
     if (stopped) throw new Error('已停止');
-    if (await page(failed)) throw Object.assign(new Error('图片上传失败'), { again: true });
+    const failed = await removeFailed();
+    if (failed.length) {
+      const again = files.filter((file) => failed.includes(path.basename(file)) && tries.get(path.basename(file)) < TRIES);
+      const dropped = failed.filter((name) => !again.some((file) => path.basename(file) === name));
+      if (dropped.length) onStatus(`${dropped.join('、')} 上传 ${TRIES} 次都失败，这次不发了`);
+      if (again.length) {
+        const attempt = Math.max(...again.map((file) => tries.get(path.basename(file)))) + 1;
+        onStatus(`${again.length} 张图片上传失败，单独重新上传（第 ${attempt} 次）`);
+        for (const file of again) tries.set(path.basename(file), tries.get(path.basename(file)) + 1);
+        await pause(UPLOAD_PAUSE_MS);
+        await attach(view, again);
+      }
+      continue;
+    }
     if (await page(ready)) return;
     if (Date.now() - start > UPLOAD_TIMEOUT_MS) throw Object.assign(new Error('图片五分钟没有传完'), { again: true });
     if (!told && Date.now() - start > 5000) {

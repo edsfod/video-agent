@@ -56,7 +56,11 @@ async function startDeepSeek(task) {
       const importArgs = ['summarize', task.video, '-o', task.workspace, '--import', '-', '--source', SOURCE, '--note', `第 ${round} 轮`];
       const saved = await cli(current ? [...importArgs, '--make-current'] : importArgs, answer);
       for (const line of saved.err.split('\n').filter((item) => item.trim() && !item.includes('video-agent pack'))) say(line.trim());
-      if (saved.code) throw new Error('导入失败');
+      if (saved.code) {
+        // The answer, to see why and to import it by hand; in the log only, as it is long.
+        log.write(`\n----- 第 ${round} 轮 DeepSeek 的回答 -----\n${answer}\n----- 回答结束 -----\n`);
+        throw new Error('导入失败，DeepSeek 的回答记在这个任务的日志里');
+      }
       if (!saved.err.includes('--follow-up')) {
         say(round === 1 ? 'DeepSeek 没有要补的画面，完成。' : `DeepSeek 不再要画面，${round} 轮完成。`);
         break;

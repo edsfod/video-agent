@@ -94,12 +94,14 @@ async function saved(check, timeout = 15_000) {
     if (Date.now() > end) assert.fail(`the settings were not saved as expected: ${JSON.stringify(settings).slice(0, 500)}`);
   }
 }
-// The parts of chat.deepseek.com that deepseek.js drives. The first answer is a busy notice, as DeepSeek's servers
-// give at times; then the answer asks for pictures in a 画面调整 section, and the next round's (its prompt starts with
-// the candidates taken) asks for none. What it was sent is kept in localStorage, which outlives loading the page again.
+// The parts of chat.deepseek.com that deepseek.js drives. The second file of the first message fails to upload once;
+// the first answer is a busy notice, as DeepSeek's servers give at times; then the answer asks for pictures in a
+// 画面调整 section, and the next round's (its prompt starts with the candidates taken) asks for none. What it was sent
+// and every file attached are kept in localStorage, which outlives loading the page again.
 const FAKE_DEEPSEEK = `<!doctype html><meta charset="utf-8"><title>DeepSeek</title>
 <div id="chat"></div>
 <div><div><div><div><div><div>
+  <div id="attachments"></div>
   <textarea></textarea>
   <div class="ds-toggle-button">DeepThink</div><div class="ds-toggle-button ds-toggle-button--selected">Search</div>
   <input type="file" multiple hidden>
@@ -109,20 +111,36 @@ const FAKE_DEEPSEEK = `<!doctype html><meta charset="utf-8"><title>DeepSeek</tit
   const box = document.querySelector('textarea');
   const send = document.getElementById('send');
   const icon = send.querySelector('path');
-  let files = [];
+  const attachments = document.getElementById('attachments');
   window.sent = JSON.parse(localStorage.getItem('sent') || '[]');
-  document.querySelector('input').onchange = (event) => (files = [...event.target.files].map((file) => file.name));
+  window.attached = JSON.parse(localStorage.getItem('attached') || '[]');
+  document.querySelector('input').onchange = (event) => {
+    for (const file of event.target.files) {
+      const item = document.createElement('div');
+      item.className = 'ds-animated-size-item';
+      item.innerHTML = '<div role="button" tabindex="0"><img><div tabindex="0">×</div></div>';
+      item.querySelector('img').alt = file.name;
+      item.querySelector('[tabindex="0"] [tabindex="0"]').onclick = () => item.remove();
+      attachments.append(item);
+      window.attached.push(file.name);
+      const fails = window.attached.length === 2;
+      item.dataset.uploading = '';
+      setTimeout(() => (delete item.dataset.uploading, fails && item.append('Upload failed')), 300);
+    }
+    localStorage.setItem('attached', JSON.stringify(window.attached));
+  };
   for (const button of document.querySelectorAll('.ds-toggle-button')) button.onclick = () => button.classList.toggle('ds-toggle-button--selected');
-  setInterval(() => send.classList.toggle('ds-button--disabled', !box.value), 50);
+  setInterval(() => send.classList.toggle('ds-button--disabled', !box.value || !!attachments.querySelector('[data-uploading]')), 50);
   send.onclick = () => {
     if (!box.value) return;
     const text = box.value;
+    const files = [...attachments.querySelectorAll('img')].map((img) => img.alt);
     const toggles = [...document.querySelectorAll('.ds-toggle-button--selected')].map((button) => button.textContent);
     window.sent.push({ text, files, toggles });
     localStorage.setItem('sent', JSON.stringify(window.sent));
     const busy = window.sent.length === 1;
     box.value = '';
-    files = [];
+    attachments.replaceChildren();
     icon.setAttribute('d', 'M2 4'); // the stop square while writing
     setTimeout(() => {
       const next = text.startsWith('我照你上一稿');
@@ -300,6 +318,11 @@ devTest('summary through DeepSeek\'s web chat, in rounds until it asks for no mo
   assert.match(sent[1].text, /# Writing a video summary/);
   assert.deepEqual(sent[1].toggles, ['DeepThink', 'Search'], 'DeepThink and Search on');
   assert.ok(sent[1].files.length > 0 && sent[1].files.every((name) => name.endsWith('.jpg')));
+  const attached = await app.evaluate(({ BrowserWindow }) =>
+    BrowserWindow.getAllWindows().find((win) => win.getTitle() === 'DeepSeek').webContents.executeJavaScript('window.attached'));
+  assert.deepEqual([...sent[0].files].sort(), [...sent[1].files].sort(), 'the file that failed to upload went with the rest');
+  assert.equal(attached.slice(0, sent[0].files.length + 1).filter((name) => name === attached[1]).length, 2, 'only that file attached again');
+  assert.ok(output.some(([, text]) => text.includes('单独重新上传')), 'the upload retry is in the task output');
   assert.match(sent[2].text, /^我照你上一稿/);
   assert.ok(sent[2].files.length >= 1 && sent[2].files.every((name) => name.includes('补截')));
   assert.ok(output.some(([, text]) => text.includes('服务器繁忙')), 'the retry is in the task output');
