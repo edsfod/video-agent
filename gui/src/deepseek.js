@@ -12,8 +12,14 @@
 // Until the attached pictures are read, the answer's place says 正在分析图片 (Analyzing image) with no .ds-markdown yet.
 // The page only draws while Chromium counts the window as seen, which main.js and backgroundThrottling see to.
 //
+// Some of what happens never shows on the page, so its requests are watched too (DevTools protocol, as attach() uses,
+// reading only): POST /api/v0/chat/completion carries chat_session_id, parent_message_id, prompt and ref_file_ids, and
+// answers with a stream of events; refused for sending too often, the stream is a `hint` event with finish_reason
+// rate_limit_reached, shown for a moment if at all, and /api/v0/file/upload_file answers biz_msg "rate limit reached",
+// which the attachment shows as Server busy (seen 2026-10-30).
+//
 // Each conversation has a window of its own (user request, 2026-10-30: DeepSeek summaries at the same time); they share
-// the signed-in session, and a window whose conversation ended serves the next one.
+// the signed-in session, and a window whose conversation ended well serves the next one.
 
 const { BrowserWindow } = require('electron');
 const path = require('node:path');
@@ -27,6 +33,12 @@ const ANSWER_TIMEOUT_MS = 30 * 60 * 1000; // a long DeepThink answer took about 
 /** Windows of conversations that ended, signed in, for the next one. @type {BrowserWindow[]} */
 const idle = [];
 let signedIn = 0; // when a window last found the page signed in, for the windows still showing the sign-in page
+// The limit on sending is the account's, not a conversation's (user report, 2026-10-30: read from the server, two
+// conversations stopped within seconds of each other, at their 6th and 2nd message, and a new one could upload nothing),
+// so the windows share these.
+let nextSend = 0; // no window sends before this
+let resumeAt = 0; // nor before this, after a refusal
+let refusals = 0; // in a row, each waited on longer
 
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -55,17 +67,29 @@ const SEND = `[...(${COMPOSER})?.querySelectorAll('.ds-button--primary.ds-button
 
 // DeepSeek's servers are sometimes busy (user report, 2026-10-29): an upload fails or never ends, or the answer is only
 // a busy notice. A failed upload is removed and that file alone attached again (user report, 2026-10-30: all 49 again
-// failed three times over), up to TRIES times, after which the message goes without it; uploads that never end, busy
-// notices and answers that never start (user report, 2026-10-30: 正在分析图片 for 8 minutes, the message not on the
+// failed three times over), up to TRIES times, after which the whole message is tried again: it never goes without a
+// file, as the import takes what was sent and not linked for pictures looked at and not needed. Uploads that never end,
+// busy notices and answers that never start (user report, 2026-10-30: 正在分析图片 for 8 minutes, the message not on the
 // server) are tried again whole, up to TRIES times, the page loaded again first, which keeps the conversation and
 // empties the box.
+//
+// A refusal for sending too often is not such a failure: the task waits it out, however long, then goes on with the
+// message it was on (user decision, 2026-10-30), and a gap between messages, across the windows, keeps it from coming.
+// 21 messages in 15 minutes from four conversations at once were refused and still were 14 minutes later; 15 in 20
+// minutes were not (2026-10-30). What the limit is, DeepSeek does not say.
 const TRIES = 3;
 const BUSY = /服务器繁忙|稍后再试|server is busy|try again later|并发请求过多|too many concurrent requests/i;
-const UPLOAD_FAILED = /上传失败|重新上传|upload failed|failed to upload|服务器繁忙|server is busy/i;
+const UPLOAD_FAILED = /上传失败|重新上传|upload failed|failed to upload|服务器繁忙|server (?:is )?busy/i;
+const REFUSED = /"finish_reason":"rate_limit_reached"|"biz_msg":"rate limit reached"/;
+const WATCHED = /\/api\/v\d+\/(?:chat\/completion|file\/upload_file)\b/;
+const SENDING = /\/api\/v\d+\/chat\/completion\b/;
 const READING_IMAGES = /正在分析图片|Analyzing image/i;
 const UPLOAD_TIMEOUT_MS = 5 * 60 * 1000;
 const BUSY_PAUSE_MS = Number(process.env.VA_DEEPSEEK_RETRY_MS) || 30000; // tests wait less
 const UPLOAD_PAUSE_MS = BUSY_PAUSE_MS / 6;
+const SEND_GAP_MS = Number(process.env.VA_DEEPSEEK_GAP_MS) || 60 * 1000; // Claude judgment, between the two rates above
+const LIMIT_PAUSE_MS = Number(process.env.VA_DEEPSEEK_LIMIT_MS) || 5 * 60 * 1000; // doubled each time, up to the next
+const LIMIT_PAUSE_MOST_MS = 6 * LIMIT_PAUSE_MS;
 // Pictures were read and the thinking begun within seconds of sending, 49 pictures included; the one that hung did
 // not start in 8 minutes.
 const START_TIMEOUT_MS = Number(process.env.VA_DEEPSEEK_START_MS) || 3 * 60 * 1000; // tests wait less
@@ -78,12 +102,82 @@ const NAME = `(item) => item.querySelector('img')?.alt || item.innerText.split('
 function conversation() {
   const win = open();
   let stopped = false;
+  // What the page's requests said about the message being sent.
+  /** @type {{ refused: boolean, answering: boolean, sent: any }} */
+  let wire = { refused: false, answering: false, sent: null };
 
   /** @param {string} code */
   const page = (code) => {
     if (win.isDestroyed()) throw new Error('DeepSeek 窗口已关闭');
     return win.webContents.executeJavaScript(code);
   };
+
+  // Blocks of earlier answers the page draws after the marking before sending, as it does while a conversation loads,
+  // must not pass for the new one (user report, 2026-10-30: an answer read in a round that never reached the server).
+  const MARK = `document.querySelectorAll('.ds-markdown').forEach((block) => (block.dataset.vaSeen = ''))`;
+  const requests = new Map();
+  /** @param {any} _ @param {string} method @param {any} event */
+  async function onRequest(_, method, event) {
+    const debug = win.webContents.debugger;
+    if (method === 'Network.requestWillBeSent' && event.request.method === 'POST' && WATCHED.test(event.request.url)) {
+      const sending = SENDING.test(event.request.url);
+      requests.set(event.requestId, sending);
+      if (!sending) return;
+      const body = event.request.postData || (await debug.sendCommand('Network.getRequestPostData', { requestId: event.requestId }).then((data) => data.postData, () => ''));
+      try {
+        wire.sent = JSON.parse(body);
+      } catch {} // not read, so not checked
+    } else if (method === 'Network.responseReceived' && requests.get(event.requestId)) {
+      await page(MARK).catch(() => {});
+      wire.answering = true;
+    } else if (method === 'Network.loadingFinished' && requests.has(event.requestId)) {
+      requests.delete(event.requestId);
+      const { body } = await debug.sendCommand('Network.getResponseBody', { requestId: event.requestId }).catch(() => ({ body: '' }));
+      if (REFUSED.test(body)) wire.refused = true;
+    }
+  }
+
+  async function watch() {
+    const debug = win.webContents.debugger;
+    if (!debug.isAttached()) debug.attach('1.3');
+    if (debug.listeners('message').includes(onRequest)) return;
+    debug.on('message', onRequest);
+    await debug.sendCommand('Network.enable');
+  }
+
+  // Waits for this window's turn to send: past a refusal and the gap after the last message of any window.
+  async function turn(onStatus) {
+    let told = false;
+    for (;;) {
+      if (stopped) throw new Error('已停止');
+      const wait = Math.max(nextSend, resumeAt) - Date.now();
+      if (wait <= 0) break;
+      if (!told && wait > 5000) {
+        onStatus(Date.now() < resumeAt ? `DeepSeek 限流中，约 ${Math.ceil(wait / 60000)} 分钟后再发` : `隔开发送，${Math.ceil(wait / 1000)} 秒后发`);
+        told = true;
+      }
+      await pause(Math.min(wait, 1000));
+    }
+    nextSend = Date.now() + SEND_GAP_MS;
+  }
+
+  // Several windows are refused at about the same time; that is one refusal.
+  function refused() {
+    if (Date.now() < resumeAt) return;
+    resumeAt = Date.now() + Math.min(LIMIT_PAUSE_MS * 2 ** refusals, LIMIT_PAUSE_MOST_MS);
+    refusals += 1;
+  }
+
+  /** The reason, if what went out is not what was meant to. @param {string} text @param {string[]} files @param {boolean} newChat */
+  function wrongMessage(text, files, newChat) {
+    const { parent_message_id: parent, prompt, ref_file_ids: attached } = wire.sent || {};
+    // User report, 2026-10-30: a new task's first message went into the conversation of the task that failed before it,
+    // as one .txt file, with neither the prompt nor the pictures.
+    if (newChat && parent != null) return '这条消息接到了别的对话后面';
+    if (typeof prompt === 'string' && prompt.length < text.length / 2) return '提示词没有发全';
+    if (Array.isArray(attached) && attached.length < files.length) return `只带上了 ${attached.length} 张图，应该是 ${files.length} 张`;
+    return '';
+  }
 
   // Waits until the page is signed in; a window still on the sign-in page loads again once another window is in.
   async function signIn(onStatus) {
@@ -134,17 +228,19 @@ function conversation() {
     let told = false;
     for (;;) {
       if (stopped) throw new Error('已停止');
+      if (wire.refused) throw Object.assign(new Error('DeepSeek 限流'), { refused: true });
       const failed = await removeFailed();
       if (failed.length) {
         const again = files.filter((file) => failed.includes(path.basename(file)) && tries.get(path.basename(file)) < TRIES);
-        const dropped = failed.filter((name) => !again.some((file) => path.basename(file) === name));
-        if (dropped.length) onStatus(`${dropped.join('、')} 上传 ${TRIES} 次都失败，这次不发了`);
+        const lost = failed.filter((name) => !again.some((file) => path.basename(file) === name));
+        if (lost.length) throw Object.assign(new Error(`${lost.join('、')} 上传 ${TRIES} 次都失败`), { again: true });
         if (again.length) {
           const attempt = Math.max(...again.map((file) => tries.get(path.basename(file)))) + 1;
           onStatus(`${again.length} 张图片上传失败，单独重新上传（第 ${attempt} 次）`);
           for (const file of again) tries.set(path.basename(file), tries.get(path.basename(file)) + 1);
           await pause(UPLOAD_PAUSE_MS);
           await attach(again);
+          await pause(1000); // until the page has taken them, the send button still says what it said before
         }
         continue;
       }
@@ -158,12 +254,15 @@ function conversation() {
     }
   }
 
-  /** Presses send and waits until the answer is written; returns it. */
-  async function sendAndRead(onStatus) {
+  /**
+   * Presses send and waits until the answer is written; returns it.
+   * @param {(line: string) => void} onStatus @param {() => string} wrong what is wrong with the message that went out
+   */
+  async function sendAndRead(onStatus, wrong) {
     // The answers on the page are marked, and the new one is the last block without the mark: the page does not keep
     // every earlier answer (user report, 2026-10-30: the first round's blocks were gone by the third, so counting them
     // missed the third answer).
-    await page(`document.querySelectorAll('.ds-markdown').forEach((block) => (block.dataset.vaSeen = ''))`);
+    await page(MARK);
     const answered = `(() => { const blocks = document.querySelectorAll('.ds-markdown'); return !!blocks.length && !('vaSeen' in blocks[blocks.length - 1].dataset); })()`;
     const idleIcon = await page(`${SEND}.querySelector('svg path')?.getAttribute('d') || ''`);
     await page(`${SEND}.click()`);
@@ -175,7 +274,11 @@ function conversation() {
       if (stopped) throw new Error('已停止');
       if (Date.now() - start > ANSWER_TIMEOUT_MS) throw new Error('DeepSeek 半小时没有写完');
       await pause(2000);
-      const started = await page(answered);
+      if (wire.refused) throw Object.assign(new Error('DeepSeek 限流'), { refused: true });
+      const problem = wrong();
+      if (problem) throw Object.assign(new Error(problem), { again: true });
+      const started = wire.answering && (await page(answered));
+      if (started) refusals = 0;
       if (!started && Date.now() - start > START_TIMEOUT_MS) {
         const reading = READING_IMAGES.test(await page('document.body.innerText'));
         throw Object.assign(new Error(`发出 ${Math.round(START_TIMEOUT_MS / 1000)} 秒还没有开始写${reading ? '（一直显示「正在分析图片」）' : ''}`), { again: true });
@@ -211,27 +314,38 @@ function conversation() {
    */
   async function ask({ text, files = [], newChat = false, onStatus = () => {} }) {
     if (newChat || !win.webContents.getURL()) await win.loadURL(URL);
-    for (let attempt = 1; ; attempt++) {
-      if (attempt > 1) {
-        await win.webContents.loadURL(win.webContents.getURL()); // the same conversation, with an empty box
-      }
+    await watch();
+    // A new conversation starts anew; a later message goes on in the same one, with an empty box.
+    const reload = () => win.webContents.loadURL(newChat ? URL : win.webContents.getURL());
+    for (let attempt = 1; ; ) {
+      await turn(onStatus);
       await signIn(onStatus);
       // DeepThink and Search on (user decision, 2026-10-29): search serves the 补充 a summary may add.
       await page(`(() => { for (const b of document.querySelectorAll('.ds-toggle-button')) if (!b.classList.contains('ds-toggle-button--selected')) b.click(); })()`);
+      wire = { refused: false, answering: false, sent: null };
       let read;
       try {
         await compose(text, files, onStatus);
-        read = await sendAndRead(onStatus);
+        read = await sendAndRead(onStatus, () => wrongMessage(text, files, newChat));
       } catch (error) {
+        if (error.refused) {
+          refused();
+          await reload(); // the page stops uploading the rest
+          continue;
+        }
         if (!error.again || attempt >= TRIES) throw error;
-        onStatus(`${error.message}，重新发送（第 ${attempt + 1} 次）`);
+        attempt += 1;
+        onStatus(`${error.message}，重新发送（第 ${attempt} 次）`);
         await pause(5000);
+        await reload();
         continue;
       }
       if (!read.code && BUSY.test(read.text) && read.text.length < 200) {
         if (attempt >= TRIES) throw new Error(`DeepSeek 服务器繁忙，试了 ${TRIES} 次`);
-        onStatus(`DeepSeek 服务器繁忙，${Math.round(BUSY_PAUSE_MS / 1000)} 秒后再发（第 ${attempt + 1} 次）`);
+        attempt += 1;
+        onStatus(`DeepSeek 服务器繁忙，${Math.round(BUSY_PAUSE_MS / 1000)} 秒后再发（第 ${attempt} 次）`);
         await pause(BUSY_PAUSE_MS);
+        await reload();
         continue;
       }
       onStatus(`DeepSeek 写完了，用时 ${read.seconds} 秒`);
@@ -242,8 +356,15 @@ function conversation() {
   return {
     ask,
     stop: () => (stopped = true),
-    // The window stays open, signed in, for the next conversation.
-    close: () => !win.isDestroyed() && idle.push(win),
+    // The window stays open, signed in, for the next conversation; after a failure it closes, as what the page holds of
+    // the message that failed went into the next task's conversation (user report, 2026-10-30).
+    /** @param {boolean} [failed] */
+    close: (failed = false) => {
+      if (win.isDestroyed()) return;
+      win.webContents.debugger.removeListener('message', onRequest);
+      if (failed) win.destroy();
+      else idle.push(win);
+    },
   };
 }
 

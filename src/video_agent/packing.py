@@ -11,7 +11,7 @@ import zipfile
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from . import files, media, picture_review, summary_review, templates
+from . import files, media, picture_review, pictures, summary_review, templates
 from .evidence import SUMMARY_NAME, clock, frames, pages, plan, processed, video_line, video_name
 from .importer import CORRECTIONS_HEADING
 from .model_api import SummaryError
@@ -107,16 +107,16 @@ PICTURES_SECTION = f"""## {picture_review.HEADING}（网页 AI 写在总结最�
 class Labels:
   """Copies of pictures with '#<number> <time>' printed in a corner (media.label_picture), numbered in the order
   given: with dozens of pictures attached, a chat AI matched a picture to another one's name (DeepSeek, 2026-10-29),
-  and the number on the picture itself is what it can go by."""
+  and the number on the picture itself is what it can go by. `first` is the number to start from."""
 
-  def __init__(self, asset, items, work_dir):
+  def __init__(self, asset, items, work_dir, first=1):
     self.folder = Path(work_dir) / 'labelled'
     self.folder.mkdir(parents=True, exist_ok=True)
     self.numbers = {}
     jobs = []
     for second, relative in items:
       if relative not in self.numbers:
-        self.numbers[relative] = number = len(self.numbers) + 1
+        self.numbers[relative] = number = first + len(self.numbers)
         jobs.append((asset / relative, self.path(relative), f'#{number} {clock(second)}'))
     with ThreadPoolExecutor(max_workers=8) as pool:
       list(pool.map(lambda job: media.label_picture(*job), jobs))
@@ -139,6 +139,15 @@ SHEET_NOTE = (
   '总图只是为了凑进文件数：总图里一格是一张图，每格左下角都有它自己的编号和时间，按编号和时间分格。一格里分成几块的'
   '（讲者和屏幕并排的分屏、画中画）仍是同一张图：没有自己编号和时间的那一块不是另一张图，不要拆成两张来描述或链接。'
   '链接写下表里那张图的路径，导入后链接打开的是那张图的原图，不是总图。'
+)
+
+
+# A next round in a new conversation (user request, 2026-10-30): the chat AI has nothing of the one before, so the
+# message holds what it needs and no more: the rules, the transcript, the pictures of the current set, the round's
+# request and the draft.
+NEW_CHAT_NOTE = (
+  '这是同一个视频总结的复查。之前的对话太长，换了一个新对话，那边的内容你看不到。下面先是总结的规则和全部材料，最后是这'
+  '一轮的要求和上一稿。不要从头另写：照最后的要求改好上一稿，再输出整篇。'
 )
 
 
@@ -237,12 +246,14 @@ def material(video, workspace, *, request='', max_images=40, work_dir=None, max_
   return text, entries
 
 
-def follow_up(video, workspace, *, work_dir=None, max_files=None):
+def follow_up(video, workspace, *, work_dir=None, max_files=None, new_chat=False, request='', template=None):
   """The next round for a chat AI: the 复查 of its draft (summary_review.py) with what the checks found, the
   candidates taken for the pictures its 画面调整 section asked for, and the summary as it was saved (with the
   transcript corrections applied), to rewrite. Returns (text, entries) as `material` does: with `max_files`, numbered
   pictures; with only `work_dir`, the pictures at their paths in the video's folder; without either, none, and the
-  text names the files by their own names."""
+  text names the files by their own names. With `new_chat` (and `max_files`), for a conversation that has seen nothing:
+  the whole of `material` comes first, with the current set of pictures, and the candidates take at most half the
+  files."""
   video, _, asset, _ = processed(video, workspace)
   state = picture_review.load(asset)
   review = summary_review.load(asset)
@@ -255,7 +266,7 @@ def follow_up(video, workspace, *, work_dir=None, max_files=None):
     raise SummaryError(f'the summary imported last for {video.name} needs no other round; there is no next round')
   taken = [relative for request in requests for relative in request['candidates']]
   if max_files:
-    taken = taken[: max_files - 1]
+    taken = taken[: (max_files - 1) // 2 if new_chat else max_files - 1]
   names = {}
   for number, relative in enumerate(taken, 1):
     if max_files:
@@ -265,13 +276,16 @@ def follow_up(video, workspace, *, work_dir=None, max_files=None):
   seconds = {
     relative: media.parse_clock(Path(relative).stem.removeprefix('frame-').replace('-', ':')) for relative in names
   }
+  first = len(pictures.members(asset)) + 1 if new_chat else 1  # after the set's own numbers
   labels = (
-    Labels(asset, [(seconds[relative], relative) for relative in names], work_dir) if work_dir is not None else None
+    Labels(asset, [(seconds[relative], relative) for relative in names], work_dir, first)
+    if work_dir is not None
+    else None
   )
   lines = []
-  for request in requests:
-    span = f'{clock(request["start_s"])}–{clock(request["end_s"])} {request["what"]}'.rstrip()
-    shown = [relative for relative in request['candidates'] if relative in names]
+  for wanted in requests:
+    span = f'{clock(wanted["start_s"])}–{clock(wanted["end_s"])} {wanted["what"]}'.rstrip()
+    shown = [relative for relative in wanted['candidates'] if relative in names]
     if shown:
       listed = [labels.entry(seconds[relative], relative) if labels else relative for relative in shown]
       lines.append(
@@ -310,7 +324,13 @@ def follow_up(video, workspace, *, work_dir=None, max_files=None):
     )
     if part
   )
-  return text, [(names[relative], labels.path(relative)) for relative in names] if labels else []
+  entries = [(names[relative], labels.path(relative)) for relative in names] if labels else []
+  if new_chat:
+    start, shown = material(
+      video, workspace, request=request, work_dir=work_dir, max_files=max_files - len(entries), template=template
+    )
+    return f'{NEW_CHAT_NOTE}\n\n{start}\n\n---\n\n{text}', shown + entries
+  return text, entries
 
 
 def pack(video, workspace, target, *, request='', max_images=40, template=None, follow=False):
@@ -337,9 +357,10 @@ def pack(video, workspace, target, *, request='', max_images=40, template=None, 
   return target, len(entries)
 
 
-def pack_folder(video, workspace, parent, *, request='', max_files=50, template=None, follow=False):
+def pack_folder(video, workspace, parent, *, request='', max_files=50, template=None, follow=False, new_chat=False):
   """Writes a new folder in `parent` with 提示词.md and numbered pictures, `max_files` files in all, for chat AIs that
-  take files one by one up to a limit and no zip; with `follow`, the next round's (`follow_up`). Returns the folder and
+  take files one by one up to a limit and no zip; with `follow`, the next round's (`follow_up`), for a new conversation
+  with `new_chat`. Returns the folder and
   the number of pictures in it."""
   if max_files < 2:
     raise SummaryError('a folder for a chat AI needs room for the prompt and at least one picture')
@@ -352,7 +373,15 @@ def pack_folder(video, workspace, parent, *, request='', max_files=50, template=
     number += 1
   with tempfile.TemporaryDirectory(prefix='video-agent-') as work_dir:
     if follow:
-      text, entries = follow_up(video, workspace, work_dir=work_dir, max_files=max_files)
+      text, entries = follow_up(
+        video,
+        workspace,
+        work_dir=work_dir,
+        max_files=max_files,
+        new_chat=new_chat,
+        request=request,
+        template=template,
+      )
     else:
       text, entries = material(
         video, workspace, request=request, work_dir=work_dir, max_files=max_files, template=template

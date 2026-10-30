@@ -589,6 +589,43 @@ def test_a_chat_ai_drops_pictures_and_asks_for_others_over_rounds(processed, cap
   assert 'no next round' in capsys.readouterr().err
 
 
+def test_a_next_round_in_a_new_conversation_carries_what_it_needs(processed, capsys):
+  from video_agent import cli, packing, pictures
+
+  video, workspace = processed
+  asset = asset_folder(workspace, video.resolve())
+  manifest = json.loads((asset / 'manifest.json').read_text(encoding='utf-8'))
+  kept = manifest['representative_frames'][1]['path']
+  answer = workspace / 'answer.md'
+  answer.write_text(
+    f'# 标题\n\n视频：x · 时长：0:08\n\n- 一点 `00:00:01`，上一稿特有的句子，讲了彩条和测试图案 [画面]({kept})\n\n'
+    '## 画面调整\n\n- 补截：00:00:01–00:00:06 彩条\n',
+    encoding='utf-8',
+  )
+  with tempfile.TemporaryDirectory() as work_dir:
+    packing.material(video, workspace, work_dir=work_dir)  # every picture sent, so the one linked is what stays
+  assert cli.main(['summarize', str(video), '-o', str(workspace), '--import', str(answer)]) == 0
+  assert pictures.members(asset)[0] == kept
+  with pytest.raises(SystemExit):
+    cli.main(['pack', str(video), '-o', str(workspace), '--new-chat'])
+  assert '--new-chat goes with' in capsys.readouterr().err
+  command = ['pack', str(video), '-o', str(workspace), '--follow-up', '--new-chat', '--folder', str(workspace / 'out')]
+  assert cli.main(command) == 0
+  folder = next((workspace / 'out').iterdir())
+  prompt = (folder / '提示词.md').read_text(encoding='utf-8')
+  # The rules, the transcript, the round's request and the draft, in the order the words 「前面的字幕」 need.
+  assert prompt.startswith(packing.NEW_CHAT_NOTE)
+  assert prompt.index('# Writing a video summary') < prompt.index('请对照前面的字幕复查上一稿') < prompt.index('上一稿特有的句子')
+  # The set in use alone, each picture sharp, and the candidates, none of them sharing a printed number.
+  names = sorted(path.name for path in folder.iterdir() if path.name != packing.PROMPT_NAME)
+  assert sum('补截' in name for name in names) >= 1 and sum('补截' not in name for name in names) == len(pictures.members(asset))
+  assert not any('总图' in name for name in names)
+  numbers = re.findall(r'#(\d+) \d\d:\d\d:\d\d frames/', prompt)
+  assert len(numbers) == len(set(numbers)) == len(names)
+  # What is sent now is what the next import judges, not the first round's pictures.
+  assert set(json.loads((asset / 'picture-review.json').read_text(encoding='utf-8'))['sent']) == set(pictures.members(asset))
+
+
 def test_a_chat_ais_later_rounds_overwrite_the_round_before(processed):
   from video_agent import versions
   from video_agent.importer import import_summary

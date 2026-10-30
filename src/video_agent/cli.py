@@ -334,6 +334,11 @@ def build_parser():
     'and the summary to rewrite',
   )
   packing.add_argument(
+    '--new-chat',
+    action='store_true',
+    help='with --follow-up and --folder: for a new conversation, with the rules, transcript and pictures as well',
+  )
+  packing.add_argument(
     '--folder',
     type=Path,
     metavar='PARENT',
@@ -1040,9 +1045,13 @@ def _pack(args):
       collection_material(args.output, args.collection, guide=args.guide, request=args.request, template=args.template)
     )
     return 0
+  if args.new_chat and not (args.follow_up and args.folder):
+    raise ValueError('--new-chat goes with --follow-up and --folder')
   chosen = {'request': args.request, 'template': args.template, 'follow': args.follow_up}
   if args.folder:
-    target, count = pack_folder(args.video, args.output, args.folder, max_files=args.max_files, **chosen)
+    target, count = pack_folder(
+      args.video, args.output, args.folder, max_files=args.max_files, new_chat=args.new_chat, **chosen
+    )
     print(f'{target} ({count} pictures)')
   elif args.zip:
     target, count = pack(args.video, args.output, args.zip, max_images=args.max_images, **chosen)

@@ -32,6 +32,8 @@ const ENV = {
   AUTOSLIDES_EXTRACTOR: 'none',
   VA_DEEPSEEK_RETRY_MS: '500',
   VA_DEEPSEEK_START_MS: '6000',
+  VA_DEEPSEEK_GAP_MS: '1500',
+  VA_DEEPSEEK_LIMIT_MS: '500',
   APPDATA,
   NO_PROXY: '127.0.0.1,localhost',
   no_proxy: '127.0.0.1,localhost',
@@ -77,6 +79,28 @@ function fakeModel() {
   return new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve({ server, requests })));
 }
 
+// What deepseek.js watches of the page's requests: an upload and a message, each refused when asked for (?refuse) with
+// DeepSeek's own answers to sending too often, and every message kept.
+function fakeDeepSeekApi() {
+  const messages = [];
+  const server = http.createServer((request, response) => {
+    let body = '';
+    request.on('data', (chunk) => (body += chunk));
+    request.on('end', () => {
+      const refuse = request.url.includes('refuse');
+      response.setHeader('Access-Control-Allow-Origin', '*');
+      if (request.url.includes('upload_file')) {
+        return response.end(JSON.stringify({ code: 0, msg: '', data: { biz_code: refuse ? 7 : 0, biz_msg: refuse ? 'rate limit reached' : '', biz_data: null } }));
+      }
+      messages.push(JSON.parse(body));
+      response.setHeader('Content-Type', 'text/event-stream');
+      const hint = 'event: hint\ndata: {"type":"error","content":"Messages too frequent. Try again later.","clear_response":true,"finish_reason":"rate_limit_reached"}\n\nevent: close\ndata: {"click_behavior":"retry"}\n\n';
+      response.end(`event: ready\ndata: {"request_message_id":1}\n\n${refuse ? hint : ''}`);
+    });
+  });
+  return new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve({ server, messages })));
+}
+
 // The packaged build (VA_E2E_EXE, in CI's installer job) runs only the tests that reach what packaging changes: the
 // bundled CLI and FFmpeg, the plugin and skill files under resources, the licence and privacy files, the terminal's
 // native module, the tray icon and cookie encryption. The rest, declared with devTest, run on the unpackaged app alone (user request, 2026-10-29: the
@@ -100,7 +124,8 @@ async function saved(check, timeout = 15_000) {
 // the answer asks for pictures in a 画面调整 section, and the next round's (its prompt starts with the candidates taken),
 // its 复查 finding nothing more and the sections it leaves out said, ends the rounds. Each answer takes the place of the
 // oldest one on the page, as the real page drops earlier answers, and its last line comes a second after the rest.
-// What it was sent and every file attached are kept in localStorage, which outlives loading the page again.
+// What it was sent and every file attached are kept in localStorage, which outlives loading the page again. A test sets
+// what comes of the next messages there (plan: hang, busy, refuse, wrong, late) and of uploads (uploads: refuse, fail).
 const FAKE_DEEPSEEK = `<!doctype html><meta charset="utf-8"><title>DeepSeek</title>
 <div id="chat"></div>
 <div><div><div><div><div><div>
@@ -126,11 +151,20 @@ const FAKE_DEEPSEEK = `<!doctype html><meta charset="utf-8"><title>DeepSeek</tit
       item.querySelector('[tabindex="0"] [tabindex="0"]').onclick = () => item.remove();
       attachments.append(item);
       window.attached.push(file.name);
-      const fails = window.attached.length === 2;
+      const uploads = localStorage.getItem('uploads');
+      const fails = window.attached.length === 2 || uploads === 'fail';
+      const refused = uploads === 'refuse';
+      if (refused) localStorage.removeItem('uploads');
+      fetch('__API__/api/v0/file/upload_file' + (refused ? '?refuse' : ''), { method: 'POST', body: file.name });
       item.dataset.uploading = '';
-      setTimeout(() => (delete item.dataset.uploading, fails && item.append('Upload failed')), 300);
+      setTimeout(() => {
+        delete item.dataset.uploading;
+        if (fails) item.append('Upload failed');
+        else if (refused) item.append('Server busy');
+      }, 300);
     }
     localStorage.setItem('attached', JSON.stringify(window.attached));
+    event.target.value = ''; // the same file can be chosen again, as on the real page
   };
   for (const button of document.querySelectorAll('.ds-toggle-button')) button.onclick = () => button.classList.toggle('ds-toggle-button--selected');
   setInterval(() => send.classList.toggle('ds-button--disabled', !box.value || !!attachments.querySelector('[data-uploading]')), 50);
@@ -139,14 +173,31 @@ const FAKE_DEEPSEEK = `<!doctype html><meta charset="utf-8"><title>DeepSeek</tit
     const text = box.value;
     const files = [...attachments.querySelectorAll('img')].map((img) => img.alt);
     const toggles = [...document.querySelectorAll('.ds-toggle-button--selected')].map((button) => button.textContent);
-    window.sent.push({ text, files, toggles });
+    window.sent.push({ text, files, toggles, at: Date.now() });
     localStorage.setItem('sent', JSON.stringify(window.sent));
-    const hangs = window.sent.length === 1;
-    const busy = window.sent.length === 2;
+    const plan = JSON.parse(localStorage.getItem('plan') || '["hang","busy"]');
+    const step = plan.shift();
+    localStorage.setItem('plan', JSON.stringify(plan));
+    const busy = step === 'busy';
     box.value = '';
     attachments.replaceChildren();
     icon.setAttribute('d', 'M2 4'); // the stop square while writing
-    if (hangs) return document.getElementById('chat').append('正在分析图片');
+    if (step === 'hang') return document.getElementById('chat').append('正在分析图片');
+    if (step === 'late') {
+      // An earlier answer drawn after the marking, for a message that never reached the server.
+      const old = document.createElement('div');
+      old.className = 'ds-markdown';
+      old.textContent = '一段迟到的旧回答，不是这一轮的。';
+      document.getElementById('chat').append(old);
+      setTimeout(() => icon.setAttribute('d', 'M8 1'), 200);
+      return;
+    }
+    const parent = step === 'wrong' ? 7 : text.startsWith('我照你上一稿') ? 2 : null;
+    fetch('__API__/api/v0/chat/completion' + (step === 'refuse' ? '?refuse' : ''), {
+      method: 'POST',
+      body: JSON.stringify({ parent_message_id: parent, prompt: text, ref_file_ids: files }),
+    });
+    if (step === 'refuse' || step === 'wrong') return;
     setTimeout(() => {
       const next = text.startsWith('我照你上一稿');
       const answer = document.createElement('div');
@@ -176,10 +227,12 @@ const answerDialogs = () =>
   });
 const refuse = (value) => page.evaluate((answer) => (window.vaRefuse = answer), value);
 let model;
+let deepseekApi;
 
 test.before(async () => {
   makeVideo();
-  fs.writeFileSync(DEEPSEEK_PAGE, FAKE_DEEPSEEK);
+  deepseekApi = await fakeDeepSeekApi();
+  fs.writeFileSync(DEEPSEEK_PAGE, FAKE_DEEPSEEK.replaceAll('__API__', `http://127.0.0.1:${deepseekApi.server.address().port}`));
   model = await fakeModel();
   cli(['config', '--provider', 'openai', '--model', 'fake-model', '--base-url', `http://127.0.0.1:${model.server.address().port}/v1`]);
   const userData = path.join(ROOT, 'gui-data');
@@ -216,6 +269,7 @@ test.afterEach(async () => {
 test.after(async () => {
   await app?.close();
   model?.server.close();
+  deepseekApi?.server.close();
   fs.rmSync(ROOT, { recursive: true, force: true });
 });
 
@@ -692,6 +746,76 @@ devTest('logs record every job and never the API key', async () => {
   const all = files.map((file) => fs.readFileSync(file, 'utf8')).join('\n');
   assert.match(all, /job task-[\w-]+ started: 处理/);
   assert.doesNotMatch(all, /e2e-test-key/);
+});
+
+// Runs the DeepSeek route with what the fake page is told to do, and returns the task and its output.
+async function runDeepSeek(fake) {
+  cli(['pictures', VIDEO, '-o', WORKSPACE, '--use', '0']); // every picture, as earlier rounds linked none of them
+  const deepseekTasks = async () => (await page.evaluate(() => window.va.tasks())).filter((item) => item.title.startsWith('总结（DeepSeek 网页'));
+  const known = new Set((await deepseekTasks()).map((item) => item.id));
+  await app.evaluate(({ BrowserWindow }, values) => {
+    const script = Object.entries(values).map(([key, value]) => `localStorage.setItem(${JSON.stringify(key)}, ${JSON.stringify(value)});`).join('');
+    return BrowserWindow.getAllWindows().find((win) => win.getTitle() === 'DeepSeek').webContents.executeJavaScript(script);
+  }, fake);
+  await page.click('.tabs button[data-tab=summary]');
+  await page.check('input[name=route][value=deepseek]');
+  await page.click('#run-summary');
+  for (const end = Date.now() + 120_000; ; await new Promise((resolve) => setTimeout(resolve, 500))) {
+    const task = (await deepseekTasks()).find((item) => !known.has(item.id));
+    if (task && !['queued', 'running'].includes(task.status)) {
+      return { task, output: (await page.evaluate((id) => window.va.taskOutput(id), task.id)).map(([, text]) => text).join('') };
+    }
+    if (Date.now() > end) assert.fail('the DeepSeek task did not end');
+  }
+}
+
+devTest('a DeepSeek task waits out a refusal for sending too often and checks what went out', async () => {
+  const before = deepseekApi.messages.length;
+  // Refused at the upload and at the send; a message into another conversation; an old answer drawn for a message that
+  // never left, which must not pass for the new answer.
+  const { task, output } = await runDeepSeek({ uploads: 'refuse', plan: '["refuse","wrong","late"]', sent: '[]', attached: '[]' });
+  assert.equal(task.status, 'done', output.slice(-1500));
+  assert.match(output, /这条消息接到了别的对话后面，重新发送/);
+  assert.match(output, /发出 6 秒还没有开始写/, 'the old answer did not end the wait');
+  const messages = deepseekApi.messages.slice(before);
+  assert.deepEqual(messages.map((message) => message.parent_message_id), [null, 7, null, 2], 'refused, wrong, the first round, the second');
+  assert.equal(messages[0].prompt, messages[2].prompt, 'the same message after the refusal');
+  assert.equal(messages[2].ref_file_ids.length, messages[0].ref_file_ids.length);
+  const sent = await app.evaluate(({ BrowserWindow }) =>
+    BrowserWindow.getAllWindows().find((win) => win.getTitle() === 'DeepSeek').webContents.executeJavaScript('window.sent'));
+  assert.ok(sent.slice(1).every((message, index) => message.at - sent[index].at >= 1400), 'messages are kept apart');
+  const summaries = fs.readdirSync(WORKSPACE, { recursive: true }).filter((name) => name.endsWith('.md'));
+  assert.ok(summaries.every((name) => !fs.readFileSync(path.join(WORKSPACE, name), 'utf8').includes('迟到的旧回答')));
+});
+
+devTest('a long conversation goes on in a new one, with what the next round needs', async () => {
+  const before = deepseekApi.messages.length;
+  await app.evaluate(() => (process.env.VA_DEEPSEEK_NEW_CHAT_CHARS = '1'));
+  const { task, output } = await runDeepSeek({ plan: '[]', sent: '[]', attached: '[]' });
+  await app.evaluate(() => delete process.env.VA_DEEPSEEK_NEW_CHAT_CHARS);
+  assert.equal(task.status, 'done', output.slice(-1500));
+  assert.match(output, /第 2 轮：对话太长，换一个新对话/);
+  const [first, second] = deepseekApi.messages.slice(before);
+  assert.equal(second.parent_message_id, null, 'not in the conversation before');
+  assert.match(second.prompt, /换了一个新对话/);
+  assert.match(second.prompt, /# Writing a video summary/, 'the rules');
+  assert.match(second.prompt, /大家好，今天讲测试视频/, 'the transcript');
+  assert.match(second.prompt, /第一轮写的测试总结/, 'the draft');
+  assert.ok(second.ref_file_ids.length > 0 && second.ref_file_ids.length <= first.ref_file_ids.length + 4, 'the pictures');
+});
+
+devTest('a picture that cannot be uploaded stops the message, and the set of pictures stays', async () => {
+  const before = deepseekApi.messages.length;
+  const set = () => JSON.parse(cli(['pictures', VIDEO, '-o', WORKSPACE, '--json']));
+  const nodes = set().nodes;
+  const { task, output } = await runDeepSeek({ uploads: 'fail', plan: '[]', sent: '[]', attached: '[]' });
+  assert.notEqual(task.status, 'done', output.slice(-1500));
+  assert.match(output, /上传 3 次都失败/);
+  assert.equal(deepseekApi.messages.length, before, 'nothing went out without its pictures');
+  assert.equal(set().current, '0');
+  assert.equal(set().nodes.length, nodes.length);
+  // What a failed task's page holds is not passed on to the next one.
+  assert.equal(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().some((win) => win.getTitle() === 'DeepSeek')), false);
 });
 
 test('closing the window keeps the app in the tray', async () => {

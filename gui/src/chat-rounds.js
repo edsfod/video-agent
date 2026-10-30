@@ -11,9 +11,13 @@ const { send } = shared;
 const deepseek = require('./deepseek');
 const { cliCommand, runToEnd } = require('./programs');
 
-// A runaway limit, said when reached: a chat AI whose 复查 keeps finding something stops here (AGENTS.md); the user
+// A runaway limit, said when reached: a chat AI whose 复查 keeps finding something stops here (docs/product-rules.md); the user
 // sets it on the summary page (user request, 2026-10-30).
 const MAX_ROUNDS = 6;
+// A conversation goes on to a new one past this many characters said in it since its first message (user request,
+// 2026-10-30), about 4 rounds on a talk, as every message makes DeepSeek read the whole conversation again: 89,000 tokens
+// grew to 160,000 in six rounds. Claude judgment; pack --new-chat carries what the next round needs.
+const NEW_CHAT_AFTER_CHARS = 100000;
 const SOURCE = 'DeepSeek 网页';
 /** The conversations of the running tasks, by task id. @type {Map<string, ReturnType<typeof deepseek.conversation>>} */
 const running = new Map();
@@ -39,6 +43,8 @@ async function startDeepSeek(task) {
   const chat = deepseek.conversation();
   running.set(task.id, chat);
   const most = task.maxRounds || MAX_ROUNDS;
+  const longest = Number(process.env.VA_DEEPSEEK_NEW_CHAT_CHARS) || NEW_CHAT_AFTER_CHARS; // tests set less
+  let said = 0;
   let code = 0;
   try {
     for (let round = 1; ; round++) {
@@ -46,9 +52,11 @@ async function startDeepSeek(task) {
         say(`已经 ${most} 轮，DeepSeek 的复查还在补上或改正，先停在这里；最后一轮的总结已经保存。`);
         break;
       }
+      const newChat = round === 1 || said > longest;
       const args = ['pack', task.video, '-o', task.workspace, '--folder', work, '--max-files', String(task.maxFiles || 50)];
       if (round > 1) args.push('--follow-up');
-      else {
+      if (round > 1 && newChat) args.push('--new-chat');
+      if (newChat) {
         if (task.template) args.push('--template', task.template);
         if (task.request) args.push('--request', task.request);
       }
@@ -56,9 +64,10 @@ async function startDeepSeek(task) {
       if (packed.code) throw new Error((packed.err || packed.out).trim());
       const folder = packed.out.trim().split('\n').pop().replace(/ \(\d+ pictures\)$/, '');
       const files = fs.readdirSync(folder).filter((name) => name !== '提示词.md').sort().map((name) => path.join(folder, name));
-      say(`第 ${round} 轮：发给 DeepSeek，附 ${files.length} 张图`);
+      say(`第 ${round} 轮：${round > 1 && newChat ? '对话太长，换一个新对话，' : ''}发给 DeepSeek，附 ${files.length} 张图`);
       const text = fs.readFileSync(path.join(folder, '提示词.md'), 'utf8');
-      const { answer, fenced } = await chat.ask({ text, files, newChat: round === 1, onStatus: say });
+      const { answer, fenced } = await chat.ask({ text, files, newChat, onStatus: say });
+      said = (newChat ? 0 : said + text.length) + answer.length;
       if (!fenced) say('回答没有放在代码块里，按页面上的文字导入');
       const importArgs = ['summarize', task.video, '-o', task.workspace, '--import', '-', '--source', SOURCE, '--note', `第 ${round} 轮`];
       if (task.template) importArgs.push('--template', task.template); // the sections the import checks for
@@ -80,7 +89,7 @@ async function startDeepSeek(task) {
     say(`出错：${error.message}`);
   } finally {
     running.delete(task.id);
-    chat.close();
+    chat.close(code !== 0);
     fs.rmSync(work, { recursive: true, force: true });
     log.close(code);
     shared.queue.exited(task.id, code);

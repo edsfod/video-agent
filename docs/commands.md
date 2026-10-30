@@ -280,7 +280,7 @@ Which of a video's pictures a summary is given, as a tree of sets. Set `0` holds
 ### `pack`
 
 ```text
-video-agent pack VIDEO [-o WORKSPACE] [--request TEXT] [--template NAME] [--follow-up]
+video-agent pack VIDEO [-o WORKSPACE] [--request TEXT] [--template NAME] [--follow-up [--new-chat]]
                  [--zip FILE | --folder PARENT [--max-files N]] [--max-images N]
 video-agent pack --collection NAME [--guide] [...]
 ```
@@ -288,6 +288,8 @@ video-agent pack --collection NAME [--guide] [...]
 The summary prompt for a chat AI on the web, which cannot run commands: the rules, the template and the evidence, with the answer asked for in one Markdown code block. Alone it prints the prompt; `--zip FILE` writes `提示词.md` and the pictures into a zip, the frames keeping their relative paths, so the summary's links work once imported; `--folder PARENT` writes `提示词.md` and numbered pictures into a new folder, for chat AIs that take no zip and a limited number of files: with more than `--max-files` (default 50, the prompt included), screen pages and whole frames go on contact sheets to fit, the pages kept larger. Every picture carries its number and time in its lower left corner. `--max-images` (default 40) caps the whole frames put in besides every screen page.
 
 `--follow-up` gives the next round after an imported answer that needs one (see `summarize`): the 复查 of the summary as saved, what the checks found and the candidates taken for the pictures asked for, to rewrite. The answer goes back with `summarize --import`. The desktop app's 「DeepSeek 网页」 route runs these rounds itself in a DeepSeek window.
+
+`--new-chat`, with `--follow-up` and `--folder`, gives that round for a new conversation: the rules, the transcript and the current set of pictures come first, then the round itself. It carries nothing of the earlier answers.
 
 ### `fix`
 
