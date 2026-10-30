@@ -551,17 +551,19 @@ def test_a_chat_ai_drops_pictures_and_asks_for_others_over_rounds(processed, cap
   assert folder.name == 'sample clip [test]-下一轮材料'
   assert min(path.name for path in folder.iterdir()).startswith('001-补截-00-00-0')
 
-  # A 复查 that still adds something goes round again; one that adds and corrects nothing, with nothing wanted and the
-  # checks passed, ends the rounds.
+  # A 复查 that still adds something goes round again; one that changes nothing in the draft, with nothing wanted and
+  # the checks passed, ends the rounds.
   body = '# 标题\n\n视频：x · 时长：0:08\n\n## 概要\n\n用上了候选，讲了彩条和测试图案各自的用途。\n\n## 详细内容\n\n- 彩条\n\n'
   done = '## 画面调整\n\n无\n\n## 复查\n\n- 删掉的节：要点、时间线、需留意、需确认（测试视频只有 8 秒）\n'
   answer.write_text(body + done + '- 补上：`00:00:03` 测试图案\n', encoding='utf-8')
   assert cli.main(['summarize', str(video), '-o', str(workspace), '--import', str(answer), '--make-current']) == 0
   told = capsys.readouterr().err
-  assert '复查：补上 1 处，改正 0 处' in told and '--follow-up' in told and '检查' not in told
-  answer.write_text(body + done, encoding='utf-8')
+  assert '复查：补上 1 处，改正 0 处，稿子和上一稿相比改了' in told and '--follow-up' in told and '检查' not in told
+  # Corrections listed in a draft equal to the one before change nothing (DeepSeek, 2026-10-30): the rounds end.
+  answer.write_text(body + done + '- 改正：复核了所有时间点，确认无遗漏\n', encoding='utf-8')
   assert cli.main(['summarize', str(video), '-o', str(workspace), '--import', str(answer), '--make-current']) == 0
-  assert '--follow-up' not in capsys.readouterr().err
+  told = capsys.readouterr().err
+  assert '改正 1 处，但稿子和上一稿一样' in told and '--follow-up' not in told
   assert picture_review.load(asset)['unused'] == [dropped], 'what was dropped stays dropped'
   with pytest.raises(SystemExit):
     cli.main(['pack', str(video), '-o', str(workspace), '--follow-up'])

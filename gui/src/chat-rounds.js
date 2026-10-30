@@ -68,7 +68,7 @@ async function startDeepSeek(task) {
         throw new Error('导入失败，DeepSeek 的回答记在这个任务的日志里');
       }
       if (!saved.err.includes('--follow-up')) {
-        say(`复查没有再补上或改正，检查也都通过，${round} 轮完成。`);
+        say(`这一稿没有再补上或改正什么，检查也都通过，${round} 轮完成。`);
         break;
       }
       say('开始下一轮');

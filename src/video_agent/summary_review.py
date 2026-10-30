@@ -9,9 +9,13 @@ said is in it, not on its length (user decision): only the chat AI, reading the 
 复查 says what it found. Likewise for pictures (user decision, 2026-10-30: title cards repeating what was said, the
 speaker and stock footage linked although the rules said not to): the 复查 says for each linked picture what it shows
 that the transcript does not; a link for which it says nothing is taken out, and a picture linked without a word on it
-is named in the next round. The state between rounds is in summary-review.json in the video's folder.
+is named in the next round. Whether a round changed anything is read from the drafts themselves, not from its 复查
+(user report, 2026-10-30: six rounds did not end; the fourth 复查 was the third's word for word, and the sixth listed
+two corrections in a draft equal to the fifth). The state between rounds is in summary-review.json in the video's
+folder.
 """
 
+import difflib
 import json
 import re
 from pathlib import Path
@@ -152,14 +156,29 @@ def load(asset):
     return {}
 
 
-def record(asset, draft, review, problems, status=lambda message: None):
+def changed(before, after):
+  """How many lines of a summary differ from the draft before, blank lines and spaces aside."""
+  lines = [[re.sub(r'\s+', '', line) for line in text.splitlines() if line.strip()] for text in (before, after)]
+  blocks = difflib.SequenceMatcher(None, *lines, autojunk=False).get_opcodes()
+  return sum(max(end - start, last - first) for kind, start, end, first, last in blocks if kind != 'equal')
+
+
+def record(asset, draft, review, problems, status=lambda message: None, before=None):
   """Saves what the next round needs and says it; returns whether there is one, pictures aside: after a first draft,
-  after a 复查 that added or corrected something, and while a check finds something."""
+  after a 复查 that added or corrected something in a draft that differs from the one `before`, and while a check
+  finds something."""
+  text = Path(draft).read_text(encoding='utf-8')
+  lines = changed(before, text) if before is not None else None
   if review is not None:
-    status(f'{HEADING}：补上 {len(review["added"])} 处，改正 {len(review["fixed"])} 处')
+    said = f'{HEADING}：补上 {len(review["added"])} 处，改正 {len(review["fixed"])} 处'
+    if lines == 0:
+      said += '，但稿子和上一稿一样'
+    elif lines is not None:
+      said += f'，稿子和上一稿相比改了 {lines} 行'
+    status(said)
   for problem in problems:
     status(f'检查：{problem}')
-  again = review is None or bool(review['added'] or review['fixed'] or problems)
+  again = review is None or bool(problems) or (bool(review['added'] or review['fixed']) and lines != 0)
   state = {'draft': Path(draft).name, 'first': review is None, 'problems': problems, 'review': review, 'again': again}
   files.write_text(Path(asset) / NAME, json.dumps(state, ensure_ascii=False, indent=2) + '\n')
   return again

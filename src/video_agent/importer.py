@@ -127,7 +127,9 @@ def import_summary(
     # A later round (an answer with a 复查, after an import that asked for another round) overwrites the round before.
     before = summary_review.load(asset) if review is not None else {}
     later = before.get('again') or picture_review.load(asset).get('requests')
-    if later and before.get('draft') and (asset / before['draft']).is_file():
+    earlier = asset / before['draft'] if before.get('draft') else None
+    draft = earlier.read_text(encoding='utf-8') if earlier and earlier.is_file() else None  # to see what changed
+    if later and draft is not None:
       target, _ = versions.overwrite(asset / SUMMARY_NAME, before['draft'], text, **written)
     else:
       target, _ = versions.save(asset / SUMMARY_NAME, text, **written)
@@ -147,7 +149,7 @@ def import_summary(
       problems = summary_review.check(
         target.read_text(encoding='utf-8'), asset, templates.text(template), length, pictures=pictures, review=review
       )
-      summary_review.record(asset, target, review, problems, status)
+      summary_review.record(asset, target, review, problems, status, before=draft)
   return target, pairs
 
 
