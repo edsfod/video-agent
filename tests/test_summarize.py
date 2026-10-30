@@ -568,6 +568,33 @@ def test_a_chat_ai_drops_pictures_and_asks_for_others_over_rounds(processed, cap
   assert 'no next round' in capsys.readouterr().err
 
 
+def test_a_chat_ais_later_rounds_overwrite_the_round_before(processed):
+  from video_agent import versions
+  from video_agent.importer import import_summary
+
+  video, workspace = processed
+  asset = asset_folder(workspace, video.resolve())
+  import_summary(
+    video,
+    workspace,
+    '# 已有的总结\n\n## 概要\n\n别的路线写的，留着不动，讲了彩条和测试图案各自的用途。\n',
+    source='模型 API',
+  )
+  body = '# 标题\n\n## 概要\n\n第 {} 轮写的测试总结，讲了彩条和测试图案各自的用途，以及怎样看出画面偏色。\n'
+  first, _ = import_summary(video, workspace, body.format(1), rounds=True, note='第 1 轮')
+  review = '\n## 复查\n\n- 补上：`00:00:03` 测试图案\n'
+  second, _ = import_summary(video, workspace, body.format(2) + review, rounds=True, note='第 2 轮')
+  third, _ = import_summary(video, workspace, body.format(3) + review, rounds=True, note='第 3 轮')
+  listed = versions.listing(asset / '总结.md')
+  assert '留着不动' in (asset / '总结.md').read_text(encoding='utf-8'), 'the current summary is not touched'
+  assert [version['note'] for version in listed['versions']] == ['第 3 轮'], 'one version, the last round'
+  assert all(not path.exists() for path in (first, second) if path != third), 'the earlier rounds are gone'
+  assert '第 3 轮写的' in third.read_text(encoding='utf-8')
+  # A new first draft, without a 复查, starts a version of its own.
+  import_summary(video, workspace, body.format(1), rounds=True, note='第 1 轮')
+  assert len(versions.listing(asset / '总结.md')['versions']) == 2
+
+
 def test_the_checks_name_what_a_chat_ais_summary_leaves_out(processed):
   from video_agent import summary_review
   from video_agent.importer import import_summary

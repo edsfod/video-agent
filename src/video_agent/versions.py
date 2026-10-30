@@ -81,6 +81,24 @@ def save(target, text, *, source='', note='', make_current=False):
   return target, True
 
 
+def overwrite(target, name, text, *, source='', note='', make_current=False):
+  """Writes a new text over an earlier one, the current text (`name` the target's own name) or a version, keeping
+  neither: a chat AI's later round over the round before (user request, 2026-10-30: the rounds of one summary
+  overwrite each other, whether or not they become current). A version written over takes the new time in its name;
+  with `make_current` it becomes the current text. Returns (path written, is current)."""
+  target = Path(target)
+  data = _load(target)
+  if name == target.name:
+    files.write_text(target, text)
+    data['current'] = _meta(source, note)
+    _save(target, data)
+    return target, True
+  data['versions'].remove(_find(target, data, name))
+  target.with_name(name).unlink(missing_ok=True)
+  _save(target, data)
+  return save(target, text, source=source, note=note, make_current=make_current)
+
+
 def keep(target, *, source=''):
   """Keeps a copy of the current text as a version unless an identical one is kept already; for routes that write
   the file themselves, such as an Agent. Returns the version's path or None."""

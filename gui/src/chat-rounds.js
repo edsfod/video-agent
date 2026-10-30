@@ -32,8 +32,8 @@ async function startDeepSeek(task) {
     send('job:output', { id: task.id, stream: 'stdout', text });
   };
   const work = fs.mkdtempSync(path.join(app.getPath('temp'), 'video-agent-deepseek-'));
-  // A first summary becomes the current one, and each later round replaces it; beside an existing summary every
-  // round is kept as a version, for the user to choose, as with the other routes.
+  // A first summary becomes the current one; beside an existing summary it is a version, for the user to choose, as
+  // with the other routes. Either way each later round overwrites the one before (the import sees to it).
   const current = !fs.existsSync(path.join(task.folder, '总结.md'));
   const chat = deepseek.conversation();
   running.set(task.id, chat);

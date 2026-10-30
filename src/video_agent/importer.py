@@ -123,7 +123,14 @@ def import_summary(
   text = re.sub(r'^视频：.*?时长：[0-9:]+', lambda _: line, text, count=1, flags=re.MULTILINE)
   with files.video_lock(asset, 'import the summary'):
     text = _capture_frames(text, video, asset, length, status)
-    target, _ = versions.save(asset / SUMMARY_NAME, text, source=source or '导入', note=note, make_current=overwrite)
+    written = {'source': source or '导入', 'note': note, 'make_current': overwrite}
+    # A later round (an answer with a 复查, after an import that asked for another round) overwrites the round before.
+    before = summary_review.load(asset) if review is not None else {}
+    later = before.get('again') or picture_review.load(asset).get('requests')
+    if later and before.get('draft') and (asset / before['draft']).is_file():
+      target, _ = versions.overwrite(asset / SUMMARY_NAME, before['draft'], text, **written)
+    else:
+      target, _ = versions.save(asset / SUMMARY_NAME, text, **written)
     if unused or wanted or (asset / picture_review.NAME).is_file():
       picture_review.apply(video, asset, target, unused, wanted, length, status)
       if unused:

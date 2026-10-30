@@ -336,9 +336,9 @@ devTest('summary through DeepSeek\'s web chat, in rounds until it asks for no mo
   assert.ok(sent[3].files.length >= 1 && sent[3].files.every((name) => name.includes('补截')));
   assert.ok(output.some(([, text]) => text.includes('正在分析图片')), 'the hang is in the task output');
   assert.ok(output.some(([, text]) => text.includes('服务器繁忙')), 'the retry is in the task output');
-  // A summary was there already (the model API's), so both rounds are kept as versions beside it.
+  // A summary was there already (the model API's), so the rounds are a version beside it, the second over the first.
   const versions = JSON.parse(cli(['versions', VIDEO, '-o', WORKSPACE, '--json'])).versions.filter((item) => item.source === 'DeepSeek 网页');
-  assert.deepEqual(versions.map((item) => item.note).sort(), ['第 1 轮', '第 2 轮']);
+  assert.deepEqual(versions.map((item) => item.note), ['第 2 轮']);
 });
 
 devTest('copy material puts the rules and transcript on the clipboard', async () => {
