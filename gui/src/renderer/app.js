@@ -22,7 +22,6 @@ async function init() {
   }
   renderUpdate(await window.va.updateState());
   window.va.accounts().then((list) => ((state.accounts = list), renderAccounts()));
-  state.route = state.env.claude ? 'claude' : state.env.codex ? 'codex' : 'api';
   state.videos = state.settings.videos.map((path) => ({ path, info: null }));
   state.tasks = await window.va.tasks();
   $('download-then-process').checked = state.settings.processAfterDownload !== false; // on unless turned off

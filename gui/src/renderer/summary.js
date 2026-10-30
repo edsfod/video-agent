@@ -24,6 +24,7 @@ export const routeName = (route) =>
 export const routeMissing = (route) =>
   (route === 'claude' && !state.env.claude) || (route === 'codex' && !state.env.codex) || otherRoute(route)?.found === false;
 const routeNote = (route) =>
+  (!route && '选一种总结方式。') ||
   ROUTE_NOTES[route] ||
   (otherRoute(route)
     ? `在后台运行 ${otherRoute(route)?.name}，按同一份 skill 写总结。它以你的身份运行命令，不限于工作区。`
@@ -53,8 +54,8 @@ async function saveRouteChoice(changes) {
 
 async function renderModel() {
   const route = state.route;
-  $('route-model-label').hidden = !modelTakes(route);
-  if (!modelTakes(route)) return;
+  $('route-model-label').hidden = !route || !modelTakes(route);
+  if (!route || !modelTakes(route)) return;
   const select = $('route-model');
   const fill = (list, note) => {
     if (route !== state.route) return; // another route was chosen meanwhile
@@ -91,18 +92,18 @@ $('route-model').onchange = async () => {
   const custom = $('route-model').value === CUSTOM_MODEL;
   $('route-model-custom').hidden = !custom;
   if (custom) return $('route-model-custom').focus();
-  await saveRouteChoice({ routeModels: { ...(state.settings.routeModels || {}), [state.route]: $('route-model').value } });
+  await saveRouteChoice({ routeModels: { ...(state.settings.routeModels || {}), [String(state.route)]: $('route-model').value } });
   renderModel(); // the thinking levels may follow the model
 };
 $('route-model-custom').onchange = () =>
-  saveRouteChoice({ routeModels: { ...(state.settings.routeModels || {}), [state.route]: $('route-model-custom').value.trim() } });
+  saveRouteChoice({ routeModels: { ...(state.settings.routeModels || {}), [String(state.route)]: $('route-model-custom').value.trim() } });
 $('route-effort').onchange = () =>
-  saveRouteChoice({ routeEfforts: { ...(state.settings.routeEfforts || {}), [state.route]: $('route-effort').value } });
+  saveRouteChoice({ routeEfforts: { ...(state.settings.routeEfforts || {}), [String(state.route)]: $('route-effort').value } });
 
 function renderRoutes() {
   for (const label of $$('#routes .route-agent')) label.remove();
   $('routes').querySelector('input[value=api]').parentElement.before(...otherRouteLabels());
-  if (!document.querySelector(`input[name=route][value="${state.route}"]`)) state.route = 'api';
+  if (state.route && !document.querySelector(`input[name=route][value="${state.route}"]`)) state.route = null;
   for (const input of $$('input[name=route]')) {
     const missing = routeMissing(input.value);
     input.disabled = missing;
@@ -122,7 +123,7 @@ export async function renderSummary(video) {
   renderRoutes();
   const article = $('summary');
   const info = video.info;
-  $('run-summary').disabled = !info?.processed || state.route === 'other';
+  $('run-summary').disabled = !info?.processed || !state.route || state.route === 'other';
   $('run-summary').textContent = state.route === 'copy' ? '复制材料' : info?.summary ? '重新生成总结' : '生成总结';
   $('open-summary').hidden = !info?.summary;
   const copying = state.route === 'copy' && !!info?.processed;
@@ -232,18 +233,19 @@ $('open-summary').onclick = () => {
 $('run-summary').onclick = async () => {
   const video = pageVideo();
   const info = video.info;
-  if (!info) return; // not read yet
+  const route = state.route;
+  if (!info || !route) return; // not read yet, or no route chosen
   const request = $('summary-request').value.trim();
-  if (state.route === 'copy') return copyMaterial();
-  const name = routeName(state.route);
+  if (route === 'copy') return copyMaterial();
+  const name = routeName(route);
   // A summary there already stays current; the new one is kept as a version to compare and choose.
   if (info.summary) summaryState('已经有总结：新写的会另存为一个版本，原来的不动。');
   addTask({
     kind: 'summary',
     title: `总结（${name}）：${baseName(video.path)}`,
-    route: state.route,
-    agent: ['api', 'deepseek'].includes(state.route) ? undefined : state.route,
-    maxFiles: state.route === 'deepseek' ? state.settings.webFiles || 50 : undefined,
+    route,
+    agent: ['api', 'deepseek'].includes(route) ? undefined : route,
+    maxFiles: route === 'deepseek' ? state.settings.webFiles || 50 : undefined,
     video: video.path,
     folder: info.folder,
     request,

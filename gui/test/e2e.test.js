@@ -268,6 +268,8 @@ devTest('frames tab takes an extra frame', async () => {
 test('summary through the model API, with one frame tool round', async () => {
   await page.click('.tabs button[data-tab=summary]');
   assert.equal(await page.getAttribute('#routes label:first-child input', 'value'), 'copy', '复制材料 comes first');
+  assert.equal(await page.locator('input[name=route]:checked').count(), 0, 'no route is chosen for the user');
+  assert.equal(await page.isDisabled('#run-summary'), true);
   await page.check('input[name=route][value=api]');
   // A model chosen on the page for this route, instead of the one in the settings.
   // A model from the provider's list and a thinking level, instead of the model in the settings.
