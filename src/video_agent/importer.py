@@ -1,14 +1,14 @@
 """Saving a text written elsewhere (a chat AI's answer to `pack`, an Agent's draft, the user's own) as a video's
 summary or a collection's overview or study guide, and repairing what chat AIs do to it on the way: a code fence
-around it, links rewritten into searches or a sandbox, frames asked for by time, a 字幕改正 section and a 画面调整
-section (picture_review.py).
+around it, links rewritten into searches or a sandbox, frames asked for by time, a 字幕改正 section, a 画面调整
+section (picture_review.py) and a 复查 section, with the checks of a chat AI's rounds (summary_review.py).
 """
 
 import re
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-from . import collection, files, media, picture_review, processor, versions
+from . import collection, files, media, picture_review, processor, summary_review, templates, versions
 from .evidence import SUMMARY_NAME, processed, video_line
 from .model_api import SummaryError
 
@@ -87,16 +87,30 @@ def _capture_frames(text, video, asset, length, status):
   return CAPTURE_LINK.sub(take, text)
 
 
-def import_summary(video, workspace, text, *, overwrite=False, source='', note='', status=lambda message: None):
+def import_summary(
+  video,
+  workspace,
+  text,
+  *,
+  overwrite=False,
+  source='',
+  note='',
+  rounds=False,
+  template=None,
+  status=lambda message: None,
+):
   """Saves a summary written elsewhere, such as by a chat AI from `pack`, as 总结.md: a ```markdown fence is removed,
   rewritten links point at the video's files again, frames asked for with CAPTURE links are taken, the 视频 line is the
   one this program writes, a 字幕改正 section goes into the cleaned transcript and a 画面调整 section into
   picture-review.json, with the candidates it asks for taken. With a summary there already, the
-  new one is kept as a version unless `overwrite` makes it current (versions.py). Returns (path written, corrections
-  applied)."""
+  new one is kept as a version unless `overwrite` makes it current (versions.py). With `rounds` (a chat AI's answer,
+  written to `template`), a 复查 section is taken off and the summary checked for the next round. Returns (path
+  written, corrections applied)."""
   video, info, asset, manifest = processed(video, workspace)
   text, pairs = take_corrections(clean(text))
+  pictures = bool(picture_review.SECTION.search(text))
   text, unused, wanted = picture_review.take(text)
+  text, review = summary_review.take(text) if rounds else (text, None)
   if len(text.strip()) < 40:
     raise SummaryError('The summary to import is empty or too short')
   text = repair_links(text, asset)
@@ -116,6 +130,13 @@ def import_summary(video, workspace, text, *, overwrite=False, source='', note='
       known = [pair for pair in corrections.load(asset) if pair[0] not in {wrong for wrong, _ in pairs}]
       corrections.save(asset, known + pairs)
       processor.refresh_transcript(asset)
+    if not rounds:
+      (asset / summary_review.NAME).unlink(missing_ok=True)  # a later round would rewrite an older draft
+    else:
+      problems = summary_review.check(
+        target.read_text(encoding='utf-8'), asset, templates.text(template), length, pictures=pictures, review=review
+      )
+      summary_review.record(asset, target, review, problems, status)
   return target, pairs
 
 

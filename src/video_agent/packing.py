@@ -1,7 +1,8 @@
 """Material for chat AIs on the web, which cannot run commands: the prompt (rules, template, evidence), on its own for
 the clipboard, in a zip with the pictures, or in a folder of numbered pictures for a chat AI that takes a limited
-number of files. The answer comes back through importer.py; when it asks for pictures in a 画面调整 section, the next
-round (`follow_up`) gives the candidates taken and the summary as saved, until it asks for no more.
+number of files. The answer comes back through importer.py; the next round (`follow_up`) asks for a 复查 of the
+summary as saved, with what the checks found and the candidates for the pictures its 画面调整 section asked for, until
+a 复查 finds nothing more (summary_review.py).
 """
 
 import shutil
@@ -10,7 +11,7 @@ import zipfile
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from . import files, media, picture_review, templates
+from . import files, media, picture_review, summary_review, templates
 from .evidence import SUMMARY_NAME, clock, frames, pages, plan, processed, video_line, video_name
 from .importer import CORRECTIONS_HEADING
 from .model_api import SummaryError
@@ -45,7 +46,7 @@ CORRECTIONS_SECTION = f"""## 字幕改正（网页 AI 写在总结最后）
 # more at the end; the rules themselves stay in the template.
 REMINDER = f"""写之前，再对一遍上面规则里的这几条：
 
-- 详细内容写成能快速扫读的笔记，不要按讲话顺序逐段复述（「作者说……他还说……」）；每一部分自己判断用几句话、列表、表格还是步骤。
+- 详细内容是总结的主体：讲者讲到的每个论点和理由、例子、数字、定义、条件、步骤和结论都要写到，详略跟着视频讲了多少走；写成笔记，不要按讲话顺序逐段复述（「作者说……他还说……」），每一部分自己判断用几句话、列表、表格还是步骤。
 - 各节按视频的先后排，时间范围不交错；每个要点标的时间点就是视频讲到它的时候。
 - 画面是材料，不是配图：表格、图表、文件和政策截图、公式、代码里的内容要读出来写进总结，尤其是讲者没念出来的数字和\
 条文。画面链接只放在它确实显示了这一点的地方，不按时间顺手配一张；链接文字写图上是什么，写成 `[<图表、截\
@@ -54,7 +55,28 @@ REMINDER = f"""写之前，再对一遍上面规则里的这几条：
 - 写完对一遍画面：附上的图里和内容无关的（素材、空镜、讲者），在「{picture_review.HEADING}」里写「不用」；再从字幕推测哪\
 里屏幕上应该有图而附图里没有（讲者在念一串数字、描述图表或曲线、逐条读文件或条文、说「看这里」「如图」），在那里写「补\
 截」和推测的时间段。
-- 照模板的各节写，需要时最后加「{CORRECTIONS_HEADING}」「{picture_review.HEADING}」两节；整篇放进一个 ````markdown 代码块。"""
+- 照模板的各节写；字幕识别错的词写进最后的「{CORRECTIONS_HEADING}」，不写进「需确认」；「{picture_review.HEADING}」一定要写，没有要调整的就写「无」；整篇放进一个 ````markdown 代码块。"""
+
+# From the second round on (summary_review.py): the chat AI goes through the transcript again against its draft and
+# says what it added and corrected. Whether a summary is detailed enough is whether it holds every point said, not its
+# length (user decision, 2026-10-30).
+REVIEW_SECTION = f"""请对照前面的字幕复查上一稿，再输出改好的整篇：
+
+- 逐段对照字幕：讲者讲到的每个论点和理由、例子、数字、定义、条件、步骤和结论，总结里都要有，漏了就补上；只是重复、口\
+头禅、闲聊的不用写。
+- 核对每个时间点、命题的标签、链接的画面和它旁边写的内容，有错就改。
+- 字幕识别错的词写进「{CORRECTIONS_HEADING}」，不写进「需确认」。
+- 最后写「{summary_review.HEADING}」一节，每行一条，写这一稿比上一稿补上了什么、改正了什么；模板里有意删掉的节、有意不写\
+的时间段也写在这里，说明原因。什么都没有补、没有改，就写「无」。导入时程序会把这一节去掉。
+
+```markdown
+## {summary_review.HEADING}
+
+- 补上：<时间> <补上了什么>
+- 改正：<时间> <原来怎么写> → <改成什么>
+- 删掉的节：<节名>（<为什么没有内容>）
+- 不写的时间段：<开始 时:分:秒>–<结束 时:分:秒>（<为什么：课间、闲聊……>）
+```"""
 
 # A chat AI cannot look at the video (user request, 2026-10-29: delete the frames that are no use, add the ones that
 # are missing, over several rounds as an Agent would): it says which pictures it does not need and where one is missing.
@@ -68,7 +90,7 @@ PICTURES_SECTION = f"""## {picture_review.HEADING}（网页 AI 写在总结最�
 拿不准也可以要，多要几处没关系。
 
 导入时程序会照它处理，再把这一节从总结里去掉：用不上的画面以后不再给你；要补的，程序在那段时间里截几张不同的候选，下一轮\
-发给你挑。两件事都没有的就不写这一节。
+发给你挑。两件事都没有，也要写这一节，内容写「无」，表示你检查过了。
 
 ```markdown
 ## {picture_review.HEADING}
@@ -195,18 +217,21 @@ def material(video, workspace, *, request='', max_images=40, work_dir=None, max_
 
 
 def follow_up(video, workspace, *, work_dir=None, max_files=None):
-  """The next round for a chat AI whose summary asked for pictures in a 画面调整 section: the candidates taken, and
-  the summary as it was saved (with the transcript corrections applied), to rewrite. Returns (text, entries) as
-  `material` does: with `max_files`, numbered pictures; with only `work_dir`, the pictures at their paths in the
-  video's folder; without either, none, and the text names the files by their own names."""
+  """The next round for a chat AI: the 复查 of its draft (summary_review.py) with what the checks found, the
+  candidates taken for the pictures its 画面调整 section asked for, and the summary as it was saved (with the
+  transcript corrections applied), to rewrite. Returns (text, entries) as `material` does: with `max_files`, numbered
+  pictures; with only `work_dir`, the pictures at their paths in the video's folder; without either, none, and the
+  text names the files by their own names."""
   video, _, asset, _ = processed(video, workspace)
   state = picture_review.load(asset)
-  draft = asset / state['draft'] if state.get('draft') else None
+  review = summary_review.load(asset)
+  name = review.get('draft') or state.get('draft')
+  draft = asset / name if name else None
   if not draft or not draft.is_file():
-    raise SummaryError(f'no summary with a {picture_review.HEADING} section has been imported for {video.name}')
+    raise SummaryError(f'no summary from a chat AI has been imported for {video.name}')
   requests = state.get('requests') or []
-  if not requests:
-    raise SummaryError(f'the summary imported last for {video.name} asked for no pictures; there is no next round')
+  if not requests and not review.get('again'):
+    raise SummaryError(f'the summary imported last for {video.name} needs no other round; there is no next round')
   taken = [relative for request in requests for relative in request['candidates']]
   if max_files:
     taken = taken[: max_files - 1]
@@ -233,26 +258,36 @@ def follow_up(video, workspace, *, work_dir=None, max_files=None):
       )
     else:
       lines.append(f'- {span}：没有截到（时间超出视频，或者图片太多没有附上）')
-  same = all(names[relative] == relative for relative in names)
-  where = (
-    '下表列出每张图的路径。'
-    if same
-    else '附件的文件名不是总结里要用的路径：下表左边是文件名，右边是它的路径，链接时写右边的路径。'
-  ) + (LABEL_NOTE if labels else '')
+  if requests:
+    same = all(names[relative] == relative for relative in names)
+    where = (
+      '下表列出每张图的路径。'
+      if same
+      else '附件的文件名不是总结里要用的路径：下表左边是文件名，右边是它的路径，链接时写右边的路径。'
+    ) + (LABEL_NOTE if labels else '')
+    opening = (
+      f'我照你上一稿最后的「{picture_review.HEADING}」截好了图，附上 {len(names)} 张候选。{where}请看过这些图：\n\n'
+      '- 候选里有合适的，就链接到总结里讲到它的地方，并把图里的内容读出来写进总结；都不合适就不链接，也可以换个时间段再'
+      '要。\n- 写过「不用」的画面已经去掉，不要再链接。'
+    )
+  else:
+    opening = '我把你上一稿导入了，下面附上导入后的样子。'
+  problems = review.get('problems') or []
+  found = '程序检查上一稿，发现这些问题，一并改掉：\n\n' + '\n'.join(f'- {problem}' for problem in problems)
   text = '\n\n'.join(
-    (
-      (
-        f'我照你上一稿最后的「{picture_review.HEADING}」截好了图，附上 {len(names)} 张候选。{where}请看过这些图，改写整篇'
-        f'总结：\n\n- 候选里有合适的，就链接到总结里讲到它的地方，并把图里的内容读出来写进总结；都不合适就不链接，也可以'
-        f'换个时间段再要。\n- 写过「不用」的画面已经去掉，不要再链接。\n- 还要调整就照样在最后写「{picture_review.HEADING}」，'
-        f'不用调整就不写这一节。\n\n{OUTPUT_FENCE}'
-      ),
+    part
+    for part in (
+      opening,
+      REVIEW_SECTION,
+      found if problems else '',
+      OUTPUT_FENCE,
       '\n'.join(lines),
       '上一稿（导入后的样子，字幕改正已经照办）：',
       draft.read_text(encoding='utf-8').strip(),
       '---',
       REMINDER,
     )
+    if part
   )
   return text, [(names[relative], labels.path(relative)) for relative in names] if labels else []
 

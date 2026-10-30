@@ -1,6 +1,7 @@
 // The DeepSeek route of a video summary: rounds of `pack --folder` → DeepSeek's web chat (deepseek.js) → `summarize
-// --import`, the next round with `pack --follow-up`, until an answer asks for no more pictures (packing.py,
-// picture_review.py). The CLI does all the summary work; this only carries the material and the answers.
+// --import`, the next round with `pack --follow-up` while the import asks for one: a 复查 of the draft, what the checks
+// found, pictures wanted (summary_review.py, picture_review.py). The CLI does all the summary work; this only carries
+// the material and the answers.
 
 const { app } = require('electron');
 const fs = require('node:fs');
@@ -10,7 +11,7 @@ const { send } = shared;
 const deepseek = require('./deepseek');
 const { cliCommand, runToEnd } = require('./programs');
 
-// A runaway limit, said when reached: a chat AI that keeps asking for pictures stops here (AGENTS.md).
+// A runaway limit, said when reached: a chat AI whose 复查 keeps finding something stops here (AGENTS.md).
 const MAX_ROUNDS = 6;
 const SOURCE = 'DeepSeek 网页';
 
@@ -36,7 +37,7 @@ async function startDeepSeek(task) {
   try {
     for (let round = 1; ; round++) {
       if (round > MAX_ROUNDS) {
-        say(`已经 ${MAX_ROUNDS} 轮，DeepSeek 还在要画面，先停在这里；最后一轮的总结已经保存。`);
+        say(`已经 ${MAX_ROUNDS} 轮，DeepSeek 的复查还在补上或改正，先停在这里；最后一轮的总结已经保存。`);
         break;
       }
       const args = ['pack', task.video, '-o', task.workspace, '--folder', work, '--max-files', String(task.maxFiles || 50)];
@@ -54,6 +55,7 @@ async function startDeepSeek(task) {
       const { answer, fenced } = await deepseek.ask({ text, files, newChat: round === 1, onStatus: say });
       if (!fenced) say('回答没有放在代码块里，按页面上的文字导入');
       const importArgs = ['summarize', task.video, '-o', task.workspace, '--import', '-', '--source', SOURCE, '--note', `第 ${round} 轮`];
+      if (task.template) importArgs.push('--template', task.template); // the sections the import checks for
       const saved = await cli(current ? [...importArgs, '--make-current'] : importArgs, answer);
       for (const line of saved.err.split('\n').filter((item) => item.trim() && !item.includes('video-agent pack'))) say(line.trim());
       if (saved.code) {
@@ -62,10 +64,10 @@ async function startDeepSeek(task) {
         throw new Error('导入失败，DeepSeek 的回答记在这个任务的日志里');
       }
       if (!saved.err.includes('--follow-up')) {
-        say(round === 1 ? 'DeepSeek 没有要补的画面，完成。' : `DeepSeek 不再要画面，${round} 轮完成。`);
+        say(`复查没有再补上或改正，检查也都通过，${round} 轮完成。`);
         break;
       }
-      say('DeepSeek 要补画面，候选已截好，开始下一轮');
+      say('开始下一轮');
     }
   } catch (error) {
     code = 1;

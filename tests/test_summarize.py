@@ -520,7 +520,8 @@ def test_a_chat_ai_drops_pictures_and_asks_for_others_over_rounds(processed, cap
     encoding='utf-8',
   )
   assert cli.main(['summarize', str(video), '-o', str(workspace), '--import', str(answer)]) == 0
-  assert '--follow-up' in capsys.readouterr().err
+  told = capsys.readouterr().err
+  assert '--follow-up' in told and '下一轮：复查上一稿；2 处补截的候选' in told
   assert '画面调整' not in (asset / '总结.md').read_text(encoding='utf-8')
   state = picture_review.load(asset)
   assert state['unused'] == [dropped], 'a picture the summary links stays in use'
@@ -543,19 +544,52 @@ def test_a_chat_ai_drops_pictures_and_asks_for_others_over_rounds(processed, cap
   assert sorted(names) == sorted(['提示词.md', *wanted['candidates']])
   assert '00:00:01–00:00:06 彩条：\n  - frames/extra/' in prompt and '00:09:00–00:09:10 超出的：没有截到' in prompt
   assert '- 一点 `00:00:01`，讲了' in prompt and prompt.rstrip().endswith('整篇放进一个 ````markdown 代码块。')
+  assert '请对照前面的字幕复查上一稿' in prompt and '模板里的「概要」' in prompt
   capsys.readouterr()
   assert cli.main(['pack', str(video), '-o', str(workspace), '--follow-up', '--folder', str(workspace / 'out')]) == 0
   folder = next((workspace / 'out').iterdir())
   assert folder.name == 'sample clip [test]-下一轮材料'
   assert min(path.name for path in folder.iterdir()).startswith('001-补截-00-00-0')
 
-  # An answer that asks for nothing more ends the rounds.
-  answer.write_text(
-    '# 标题\n\n视频：x · 时长：0:08\n\n- 一点，用上了候选，讲了彩条和测试图案各自的用途\n', encoding='utf-8'
-  )
+  # A 复查 that still adds something goes round again; one that adds and corrects nothing, with nothing wanted and the
+  # checks passed, ends the rounds.
+  body = '# 标题\n\n视频：x · 时长：0:08\n\n## 概要\n\n用上了候选，讲了彩条和测试图案各自的用途。\n\n## 详细内容\n\n- 彩条\n\n'
+  done = '## 画面调整\n\n无\n\n## 复查\n\n- 删掉的节：要点、时间线、需留意、需确认（测试视频只有 8 秒）\n'
+  answer.write_text(body + done + '- 补上：`00:00:03` 测试图案\n', encoding='utf-8')
+  assert cli.main(['summarize', str(video), '-o', str(workspace), '--import', str(answer), '--make-current']) == 0
+  told = capsys.readouterr().err
+  assert '复查：补上 1 处，改正 0 处' in told and '--follow-up' in told and '检查' not in told
+  answer.write_text(body + done, encoding='utf-8')
   assert cli.main(['summarize', str(video), '-o', str(workspace), '--import', str(answer), '--make-current']) == 0
   assert '--follow-up' not in capsys.readouterr().err
   assert picture_review.load(asset)['unused'] == [dropped], 'what was dropped stays dropped'
   with pytest.raises(SystemExit):
     cli.main(['pack', str(video), '-o', str(workspace), '--follow-up'])
   assert 'no next round' in capsys.readouterr().err
+
+
+def test_the_checks_name_what_a_chat_ais_summary_leaves_out(processed):
+  from video_agent import summary_review
+  from video_agent.importer import import_summary
+
+  video, workspace = processed
+  asset = asset_folder(workspace, video.resolve())
+  # The subtitles speak at 0.5-2.5 s and 3-5 s; the detailed part covers only the first.
+  text = '# 标题\n\n## 概要\n\n测试。\n\n## 详细内容\n\n### 彩条 `00:00:00`–`00:00:02`\n\n- `00:00:01` 彩条，`00:09:00` 结束\n'
+  import_summary(video, workspace, text, rounds=True)
+  state = summary_review.load(asset)
+  assert state['first'] and state['again']
+  missing, pictures, late, gap = state['problems']
+  assert '「要点」' in missing and '「时间线」' in missing and '「需确认」' in missing
+  assert '画面调整' in pictures and '00:09:00' in late and '00:00:03–00:00:05' in gap
+  # Sections and spans left out on purpose, said in the 复查, are not asked for again.
+  review = (
+    '\n\n## 画面调整\n\n无\n\n## 复查\n\n- 补上：无\n- 删掉的节：要点、时间线、需留意、需确认（太短）\n'
+    '- 不写的时间段：00:00:03–00:00:05（片尾）\n'
+  )
+  import_summary(video, workspace, text.replace('`00:09:00` 结束', '结束') + review, rounds=True)
+  state = summary_review.load(asset)
+  assert state['problems'] == [] and not state['again'] and state['review']['skipped'] == [[3, 5]]
+  # An Agent's draft has no rounds; what an earlier chat AI's round left is cleared.
+  import_summary(video, workspace, text, overwrite=True)
+  assert summary_review.load(asset) == {}

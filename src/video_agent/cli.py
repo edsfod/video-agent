@@ -14,6 +14,7 @@ from . import (
   picture_review,
   processor,
   settings,
+  summary_review,
   templates,
   transcript,
   versions,
@@ -912,17 +913,33 @@ def _import(args):
   if args.collection:
     target = import_collection(args.output, args.collection, text, guide=args.guide, **written)
   else:
+    # A chat AI's answer, from a file or pasted, goes through rounds; an Agent's draft (--import alone) does not.
+    rounds = draft is None
     target, pairs = import_summary(
-      args.video, args.output, text, **written, status=lambda message: print(message, file=sys.stderr)
+      args.video,
+      args.output,
+      text,
+      **written,
+      rounds=rounds,
+      template=args.template,
+      status=lambda message: print(message, file=sys.stderr),
     )
     if pairs:
       listed = '、'.join(f'{wrong}→{right}' for wrong, right in pairs)
       print(f'applied {len(pairs)} transcript corrections from the summary: {listed}', file=sys.stderr)
-    if picture_review.load(asset_folder(args.output, probe(args.video)[0])).get('requests'):
+    asset = asset_folder(args.output, probe(args.video)[0])
+    wanted = picture_review.load(asset).get('requests')
+    review = summary_review.load(asset) if rounds else {}
+    if wanted or review.get('again'):
+      why = [
+        '复查上一稿' if review.get('first') else '',
+        f'{len(wanted)} 处补截的候选' if wanted else '',
+        f'{len(review.get("problems") or [])} 个检查出的问题' if review.get('problems') else '',
+        '上一轮复查有补上或改正，再查一遍' if review.get('review') and review.get('again') else '',
+      ]
+      print('下一轮：' + '；'.join(item for item in why if item), file=sys.stderr)
       print(
-        f'the summary asked for pictures; pack the next round with: video-agent pack "{args.video}" -o '
-        f'"{args.output}" --follow-up',
-        file=sys.stderr,
+        f'pack the next round with: video-agent pack "{args.video}" -o "{args.output}" --follow-up', file=sys.stderr
       )
   if draft:
     draft.unlink(missing_ok=True)
