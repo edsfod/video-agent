@@ -92,7 +92,8 @@ PICTURES_SECTION = f"""## {picture_review.HEADING}（网页 AI 写在总结最�
 结构，或者说「看这里」「如图」，而那段时间附上的图里没有对应的画面，就推测那时屏幕上有图，写「补截」和推测的时间段。\
 拿不准也可以要，多要几处没关系。
 
-导入时程序会照它处理，再把这一节从总结里去掉：用不上的画面以后不再给你；要补的，程序在那段时间里截几张不同的候选，下一轮\
+导入时程序会照它处理，再把这一节从总结里去掉：用不上的画面以后不再给你，附上的图里总结没有链接的也当作用不上，所以有用的\
+图都要链接到讲到它的地方；要补的，程序在那段时间里截几张不同的候选，下一轮\
 发给你挑。两件事都没有，也要写这一节，内容写「无」，表示你检查过了。
 
 ```markdown
@@ -135,8 +136,8 @@ LABEL_NOTE = (
 
 
 def numbered_pictures(asset, manifest, budget, work_dir):
-  """At most `budget` pictures with numbered names, for a chat AI that takes a limited number of files, and the note
-  that says which frames each one shows and which paths to link."""
+  """At most `budget` pictures with numbered names, for a chat AI that takes a limited number of files, the note that
+  says which frames each one shows and which paths to link, and the paths of the pictures they show."""
   labels = Labels(asset, pages(manifest) + frames(asset, manifest, 10**6), work_dir)
   chosen, side, dropped = plan(asset, manifest, budget, work_dir, labels.path)
   entries, lines = [], []
@@ -158,7 +159,8 @@ def numbered_pictures(asset, manifest, budget, work_dir):
   )
   if dropped:
     note += f'屏幕页太多，有 {dropped} 页没有附上，材料里提到它们时你看不到。'
-  return entries, note + '\n\n' + '\n'.join(lines)
+  sent = [relative for _, _, shown in chosen for _, relative in shown]
+  return entries, note + '\n\n' + '\n'.join(lines), sent
 
 
 def material(video, workspace, *, request='', max_images=40, work_dir=None, max_files=None, template=None):
@@ -170,13 +172,14 @@ def material(video, workspace, *, request='', max_images=40, work_dir=None, max_
   video, info, asset, manifest = processed(video, workspace)
   shown = pages(manifest)
   found = frames(asset, manifest, max_images)
-  entries, notes = [], []
+  entries, notes, sent = [], [], []
   if work_dir is None:
     notes.append('这次没有附上画面，材料里列出的屏幕页和画面你看不到：不要描述画面内容，也不要链接画面。')
   elif max_files:
-    entries, note = numbered_pictures(asset, manifest, max_files - 1, Path(work_dir))
+    entries, note, sent = numbered_pictures(asset, manifest, max_files - 1, Path(work_dir))
     notes.append(note)
   else:
+    sent = [relative for _, relative in shown + found]
     labels = Labels(asset, shown + found, work_dir)
     entries = [(relative, labels.path(relative)) for _, relative in shown + found]
     notes.append(
@@ -216,6 +219,7 @@ def material(video, workspace, *, request='', max_images=40, work_dir=None, max_
     )
     if part
   )
+  picture_review.sent(asset, sent)  # the pictures it sees, which the import of its answer drops unless linked
   return text, entries
 
 

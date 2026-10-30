@@ -129,7 +129,8 @@ def import_summary(
     if rounds:
       had = set(pictures.members(asset))
       linked = [unquote(match[1]) for match in summary_review.LINK.finditer(text)]
-      node = pictures.branch(asset, unused, linked, source=source or '导入', note=note)
+      seen = [path for path in picture_review.load(asset).get('sent') or [] if path not in linked]
+      node = pictures.branch(asset, unused + seen, linked, source=source or '导入', note=note)
       now = set(pictures.members(asset))
       if now != had:
         status(f'画面：去掉 {len(had - now)} 张，加上 {len(now - had)} 张，这个视频以后的总结用剩下的 {len(now)} 张')

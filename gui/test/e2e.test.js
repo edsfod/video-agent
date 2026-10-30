@@ -99,8 +99,8 @@ async function saved(check, timeout = 15_000) {
 // the first message hangs at 正在分析图片 and the second gets a busy notice, as DeepSeek's servers give at times; then
 // the answer asks for pictures in a 画面调整 section, and the next round's (its prompt starts with the candidates taken),
 // its 复查 finding nothing more and the sections it leaves out said, ends the rounds. Each answer takes the place of the
-// oldest one on the page, as the real page drops earlier answers. What it was sent and every file attached are kept in
-// localStorage, which outlives loading the page again.
+// oldest one on the page, as the real page drops earlier answers, and its last line comes a second after the rest.
+// What it was sent and every file attached are kept in localStorage, which outlives loading the page again.
 const FAKE_DEEPSEEK = `<!doctype html><meta charset="utf-8"><title>DeepSeek</title>
 <div id="chat"></div>
 <div><div><div><div><div><div>
@@ -154,11 +154,13 @@ const FAKE_DEEPSEEK = `<!doctype html><meta charset="utf-8"><title>DeepSeek</tit
       const code = document.createElement('pre');
       if (busy) answer.textContent = '服务器繁忙，请稍后再试。';
       else code.textContent = '# 测试视频\\n\\n视频：x · 时长：0:08\\n\\n## 概要\\n\\n' +
-        (next ? '第二轮写的测试总结，用上了补截的候选。\\n\\n## 画面调整\\n\\n无\\n\\n## 复查\\n\\n- 删掉的节：要点、时间线、详细内容、需留意、需确认（测试视频只有 8 秒）\\n' : '第一轮写的测试总结，讲了彩条和测试图案。\\n\\n## 画面调整\\n\\n- 补截：00:00:01–00:00:06 彩条\\n');
+        (next ? '第二轮写的测试总结，用上了补截的候选。\\n\\n## 画面调整\\n\\n无\\n\\n## 复查\\n\\n' : '第一轮写的测试总结，讲了彩条和测试图案。\\n\\n## 画面调整\\n\\n');
       if (!busy) answer.append(code);
       document.querySelector('.ds-markdown')?.remove();
       document.getElementById('chat').append(answer);
       icon.setAttribute('d', 'M8 1');
+      // The last line reaches the page after the button is back, as on the real page.
+      if (!busy) setTimeout(() => (code.textContent += next ? '- 删掉的节：要点、时间线、详细内容、需留意、需确认（测试视频只有 8 秒）\\n' : '- 补截：00:00:01–00:00:06 彩条\\n'), 1000);
     }, 2500);
   };
 </script>`;

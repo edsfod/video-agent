@@ -87,6 +87,14 @@ def candidates(video, asset, start, end, length):
   return taken
 
 
+def sent(asset, paths):
+  """Records the pictures a chat AI's material holds (on contact sheets too); what its answer does not link of them,
+  it has seen and found no use for (user decision, 2026-10-30: it names only some of the useless ones as 不用)."""
+  state = load(asset)
+  state['sent'] = list(paths)
+  files.write_text(Path(asset) / NAME, json.dumps(state, ensure_ascii=False, indent=2) + '\n')
+
+
 def apply(video, asset, draft, wanted, length, status=lambda message: None):
   """Takes the candidates for the spans the section asked for and records them; `draft` is the file the summary was
   saved as. The caller holds the video's lock. Returns the new state."""

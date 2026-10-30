@@ -3,6 +3,7 @@
 import io
 import json
 import re
+import tempfile
 import zipfile
 from pathlib import Path
 
@@ -340,7 +341,7 @@ def test_screen_pages_go_on_contact_sheets_when_they_exceed_the_budget(tmp_path)
   assert len(squeezed) == 3 and dropped == 3 and '3 per row' in squeezed[0][0]
 
   # The same choice with numbered names, for a chat AI that takes few files
-  entries, note = numbered_pictures(tmp_path, manifest, 12, tmp_path / 'd')
+  entries, note, _ = numbered_pictures(tmp_path, manifest, 12, tmp_path / 'd')
   assert [name for name, _ in entries][:2] == ['001-屏幕页总图-00-00-00.jpg', '002-屏幕页总图-00-00-40.jpg']
   assert len(entries) == 8 and '30 张屏幕页（幻灯片、代码、文档），拼在 8 张总图里（每张 2×2 页' in note
   assert (
@@ -639,6 +640,14 @@ def test_the_pictures_a_summary_is_given_grow_as_a_tree(processed, capsys):
   assert third in listed['nodes'][-1]['dropped'] and first in listed['nodes'][-1]['members']
   assert cli.main(['pictures', str(video), '-o', str(workspace), '--restore', third]) == 0
   assert pictures.members(asset) == every
+  # What a chat AI was sent and did not link, it saw and found no use for.
+  assert cli.main(['pictures', str(video), '-o', str(workspace), '--use', '0']) == 0
+  from video_agent.packing import material
+
+  with tempfile.TemporaryDirectory() as work_dir:
+    material(video, workspace, work_dir=work_dir)
+  import_summary(video, workspace, body.format(f' [表格：色块]({first})'), rounds=True, note='第 1 轮')
+  assert pictures.members(asset) == [first] + [path for path in every if path.startswith('frames/extra/')]
 
 
 def test_the_checks_name_what_a_chat_ais_summary_leaves_out(processed):

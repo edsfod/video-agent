@@ -69,6 +69,7 @@ const UPLOAD_PAUSE_MS = BUSY_PAUSE_MS / 6;
 // Pictures were read and the thinking begun within seconds of sending, 49 pictures included; the one that hung did
 // not start in 8 minutes.
 const START_TIMEOUT_MS = Number(process.env.VA_DEEPSEEK_START_MS) || 3 * 60 * 1000; // tests wait less
+const SETTLE_MS = 1500; // between two readings of a finished answer, which must be the same
 
 const ATTACHMENTS = `[...(${COMPOSER})?.querySelectorAll('.ds-animated-size-item') || []]`;
 const NAME = `(item) => item.querySelector('img')?.alt || item.innerText.split('\\n')[0]`;
@@ -183,12 +184,22 @@ function conversation() {
       if (icon !== idleIcon) writing = true;
       else if ((writing || Date.now() - start > 60000) && started) break;
     }
-    const read = await page(`(() => {
+    // The last lines reach the page a moment after the button is back (user report, 2026-10-30: the 画面 lines at the
+    // end of four answers were missing as read, though DeepSeek had them), so the answer is read until it stays the
+    // same.
+    const answer = `(() => {
       const blocks = [...document.querySelectorAll('.ds-markdown')];
       const last = blocks[blocks.length - 1];
       const code = [...last.querySelectorAll('pre')].map((pre) => pre.textContent).sort((a, b) => b.length - a.length)[0];
       return { code: code || null, text: last.innerText };
-    })()`);
+    })()`;
+    let read = await page(answer);
+    for (let tries = 0; tries < 10; tries++) {
+      await pause(SETTLE_MS);
+      const again = await page(answer);
+      if (again.text === read.text && again.code === read.code) break;
+      read = again;
+    }
     return { ...read, seconds: Math.round((Date.now() - start) / 1000) };
   }
 
