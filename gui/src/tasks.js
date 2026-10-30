@@ -11,9 +11,9 @@
 // - The same work queued twice (same kind and target, still queued or running) is not added again.
 // - Tasks start in the order they were added; one that has to wait does not hold back later ones that may run.
 
-// Compressing takes the whole CPU for minutes, as processing does; one at a time, not set in the window. Summaries
-// through DeepSeek's web chat share its one window, so they have a pool of one of their own.
-const DEFAULT_LIMITS = { download: 3, process: 1, summary: 2, compress: 1, deepseek: 1 };
+// Compressing takes the whole CPU for minutes, as processing does; one at a time by default. Summaries through
+// DeepSeek's web chat each have a window of their own and count as summaries.
+const DEFAULT_LIMITS = { download: 3, process: 1, summary: 2, compress: 1 };
 // Collection tasks write the collection's own files; their `video` is "合集:<name>", so one runs per collection.
 // Compressing replaces the video file, so it does not run beside processing or a summary of the same video.
 const EXCLUSIVE = new Set(['process', 'summary', 'collection', 'compress']);
@@ -32,22 +32,20 @@ function workKey(spec) {
   return `${spec.kind}|${videoKey(spec.video)}`;
 }
 
-const pool = (task) => (task.route === 'deepseek' ? 'deepseek' : task.kind);
-
 // The queued tasks that may start now, given those already running.
 /** @param {any[]} tasks @param {Record<string, number>} [limits] */
 function startable(tasks, limits = DEFAULT_LIMITS) {
   const counts = {};
   const busy = new Set();
   const take = (task) => {
-    counts[pool(task)] = (counts[pool(task)] || 0) + 1;
+    counts[task.kind] = (counts[task.kind] || 0) + 1;
     if (EXCLUSIVE.has(task.kind)) busy.add(videoKey(task.video));
   };
   tasks.filter((task) => task.status === 'running').forEach(take);
   const chosen = [];
   for (const task of tasks) {
     if (task.status !== 'queued') continue;
-    if ((counts[pool(task)] || 0) >= (limits[pool(task)] ?? Infinity)) continue;
+    if ((counts[task.kind] || 0) >= (limits[task.kind] ?? Infinity)) continue;
     if (EXCLUSIVE.has(task.kind) && busy.has(videoKey(task.video))) continue;
     take(task);
     chosen.push(task);

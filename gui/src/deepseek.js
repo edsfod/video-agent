@@ -9,7 +9,11 @@
 // stop square while an answer is written; each answer, and the thinking before it, in a .ds-markdown block, where a
 // code block is a <pre> whose text is the Markdown as written; each attachment, a .ds-animated-size-item in the composer
 // with the file's name as its picture's alt text, a line saying the upload failed when it did, and a button removing it.
+// Until the attached pictures are read, the answer's place says 正在分析图片 (Analyzing image) with no .ds-markdown yet.
 // The page only draws while Chromium counts the window as seen, which main.js and backgroundThrottling see to.
+//
+// Each conversation has a window of its own (user request, 2026-10-30: DeepSeek summaries at the same time); they share
+// the signed-in session, and a window whose conversation ended serves the next one.
 
 const { BrowserWindow } = require('electron');
 const path = require('node:path');
@@ -20,192 +24,216 @@ const PARTITION = 'persist:deepseek';
 const BACKGROUND = !!process.env.VA_E2E_BACKGROUND;
 const ANSWER_TIMEOUT_MS = 30 * 60 * 1000; // a long DeepThink answer took about 3 minutes; this only ends a hung page
 
-/** @type {BrowserWindow | null} */
-let win = null;
-let stopped = false;
+/** Windows of conversations that ended, signed in, for the next one. @type {BrowserWindow[]} */
+const idle = [];
+let signedIn = 0; // when a window last found the page signed in, for the windows still showing the sign-in page
 
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function open() {
-  if (win && !win.isDestroyed()) {
-    if (!BACKGROUND) win.show();
-    return win;
-  }
-  win = new BrowserWindow({
-    width: 1100,
-    height: 860,
-    title: 'DeepSeek',
-    show: !BACKGROUND,
-    ...(BACKGROUND ? { x: -32000, y: -32000, skipTaskbar: true } : {}),
-    webPreferences: { partition: PARTITION, contextIsolation: true, sandbox: true, backgroundThrottling: false },
-  });
+  const kept = idle.splice(0).filter((win) => !win.isDestroyed());
+  const win =
+    kept.shift() ||
+    new BrowserWindow({
+      width: 1100,
+      height: 860,
+      title: 'DeepSeek',
+      show: !BACKGROUND,
+      ...(BACKGROUND ? { x: -32000, y: -32000, skipTaskbar: true } : {}),
+      webPreferences: { partition: PARTITION, contextIsolation: true, sandbox: true, backgroundThrottling: false },
+    });
+  idle.push(...kept);
   win.removeMenu();
   if (BACKGROUND) win.showInactive();
-  win.on('closed', () => (win = null));
-  win.loadURL(URL);
+  else win.show();
   return win;
 }
-
-/** @param {string} code */
-const page = (code) => {
-  if (!win || win.isDestroyed()) throw new Error('DeepSeek 窗口已关闭');
-  return win.webContents.executeJavaScript(code);
-};
 
 // The composer: the textarea's box with the attachments, the toggles and the send button.
 const COMPOSER = `(() => { let box = document.querySelector('textarea'); for (let i = 0; i < 6 && box?.parentElement; i++) box = box.parentElement; return box; })()`;
 const SEND = `[...(${COMPOSER})?.querySelectorAll('.ds-button--primary.ds-button--circle') || []].pop()`;
 
-async function waitFor(check, what, onStatus, timeout = Infinity) {
-  const start = Date.now();
-  let told = false;
-  for (;;) {
-    if (stopped) throw new Error('已停止');
-    if (await page(check).catch(() => false)) return;
-    if (Date.now() - start > timeout) throw new Error(`等不到${what}`);
-    if (!told && Date.now() - start > 5000) {
-      onStatus(`等待${what}…`);
-      told = true;
-    }
-    await pause(1000);
-  }
-}
-
-/** @param {BrowserWindow} view @param {string[]} files */
-async function attach(view, files) {
-  const debug = view.webContents.debugger;
-  if (!debug.isAttached()) debug.attach('1.3');
-  const { root } = await debug.sendCommand('DOM.getDocument', { depth: -1, pierce: true });
-  const { nodeId } = await debug.sendCommand('DOM.querySelector', { nodeId: root.nodeId, selector: 'input[type=file]' });
-  if (!nodeId) throw new Error('DeepSeek 页面上找不到上传文件的地方');
-  await debug.sendCommand('DOM.setFileInputFiles', { nodeId, files });
-}
-
 // DeepSeek's servers are sometimes busy (user report, 2026-10-29): an upload fails or never ends, or the answer is only
 // a busy notice. A failed upload is removed and that file alone attached again (user report, 2026-10-30: all 49 again
-// failed three times over), up to TRIES times, after which the message goes without it; uploads that never end and
-// busy notices are tried again whole, up to TRIES times, the page loaded again first, which keeps the conversation and
+// failed three times over), up to TRIES times, after which the message goes without it; uploads that never end, busy
+// notices and answers that never start (user report, 2026-10-30: 正在分析图片 for 8 minutes, the message not on the
+// server) are tried again whole, up to TRIES times, the page loaded again first, which keeps the conversation and
 // empties the box.
 const TRIES = 3;
-const BUSY = /服务器繁忙|稍后再试|server is busy|try again later/i;
+const BUSY = /服务器繁忙|稍后再试|server is busy|try again later|并发请求过多|too many concurrent requests/i;
 const UPLOAD_FAILED = /上传失败|重新上传|upload failed|failed to upload|服务器繁忙|server is busy/i;
+const READING_IMAGES = /正在分析图片|Analyzing image/i;
 const UPLOAD_TIMEOUT_MS = 5 * 60 * 1000;
 const BUSY_PAUSE_MS = Number(process.env.VA_DEEPSEEK_RETRY_MS) || 30000; // tests wait less
 const UPLOAD_PAUSE_MS = BUSY_PAUSE_MS / 6;
+// Pictures were read and the thinking begun within seconds of sending, 49 pictures included; the one that hung did
+// not start in 8 minutes.
+const START_TIMEOUT_MS = Number(process.env.VA_DEEPSEEK_START_MS) || 3 * 60 * 1000; // tests wait less
 
 const ATTACHMENTS = `[...(${COMPOSER})?.querySelectorAll('.ds-animated-size-item') || []]`;
 const NAME = `(item) => item.querySelector('img')?.alt || item.innerText.split('\\n')[0]`;
 
-/** Removes the attachments whose upload failed; returns their file names. */
-const removeFailed = () =>
-  page(`${ATTACHMENTS}.filter((item) => ${UPLOAD_FAILED}.test(item.innerText)).map((item) => {
-    item.querySelector('[role=button] [tabindex="0"]')?.click();
-    return (${NAME})(item);
-  })`);
+/** A conversation in a window of its own: ask() for each message, stop() from outside, close() when it is over. */
+function conversation() {
+  const win = open();
+  let stopped = false;
 
-/** Attaches the files and types the text; resolves once the send button may be pressed. */
-async function compose(view, text, files, onStatus) {
-  if (files.length) await attach(view, files);
-  await page(`document.querySelector('textarea').focus()`);
-  view.webContents.insertText(text);
-  const ready = `(() => { const b = ${SEND}; return !!b && !b.classList.contains('ds-button--disabled'); })()`;
-  const tries = new Map(files.map((file) => [path.basename(file), 1]));
-  const start = Date.now();
-  let told = false;
-  for (;;) {
-    if (stopped) throw new Error('已停止');
-    const failed = await removeFailed();
-    if (failed.length) {
-      const again = files.filter((file) => failed.includes(path.basename(file)) && tries.get(path.basename(file)) < TRIES);
-      const dropped = failed.filter((name) => !again.some((file) => path.basename(file) === name));
-      if (dropped.length) onStatus(`${dropped.join('、')} 上传 ${TRIES} 次都失败，这次不发了`);
-      if (again.length) {
-        const attempt = Math.max(...again.map((file) => tries.get(path.basename(file)))) + 1;
-        onStatus(`${again.length} 张图片上传失败，单独重新上传（第 ${attempt} 次）`);
-        for (const file of again) tries.set(path.basename(file), tries.get(path.basename(file)) + 1);
-        await pause(UPLOAD_PAUSE_MS);
-        await attach(view, again);
+  /** @param {string} code */
+  const page = (code) => {
+    if (win.isDestroyed()) throw new Error('DeepSeek 窗口已关闭');
+    return win.webContents.executeJavaScript(code);
+  };
+
+  // Waits until the page is signed in; a window still on the sign-in page loads again once another window is in.
+  async function signIn(onStatus) {
+    const start = Date.now();
+    let seen = signedIn;
+    let told = false;
+    for (;;) {
+      if (stopped) throw new Error('已停止');
+      if (await page("!!document.querySelector('textarea')").catch(() => false)) break;
+      if (signedIn > seen) {
+        seen = signedIn;
+        win.webContents.reload();
       }
-      continue;
+      if (!told && Date.now() - start > 5000) {
+        onStatus('等待登录 DeepSeek（在 DeepSeek 窗口里登录）…');
+        told = true;
+      }
+      await pause(1000);
     }
-    if (await page(ready)) return;
-    if (Date.now() - start > UPLOAD_TIMEOUT_MS) throw Object.assign(new Error('图片五分钟没有传完'), { again: true });
-    if (!told && Date.now() - start > 5000) {
-      onStatus('等待图片上传完…');
-      told = true;
-    }
-    await pause(1000);
+    signedIn = Date.now();
   }
-}
 
-/** Presses send and waits until the answer is written; returns it. */
-async function sendAndRead(onStatus) {
-  const answersBefore = await page(`document.querySelectorAll('.ds-markdown').length`);
-  const idle = await page(`${SEND}.querySelector('svg path')?.getAttribute('d') || ''`);
-  await page(`${SEND}.click()`);
-  onStatus('已发送，DeepSeek 正在写…');
-  // Written once the button has shown something else (the stop square) and is back to its idle icon.
-  const start = Date.now();
-  let writing = false;
-  for (;;) {
-    if (stopped) throw new Error('已停止');
-    if (Date.now() - start > ANSWER_TIMEOUT_MS) throw new Error('DeepSeek 半小时没有写完');
-    await pause(2000);
-    const icon = await page(`${SEND}?.querySelector('svg path')?.getAttribute('d') || ''`);
-    if (icon !== idle) writing = true;
-    else if (writing || Date.now() - start > 60000) {
-      const count = await page(`document.querySelectorAll('.ds-markdown').length`);
-      if (count > answersBefore) break;
+  /** @param {string[]} files */
+  async function attach(files) {
+    const debug = win.webContents.debugger;
+    if (!debug.isAttached()) debug.attach('1.3');
+    const { root } = await debug.sendCommand('DOM.getDocument', { depth: -1, pierce: true });
+    const { nodeId } = await debug.sendCommand('DOM.querySelector', { nodeId: root.nodeId, selector: 'input[type=file]' });
+    if (!nodeId) throw new Error('DeepSeek 页面上找不到上传文件的地方');
+    await debug.sendCommand('DOM.setFileInputFiles', { nodeId, files });
+  }
+
+  /** Removes the attachments whose upload failed; returns their file names. */
+  const removeFailed = () =>
+    page(`${ATTACHMENTS}.filter((item) => ${UPLOAD_FAILED}.test(item.innerText)).map((item) => {
+      item.querySelector('[role=button] [tabindex="0"]')?.click();
+      return (${NAME})(item);
+    })`);
+
+  /** Attaches the files and types the text; resolves once the send button may be pressed. */
+  async function compose(text, files, onStatus) {
+    if (files.length) await attach(files);
+    await page(`document.querySelector('textarea').focus()`);
+    win.webContents.insertText(text);
+    const ready = `(() => { const b = ${SEND}; return !!b && !b.classList.contains('ds-button--disabled'); })()`;
+    const tries = new Map(files.map((file) => [path.basename(file), 1]));
+    const start = Date.now();
+    let told = false;
+    for (;;) {
+      if (stopped) throw new Error('已停止');
+      const failed = await removeFailed();
+      if (failed.length) {
+        const again = files.filter((file) => failed.includes(path.basename(file)) && tries.get(path.basename(file)) < TRIES);
+        const dropped = failed.filter((name) => !again.some((file) => path.basename(file) === name));
+        if (dropped.length) onStatus(`${dropped.join('、')} 上传 ${TRIES} 次都失败，这次不发了`);
+        if (again.length) {
+          const attempt = Math.max(...again.map((file) => tries.get(path.basename(file)))) + 1;
+          onStatus(`${again.length} 张图片上传失败，单独重新上传（第 ${attempt} 次）`);
+          for (const file of again) tries.set(path.basename(file), tries.get(path.basename(file)) + 1);
+          await pause(UPLOAD_PAUSE_MS);
+          await attach(again);
+        }
+        continue;
+      }
+      if (await page(ready)) return;
+      if (Date.now() - start > UPLOAD_TIMEOUT_MS) throw Object.assign(new Error('图片五分钟没有传完'), { again: true });
+      if (!told && Date.now() - start > 5000) {
+        onStatus('等待图片上传完…');
+        told = true;
+      }
+      await pause(1000);
     }
   }
-  const read = await page(`(() => {
-    const blocks = [...document.querySelectorAll('.ds-markdown')];
-    const last = blocks[blocks.length - 1];
-    const code = [...last.querySelectorAll('pre')].map((pre) => pre.textContent).sort((a, b) => b.length - a.length)[0];
-    return { code: code || null, text: last.innerText };
-  })()`);
-  return { ...read, seconds: Math.round((Date.now() - start) / 1000) };
-}
 
-/**
- * Sends `text` with `files` and returns the answer: the text of its longest code block (the Markdown as written), or
- * the answer's text when it has none (`fenced` false).
- * @param {{ text: string, files?: string[], newChat?: boolean, onStatus?: (line: string) => void }} message
- * @returns {Promise<{ answer: string, fenced: boolean }>}
- */
-async function ask({ text, files = [], newChat = false, onStatus = () => {} }) {
-  stopped = false;
-  const view = open();
-  if (newChat) await view.loadURL(URL);
-  for (let attempt = 1; ; attempt++) {
-    if (attempt > 1) {
-      await view.webContents.loadURL(view.webContents.getURL()); // the same conversation, with an empty box
+  /** Presses send and waits until the answer is written; returns it. */
+  async function sendAndRead(onStatus) {
+    // The answers on the page are marked, and the new one is the last block without the mark: the page does not keep
+    // every earlier answer (user report, 2026-10-30: the first round's blocks were gone by the third, so counting them
+    // missed the third answer).
+    await page(`document.querySelectorAll('.ds-markdown').forEach((block) => (block.dataset.vaSeen = ''))`);
+    const answered = `(() => { const blocks = document.querySelectorAll('.ds-markdown'); return !!blocks.length && !('vaSeen' in blocks[blocks.length - 1].dataset); })()`;
+    const idleIcon = await page(`${SEND}.querySelector('svg path')?.getAttribute('d') || ''`);
+    await page(`${SEND}.click()`);
+    onStatus('已发送，DeepSeek 正在写…');
+    // Written once the button has shown something else (the stop square) and is back to its idle icon.
+    const start = Date.now();
+    let writing = false;
+    for (;;) {
+      if (stopped) throw new Error('已停止');
+      if (Date.now() - start > ANSWER_TIMEOUT_MS) throw new Error('DeepSeek 半小时没有写完');
+      await pause(2000);
+      const started = await page(answered);
+      if (!started && Date.now() - start > START_TIMEOUT_MS) {
+        const reading = READING_IMAGES.test(await page('document.body.innerText'));
+        throw Object.assign(new Error(`发出 ${Math.round(START_TIMEOUT_MS / 1000)} 秒还没有开始写${reading ? '（一直显示「正在分析图片」）' : ''}`), { again: true });
+      }
+      const icon = await page(`${SEND}?.querySelector('svg path')?.getAttribute('d') || ''`);
+      if (icon !== idleIcon) writing = true;
+      else if ((writing || Date.now() - start > 60000) && started) break;
     }
-    await waitFor("!!document.querySelector('textarea')", '登录 DeepSeek（在 DeepSeek 窗口里登录）', onStatus);
-    // DeepThink and Search on (user decision, 2026-10-29): search serves the 补充 a summary may add.
-    await page(`(() => { for (const b of document.querySelectorAll('.ds-toggle-button')) if (!b.classList.contains('ds-toggle-button--selected')) b.click(); })()`);
-    try {
-      await compose(view, text, files, onStatus);
-    } catch (error) {
-      if (!error.again || attempt >= TRIES) throw error;
-      onStatus(`${error.message}，重新上传（第 ${attempt + 1} 次）`);
-      await pause(5000);
-      continue;
-    }
-    const read = await sendAndRead(onStatus);
-    if (!read.code && BUSY.test(read.text) && read.text.length < 200) {
-      if (attempt >= TRIES) throw new Error(`DeepSeek 服务器繁忙，试了 ${TRIES} 次`);
-      onStatus(`DeepSeek 服务器繁忙，${Math.round(BUSY_PAUSE_MS / 1000)} 秒后再发（第 ${attempt + 1} 次）`);
-      await pause(BUSY_PAUSE_MS);
-      continue;
-    }
-    onStatus(`DeepSeek 写完了，用时 ${read.seconds} 秒`);
-    return read.code ? { answer: read.code, fenced: true } : { answer: read.text, fenced: false };
+    const read = await page(`(() => {
+      const blocks = [...document.querySelectorAll('.ds-markdown')];
+      const last = blocks[blocks.length - 1];
+      const code = [...last.querySelectorAll('pre')].map((pre) => pre.textContent).sort((a, b) => b.length - a.length)[0];
+      return { code: code || null, text: last.innerText };
+    })()`);
+    return { ...read, seconds: Math.round((Date.now() - start) / 1000) };
   }
+
+  /**
+   * Sends `text` with `files` and returns the answer: the text of its longest code block (the Markdown as written), or
+   * the answer's text when it has none (`fenced` false).
+   * @param {{ text: string, files?: string[], newChat?: boolean, onStatus?: (line: string) => void }} message
+   * @returns {Promise<{ answer: string, fenced: boolean }>}
+   */
+  async function ask({ text, files = [], newChat = false, onStatus = () => {} }) {
+    if (newChat || !win.webContents.getURL()) await win.loadURL(URL);
+    for (let attempt = 1; ; attempt++) {
+      if (attempt > 1) {
+        await win.webContents.loadURL(win.webContents.getURL()); // the same conversation, with an empty box
+      }
+      await signIn(onStatus);
+      // DeepThink and Search on (user decision, 2026-10-29): search serves the 补充 a summary may add.
+      await page(`(() => { for (const b of document.querySelectorAll('.ds-toggle-button')) if (!b.classList.contains('ds-toggle-button--selected')) b.click(); })()`);
+      let read;
+      try {
+        await compose(text, files, onStatus);
+        read = await sendAndRead(onStatus);
+      } catch (error) {
+        if (!error.again || attempt >= TRIES) throw error;
+        onStatus(`${error.message}，重新发送（第 ${attempt + 1} 次）`);
+        await pause(5000);
+        continue;
+      }
+      if (!read.code && BUSY.test(read.text) && read.text.length < 200) {
+        if (attempt >= TRIES) throw new Error(`DeepSeek 服务器繁忙，试了 ${TRIES} 次`);
+        onStatus(`DeepSeek 服务器繁忙，${Math.round(BUSY_PAUSE_MS / 1000)} 秒后再发（第 ${attempt + 1} 次）`);
+        await pause(BUSY_PAUSE_MS);
+        continue;
+      }
+      onStatus(`DeepSeek 写完了，用时 ${read.seconds} 秒`);
+      return read.code ? { answer: read.code, fenced: true } : { answer: read.text, fenced: false };
+    }
+  }
+
+  return {
+    ask,
+    stop: () => (stopped = true),
+    // The window stays open, signed in, for the next conversation.
+    close: () => !win.isDestroyed() && idle.push(win),
+  };
 }
 
-function stop() {
-  stopped = true;
-}
-
-module.exports = { ask, open, stop };
+module.exports = { conversation };

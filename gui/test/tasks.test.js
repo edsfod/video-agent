@@ -35,15 +35,15 @@ test('each kind waits for a free slot in its own pool', () => {
   assert.equal(tasks.get(third.id).status, 'running');
 });
 
-test('summaries through DeepSeek share its one window, beside the other summaries', () => {
+test('summaries through DeepSeek run side by side, as other summaries do', () => {
   const spec = (video, route) => ({ kind: 'summary', video, route, agent: route === 'deepseek' ? undefined : route });
   const tasks = [
     { ...spec('C:\\v\\one.mp4', 'deepseek'), status: 'queued' },
     { ...spec('C:\\v\\two.mp4', 'deepseek'), status: 'queued' },
     { ...spec('C:\\v\\three.mp4', 'api'), status: 'queued' },
   ];
-  const chosen = startable(tasks, { summary: 2, deepseek: 1 });
-  assert.deepEqual(chosen.map((task) => task.video), ['C:\\v\\one.mp4', 'C:\\v\\three.mp4']);
+  const chosen = startable(tasks, { summary: 2 });
+  assert.deepEqual(chosen.map((task) => task.video), ['C:\\v\\one.mp4', 'C:\\v\\two.mp4']);
 });
 
 test('processing and summarizing one video never overlap, other videos go ahead', () => {

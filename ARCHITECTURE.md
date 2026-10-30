@@ -62,7 +62,7 @@ Agents and shells           other agents follow it        commands
 | `src/jobs.js` | Running the queue's tasks: each kind's command line, Agent routes, cookies for downloads, follow-ups. |
 | `src/chat-rounds.js` | The DeepSeek route: rounds of `pack --folder`, DeepSeek, `summarize --import`, until no more pictures are asked for. |
 | `src/extractor.js` | AutoSlides Extractor's portable build, downloaded from the settings into the data folder; `childEnv` points the CLI at it. |
-| `src/deepseek.js` | DeepSeek's web chat in a window of its own: attach files (failed uploads again one by one), type, send, read the answer's code block. |
+| `src/deepseek.js` | DeepSeek's web chat, a window per conversation: attach files (failed uploads again one by one), type, send (again when the answer does not start), read the answer's code block. |
 | `src/plugins.js` | Installing the Agent plugin and copying the skill. |
 | `src/ipc.js` | Every handler the page can call. |
 | `src/window.js` | The window and the tray. |

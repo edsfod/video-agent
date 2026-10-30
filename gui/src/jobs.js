@@ -278,7 +278,7 @@ function followUp(task) {
 function createQueue() {
   shared.queue = new TaskQueue({
     start: startTask,
-    stop: (task) => (task.route === 'deepseek' ? chatRounds.stop() : stopJob(task.id)),
+    stop: (task) => (task.route === 'deepseek' ? chatRounds.stop(task.id) : stopJob(task.id)),
     changed: () => {
       updateTray();
       send('tasks:changed', shared.queue.list());

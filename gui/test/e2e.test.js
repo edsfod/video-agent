@@ -31,6 +31,7 @@ const ENV = {
   // on the machine.
   AUTOSLIDES_EXTRACTOR: 'none',
   VA_DEEPSEEK_RETRY_MS: '500',
+  VA_DEEPSEEK_START_MS: '6000',
   APPDATA,
   NO_PROXY: '127.0.0.1,localhost',
   no_proxy: '127.0.0.1,localhost',
@@ -95,10 +96,11 @@ async function saved(check, timeout = 15_000) {
   }
 }
 // The parts of chat.deepseek.com that deepseek.js drives. The second file of the first message fails to upload once;
-// the first answer is a busy notice, as DeepSeek's servers give at times; then the answer asks for pictures in a
-// 画面调整 section, and the next round's (its prompt starts with the candidates taken), its 复查 finding nothing more
-// and the sections it leaves out said, ends the rounds. What it was sent
-// and every file attached are kept in localStorage, which outlives loading the page again.
+// the first message hangs at 正在分析图片 and the second gets a busy notice, as DeepSeek's servers give at times; then
+// the answer asks for pictures in a 画面调整 section, and the next round's (its prompt starts with the candidates taken),
+// its 复查 finding nothing more and the sections it leaves out said, ends the rounds. Each answer takes the place of the
+// oldest one on the page, as the real page drops earlier answers. What it was sent and every file attached are kept in
+// localStorage, which outlives loading the page again.
 const FAKE_DEEPSEEK = `<!doctype html><meta charset="utf-8"><title>DeepSeek</title>
 <div id="chat"></div>
 <div><div><div><div><div><div>
@@ -139,10 +141,12 @@ const FAKE_DEEPSEEK = `<!doctype html><meta charset="utf-8"><title>DeepSeek</tit
     const toggles = [...document.querySelectorAll('.ds-toggle-button--selected')].map((button) => button.textContent);
     window.sent.push({ text, files, toggles });
     localStorage.setItem('sent', JSON.stringify(window.sent));
-    const busy = window.sent.length === 1;
+    const hangs = window.sent.length === 1;
+    const busy = window.sent.length === 2;
     box.value = '';
     attachments.replaceChildren();
     icon.setAttribute('d', 'M2 4'); // the stop square while writing
+    if (hangs) return document.getElementById('chat').append('正在分析图片');
     setTimeout(() => {
       const next = text.startsWith('我照你上一稿');
       const answer = document.createElement('div');
@@ -152,6 +156,7 @@ const FAKE_DEEPSEEK = `<!doctype html><meta charset="utf-8"><title>DeepSeek</tit
       else code.textContent = '# 测试视频\\n\\n视频：x · 时长：0:08\\n\\n## 概要\\n\\n' +
         (next ? '第二轮写的测试总结，用上了补截的候选。\\n\\n## 画面调整\\n\\n无\\n\\n## 复查\\n\\n- 删掉的节：要点、时间线、详细内容、需留意、需确认（测试视频只有 8 秒）\\n' : '第一轮写的测试总结，讲了彩条和测试图案。\\n\\n## 画面调整\\n\\n- 补截：00:00:01–00:00:06 彩条\\n');
       if (!busy) answer.append(code);
+      document.querySelector('.ds-markdown')?.remove();
       document.getElementById('chat').append(answer);
       icon.setAttribute('d', 'M8 1');
     }, 2500);
@@ -316,18 +321,20 @@ devTest('summary through DeepSeek\'s web chat, in rounds until it asks for no mo
   assert.equal(task.status, 'done', JSON.stringify(output).slice(-1500));
   const sent = await app.evaluate(({ BrowserWindow }) =>
     BrowserWindow.getAllWindows().find((win) => win.getTitle() === 'DeepSeek').webContents.executeJavaScript('window.sent'));
-  assert.equal(sent.length, 3, 'sent again after the busy notice; a second round for the pictures asked for, then none');
+  assert.equal(sent.length, 4, 'sent again after it hung and after the busy notice; a second round for the pictures, then none');
   assert.equal(sent[1].text, sent[0].text, 'the same message again');
-  assert.match(sent[1].text, /# Writing a video summary/);
-  assert.deepEqual(sent[1].toggles, ['DeepThink', 'Search'], 'DeepThink and Search on');
-  assert.ok(sent[1].files.length > 0 && sent[1].files.every((name) => name.endsWith('.jpg')));
+  assert.equal(sent[2].text, sent[0].text, 'the same message again');
+  assert.match(sent[2].text, /# Writing a video summary/);
+  assert.deepEqual(sent[2].toggles, ['DeepThink', 'Search'], 'DeepThink and Search on');
+  assert.ok(sent[2].files.length > 0 && sent[2].files.every((name) => name.endsWith('.jpg')));
   const attached = await app.evaluate(({ BrowserWindow }) =>
     BrowserWindow.getAllWindows().find((win) => win.getTitle() === 'DeepSeek').webContents.executeJavaScript('window.attached'));
-  assert.deepEqual([...sent[0].files].sort(), [...sent[1].files].sort(), 'the file that failed to upload went with the rest');
+  assert.deepEqual([...sent[0].files].sort(), [...sent[2].files].sort(), 'the file that failed to upload went with the rest');
   assert.equal(attached.slice(0, sent[0].files.length + 1).filter((name) => name === attached[1]).length, 2, 'only that file attached again');
   assert.ok(output.some(([, text]) => text.includes('单独重新上传')), 'the upload retry is in the task output');
-  assert.match(sent[2].text, /^我照你上一稿/);
-  assert.ok(sent[2].files.length >= 1 && sent[2].files.every((name) => name.includes('补截')));
+  assert.match(sent[3].text, /^我照你上一稿/, 'the second answer found, though the page kept no more answers than before');
+  assert.ok(sent[3].files.length >= 1 && sent[3].files.every((name) => name.includes('补截')));
+  assert.ok(output.some(([, text]) => text.includes('正在分析图片')), 'the hang is in the task output');
   assert.ok(output.some(([, text]) => text.includes('服务器繁忙')), 'the retry is in the task output');
   // A summary was there already (the model API's), so both rounds are kept as versions beside it.
   const versions = JSON.parse(cli(['versions', VIDEO, '-o', WORKSPACE, '--json'])).versions.filter((item) => item.source === 'DeepSeek 网页');

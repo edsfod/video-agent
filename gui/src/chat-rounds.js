@@ -1,7 +1,7 @@
 // The DeepSeek route of a video summary: rounds of `pack --folder` → DeepSeek's web chat (deepseek.js) → `summarize
 // --import`, the next round with `pack --follow-up` while the import asks for one: a 复查 of the draft, what the checks
 // found, pictures wanted (summary_review.py, picture_review.py). The CLI does all the summary work; this only carries
-// the material and the answers.
+// the material and the answers. Each task has a conversation, in a window, of its own, so several run at once.
 
 const { app } = require('electron');
 const fs = require('node:fs');
@@ -14,6 +14,8 @@ const { cliCommand, runToEnd } = require('./programs');
 // A runaway limit, said when reached: a chat AI whose 复查 keeps finding something stops here (AGENTS.md).
 const MAX_ROUNDS = 6;
 const SOURCE = 'DeepSeek 网页';
+/** The conversations of the running tasks, by task id. @type {Map<string, ReturnType<typeof deepseek.conversation>>} */
+const running = new Map();
 
 /** @param {string[]} args @param {string} [stdin] */
 function cli(args, stdin) {
@@ -33,6 +35,8 @@ async function startDeepSeek(task) {
   // A first summary becomes the current one, and each later round replaces it; beside an existing summary every
   // round is kept as a version, for the user to choose, as with the other routes.
   const current = !fs.existsSync(path.join(task.folder, '总结.md'));
+  const chat = deepseek.conversation();
+  running.set(task.id, chat);
   let code = 0;
   try {
     for (let round = 1; ; round++) {
@@ -52,7 +56,7 @@ async function startDeepSeek(task) {
       const files = fs.readdirSync(folder).filter((name) => name !== '提示词.md').sort().map((name) => path.join(folder, name));
       say(`第 ${round} 轮：发给 DeepSeek，附 ${files.length} 张图`);
       const text = fs.readFileSync(path.join(folder, '提示词.md'), 'utf8');
-      const { answer, fenced } = await deepseek.ask({ text, files, newChat: round === 1, onStatus: say });
+      const { answer, fenced } = await chat.ask({ text, files, newChat: round === 1, onStatus: say });
       if (!fenced) say('回答没有放在代码块里，按页面上的文字导入');
       const importArgs = ['summarize', task.video, '-o', task.workspace, '--import', '-', '--source', SOURCE, '--note', `第 ${round} 轮`];
       if (task.template) importArgs.push('--template', task.template); // the sections the import checks for
@@ -73,10 +77,15 @@ async function startDeepSeek(task) {
     code = 1;
     say(`出错：${error.message}`);
   } finally {
+    running.delete(task.id);
+    chat.close();
     fs.rmSync(work, { recursive: true, force: true });
     log.close(code);
     shared.queue.exited(task.id, code);
   }
 }
 
-module.exports = { startDeepSeek, stop: deepseek.stop };
+/** @param {string} id */
+const stop = (id) => running.get(id)?.stop();
+
+module.exports = { startDeepSeek, stop };
