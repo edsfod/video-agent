@@ -33,6 +33,13 @@ video-agent download URL... [OPTIONS]
 | `--playlist` | Off | Allow playlist downloads. Without this option, Video Agent checks the URL first, refuses playlist-only URLs, and uses `--no-playlist` for a URL containing a specific video and playlist. |
 | `--yt-dlp PATH` | Auto-detected | Executable path. Search order: this option, `YT_DLP_EXECUTABLE`, `yt-dlp`/`yt-dlp.exe` on `PATH`, the Media Downloader-managed executable in the user's AppData directory (Windows), then the yt-dlp installed with Video Agent. |
 | `--yt-dlp-config PATH` | None | Load this explicit yt-dlp config file. Other yt-dlp configuration files are ignored. |
+| `--no-subs` | Off | Do not save the site's subtitle tracks beside the video (saved by default; danmaku and live chat never are). |
+| `--cookies FILE` | None | Netscape cookies file passed to yt-dlp. Bilibili lists its subtitles, the AI ones included, only to a logged-in account. |
+| `--json` | Off | Print one JSON object per saved file; progress goes to standard error. |
+| `--collection NAME` | None | Add the saved files, in order, to this collection of `--workspace` (made if missing); for playlists and series. |
+| `--workspace PATH` | `video-agent-output` | The workspace that holds `--collection`. |
+| `--follow` | Off | With `--playlist` and `--collection`: remember the list, so `collection update` fetches its new videos later. |
+| `--auto` | Off | With `--follow`: let the desktop app check the list on its own while it runs. |
 
 Without `--playlist`, the command makes a metadata-only URL check and refuses links that resolve to a playlist; this avoids downloading a large list by surprise. The command uses yt-dlp's `--print after_move:filepath` to capture the final path after merge/post-processing. Its normal progress is shown in the terminal. If a playlist is enabled, it prints one path per completed item. Any returned path can then be passed to `process` separately.
 
@@ -49,6 +56,8 @@ video-agent process "D:\Video-Downloads\video-one.mp4" "D:\Video-Downloads\video
 ```
 
 Downloading is optional. Video Agent installs yt-dlp as a dependency, and the desktop installer bundles it, so `download` works without a separate install. A yt-dlp on `PATH` or the one Media Downloader keeps under `%APPDATA%\media-downloader\bin` is preferred when present, since either may be newer. yt-dlp is told where Video Agent's FFmpeg is, so separate video and audio streams are merged. If no executable or module is available, `download` reports the missing tool and exits with status 1. The downloader only handles URLs supported by yt-dlp. A video saved by any other method can be passed directly to `process`.
+
+`process` uses the subtitles saved beside the video; with several, human subtitles come first, Chinese before other languages, AI subtitles last. yt-dlp cannot read a browser's cookies while the browser is open, nor those newer Edge and Chrome encrypt, so the desktop app signs in through a window of its own and passes the cookies from there.
 
 Share-tracking query parameters are dropped before downloading: Bilibili's `vd_source`, `spm_id_from`, `from_spmid` and `share_*` marks, YouTube's `si` and `feature`, and `utm_*`. Parameters that select content, such as `?p=2` for a multi-part video's part or `?t=90`, stay.
 
@@ -79,6 +88,8 @@ video-agent process VIDEO... [OPTIONS]
 | `--frame-interval SECONDS` | `60` | Positive number of seconds between regular frame samples. |
 | `--scene-threshold VALUE` | `0.35` | FFmpeg scene-change threshold, greater than 0 and at most 1. |
 | `--max-frames N` | `36` | Positive maximum number of representative frames written per video. |
+| `--screen-region X,Y,W,H` | Detected | The screen part of the frame, in pixels, when the detected layout is wrong (see `layout.jpg` in the run's frame folder). |
+| `--json` | Off | Print one JSON object per video; progress goes to standard error. |
 | `--extract-slides`, `--no-extract-slides` | On where AutoSlides Extractor is installed and the video has a screen region | Find the screen pages with AutoSlides Extractor: its slides, with the steps of one slide merged, stand for the screen pages. `--no-extract-slides` (or `AUTOSLIDES_EXTRACTOR=none`) uses this program's own page search; `--extract-slides` runs it also on a video read as a camera picture. |
 | `--slide-extractor PATH` | Auto-detected | Executable path for AutoSlides Extractor. Search order: this option, `AUTOSLIDES_EXTRACTOR`, `SlidesExtractor` or `AutoSlidesExtractor` on `PATH`, then common Windows install folders. |
 | `--asr {none,bcut}` | `none` | Speech-recognition provider used only when no sidecar or embedded subtitles are available. |
@@ -137,7 +148,7 @@ video-agent compress VIDEO... [--json] [--check]
 
 Re-encodes each video in place with SVT-AV1 (CRF 40) at its source resolution; a picture that hardly moves (a screen recording) goes to 10 frames a second. Audio that is AAC at 96 kbps or less is copied, other audio becomes AAC at 64 kbps; subtitles and metadata are kept. The new file replaces the old one only when its duration matches within a second and it is smaller. Videos already in AV1, HEVC or VP9, and videos this command compressed before (a tag in the file), are left alone. Needs an FFmpeg with `libsvtav1`, as the desktop installer's has.
 
-`--check` compresses nothing and tells each video's state: `compressed`, `efficient` (already AV1, HEVC or VP9), `not-smaller` (tried before; the copy was larger) or `null` (worth compressing). The state is kept in `compression.json` beside the settings, keyed by path, size and modification time, so `show` reports it as `compression` and `collection list` gives each video's from that file without opening the videos.
+`--json` prints one JSON object per video, progress to standard error. `--check` compresses nothing and tells each video's state: `compressed`, `efficient` (already AV1, HEVC or VP9), `not-smaller` (tried before; the copy was larger) or `null` (worth compressing). The state is kept in `compression.json` beside the settings, keyed by path, size and modification time, so `show` reports it as `compression` and `collection list` gives each video's from that file without opening the videos.
 
 ### `frame`
 
@@ -165,7 +176,9 @@ Optional. Write `总结.md` for a processed video with a model API, as an altern
 
 ```text
 video-agent summarize VIDEO [-o WORKSPACE] [--provider anthropic|openai] [--model NAME] [--base-url URL]
-                      [--request TEXT] [--max-images N] [--max-extra-frames N] [--no-tools] [--overwrite]
+                      [--request TEXT] [--template NAME] [--effort low|medium|high] [--max-images N]
+                      [--max-extra-frames N] [--no-tools] [--make-current] [--import [FILE] [--source S] [--note N]]
+video-agent summarize --collection NAME [--guide] [-o WORKSPACE] [...]
 ```
 
 | Option | Default | Meaning |
@@ -178,7 +191,13 @@ video-agent summarize VIDEO [-o WORKSPACE] [--provider anthropic|openai] [--mode
 | `--max-images N` | 40 | Frames sent with the first request; more are thinned evenly. |
 | `--max-extra-frames N` | 8 | Frames the model may request through tool calling; `0` allows none. |
 | `--no-tools` | Off | Send no tool definition, for models without tool calling. |
-| `--overwrite` | Off | Replace an existing `总结.md`. |
+| `--template NAME` | The chosen one | The summary template to follow for this summary (see `template --list`). |
+| `--effort low\|medium\|high` | Not sent | How hard the model thinks (see `models`). |
+| `--make-current`, `--overwrite` | Off | Make the new text the current `总结.md`; the one it replaces is kept as a version. Without it, a new text beside an existing one is kept as a version (see `versions`). |
+| `--collection NAME` | None | Instead of a video: write the collection's overview (`合集总结.md`) from its videos' summaries. |
+| `--guide` | Off | With `--collection`: write the study guide (`学习提纲.md`) instead. |
+| `--source TEXT` | `导入` | With `--import`: what wrote it, such as `网页 AI` or `Claude Code`, kept with the version. |
+| `--note TEXT` | None | With `--import`: a note kept with the version, such as the model. |
 | `--import [FILE]` | None | Save a summary written elsewhere instead of calling a model: a file, `-` for standard input, or with no value the draft beside the summary (`总结.draft.md` in the video's folder; `合集总结.draft.md` or `学习提纲.draft.md` in the collection's), which is removed once saved. |
 
 A summary from a chat AI may end with two sections that the import takes out. `## 字幕改正` lists recurring mishearings (`错的写法 → 正确写法`), which go into the cleaned transcript. `## 画面调整` lists pictures the chat AI does not need (`不用：frames/…`), which are left out of every later pack, context and model request, and spans in which it misses one (`补截：00:02:20–00:02:30 what should be visible`), in which the import takes up to four different candidates into `frames/extra/`, preferring pictures held on screen. `pack VIDEO --follow-up` (alone, `--zip` or `--folder`) then gives the next round: the candidates and the summary as saved, to rewrite. The state between rounds is in `picture-review.json` in the video's folder; an answer without a `画面调整` section ends the rounds.
@@ -195,7 +214,7 @@ video-agent config --provider openai --model qwen2.5vl:7b --base-url http://127.
 video-agent config --delete-key
 ```
 
-`--provider` also makes that provider the default. `--set-key` reads the key without echoing it (or one line from standard input when not run in a terminal); `--delete-key` removes it.
+`--provider` also makes that provider the default; `--json` prints the resulting settings as JSON. `--set-key` reads the key without echoing it (or one line from standard input when not run in a terminal); `--delete-key` removes it.
 
 ### `template`
 
@@ -212,6 +231,90 @@ Print the summary rules and Markdown template that the Agent skill, `summarize` 
 - `--copy NEW`: make a template of the user's own named `NEW` from the named one.
 - `--reset`: delete the user's copy of a built-in template, or a template of the user's own.
 - `--accept`, `--info`: mark a copy as up to date with the built-in's changes; print where it is and whether it is outdated.
+
+### `tools`
+
+```powershell
+video-agent tools [--json]
+```
+
+Prints where the external programs it would use are: FFmpeg, ffprobe, yt-dlp and AutoSlides Extractor, each found as `process` and `download` search for it; `null` (or `none`) for one not found. Changes nothing.
+
+### `show`
+
+```powershell
+video-agent show VIDEO [-o WORKSPACE]
+```
+
+Prints JSON about a video's processing folder without changing anything: its length, whether it is processed, the paths of its manifest, summary, context and transcripts, its corrections, extra frames, subtitle files found beside the video and compression state. The desktop app reads it.
+
+### `versions`
+
+```text
+video-agent versions VIDEO [-o WORKSPACE] [--use FILE | --delete FILE | --note FILE TEXT | --keep SOURCE] [--json]
+video-agent versions --collection NAME [--guide] [...]
+```
+
+A summary written again does not replace the current one unless asked (`--make-current`): the new text is kept as a version beside it, `总结 (<date time>).md`, with what wrote it and a note in `总结.versions.json`. With no option it lists the versions.
+
+- `--use FILE`: make this version current; the current text becomes a version.
+- `--delete FILE`: delete a version (never the current text).
+- `--note FILE TEXT`: set a version's note (`FILE` may be `总结.md`).
+- `--keep SOURCE`: keep a copy of the current text as a version before something rewrites the file.
+- `--collection NAME`, `--guide`: the collection's overview or study guide instead of a video's summary.
+
+### `pack`
+
+```text
+video-agent pack VIDEO [-o WORKSPACE] [--request TEXT] [--template NAME] [--follow-up]
+                 [--zip FILE | --folder PARENT [--max-files N]] [--max-images N]
+video-agent pack --collection NAME [--guide] [...]
+```
+
+The summary prompt for a chat AI on the web, which cannot run commands: the rules, the template and the evidence, with the answer asked for in one Markdown code block. Alone it prints the prompt; `--zip FILE` writes `提示词.md` and the pictures into a zip, the frames keeping their relative paths, so the summary's links work once imported; `--folder PARENT` writes `提示词.md` and numbered pictures into a new folder, for chat AIs that take no zip and a limited number of files: with more than `--max-files` (default 50, the prompt included), screen pages go on contact sheets to fit. Every picture carries its number and time in its lower left corner. `--max-images` (default 40) caps the whole frames put in besides every screen page.
+
+`--follow-up` gives the next round after an imported answer whose `画面调整` section asked for pictures (see `summarize`): the candidates taken and the summary as saved, to rewrite. The answer goes back with `summarize --import`. The desktop app's 「DeepSeek 网页」 route runs these rounds itself in a DeepSeek window.
+
+### `fix`
+
+```powershell
+video-agent fix VIDEO [-o WORKSPACE] [--replace WRONG RIGHT]... [--remove WRONG] [--reset] [--json]
+```
+
+Corrects recurring mishearings of names and terms. The original transcript stays; the corrected one is written as `transcript.clean.srt` and `.txt`, and every later summary uses it. A Latin word matches as a whole word only, Chinese as written, also inside longer words, so give only forms that are wrong wherever they occur. `--remove WRONG` takes one back, `--reset` removes them all with the cleaned transcript; with no option it lists them. `--json` prints the corrections and the changed lines.
+
+```powershell
+video-agent fix "D:\Videos\lecture.mp4" -o D:\Video-Work --replace 延和课堂 延河课堂 --replace react ReAct
+```
+
+### `collection`
+
+Groups related videos (a course, a series, a playlist) for an overview and a study guide. A collection is a folder in the workspace; the videos' own folders and summaries stay where they are. Every subcommand takes `-o WORKSPACE`.
+
+| Subcommand | Meaning |
+|---|---|
+| `create NAME [VIDEO...]` | Make a collection, optionally with videos. |
+| `add NAME VIDEO... [--at N]` | Add videos at the end, or before the Nth. |
+| `remove NAME VIDEO...` | Take videos out. |
+| `show NAME` | Each video with its state: processed, summarized, length, share of speech, maybe empty, skipped. |
+| `list` | The collections in the workspace. |
+| `delete NAME` | Remove the collection's own folder. |
+| `skip NAME VIDEO --reason TEXT` | Mark a video with next to no content as skipped, with the reason shown in the overview; an empty reason takes it back. |
+| `terms NAME [--replace WRONG RIGHT] [--remove WRONG]` | Corrections shared by every video, applied to each one's cleaned transcript. |
+| `follow NAME [URL] [--folder DIR] [--auto\|--no-auto]` | Remember the list the videos come from (new videos are saved in `<workspace>/下载` unless `--folder`), or only turn the desktop app's own checks on or off. |
+| `unfollow NAME` | Forget the list; the videos stay. |
+| `update NAME [--cookies FILE] [--no-subs] [--json] ...` | Download the followed list's new videos and add them at the end, in order; the ones already downloaded are listed in the collection's `downloaded.txt`. |
+
+Once each video has a summary, `summarize --collection NAME` writes the overview (things to note, the videos at a glance, the main line) and `--guide` the study guide (key points, points by topic, self-test questions with answers).
+
+```powershell
+video-agent collection create "机器学习" D:\Videos\ml-01.mp4 D:\Videos\ml-02.mp4 -o D:\Video-Work
+video-agent collection terms "机器学习" --replace 剃度下降 梯度下降 -o D:\Video-Work
+video-agent summarize --collection "机器学习" -o D:\Video-Work
+video-agent summarize --collection "机器学习" --guide -o D:\Video-Work
+video-agent download "https://space.bilibili.com/.../lists/...?type=season" --playlist --follow -o D:\Videos --collection "连载" --workspace D:\Video-Work
+video-agent collection update "连载" -o D:\Video-Work
+```
 
 ## Output layout
 
@@ -240,7 +343,7 @@ Transcript files are created when a usable subtitle source is acquired. A silent
 
 ## Commands not implemented
 
-The current CLI has `download`, `inspect`, `process`, and `frame`. It also has `summarize`, `config` and `template`. It has no `slides` subcommand and no GUI command. AutoSlides Extractor is used by `process` where it is installed (`--no-extract-slides` turns it off).
+The CLI has no `slides` subcommand and no GUI command. AutoSlides Extractor is used by `process` where it is installed (`--no-extract-slides` turns it off).
 
 
 

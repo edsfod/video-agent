@@ -66,7 +66,7 @@ function renderProcess(video) {
   $('opt-slides').checked = !!extractor && state.settings.extractor !== false;
   $('opt-slides-note').textContent = extractor
     ? '已安装：屏幕页由它来找，讲者翻得快的页也不会漏；取消勾选就用本程序自己的规则。'
-    : '没有找到 AutoSlides Extractor，屏幕页用本程序自己的规则找；装上后重新打开本程序就会用它。';
+    : '没有找到 AutoSlides Extractor，屏幕页用本程序自己的规则找；可以在「设置」里下载它的免安装版。';
   $('opt-max-frames').value = state.settings.maxFrames || '';
   const info = video.info;
   const facts = [];
