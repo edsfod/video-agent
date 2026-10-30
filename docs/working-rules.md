@@ -22,7 +22,7 @@ Keep a change's documents in the same commit as the change.
 - Fix what is clearly wrong and report it. Ask only about product decisions, and about steps that go outward or cannot be undone.
 - Add no allow-list, restriction or defensive limit nobody asked for; ask first.
 - Do not change the user's Clash proxy rules.
-- Push straight to `main`: `git pull --rebase` after committing, then push. `.git/hooks/pre-push` runs the tests the change touches; do not wait for GitHub's runs, and fix what they find next.
+- Push straight to `main`: `git pull --rebase` after committing, then push. `.git/hooks/pre-push` runs the quick checks the change touches (lint, types, CLI tests, GUI unit tests); the GUI tests that open windows run on GitHub. Do not wait for GitHub's runs, and fix what they find next, except before a release, which waits for them.
 - Tests run on this machine with their windows off the screen (`VA_E2E_BACKGROUND=1`), never touching the user's real settings; they wait on state, not on timing. When wording changes, search the tests for the old text. Installer tests (install, PATH, update) run only on GitHub, for packaging changes.
 - Python that writes text passes `newline='\n'`; `.gitattributes` keeps the repository in LF.
 - Every long run has a time limit and writes its output straight to a file that is read while it runs, never through `grep` or `tail`, and never left to a completion notice: a hung process sends none.
