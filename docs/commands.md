@@ -222,7 +222,7 @@ video-agent config --delete-key
 video-agent template [NAME] [--list | --use | --default | --edit | --copy NEW | --reset | --accept | --info]
 ```
 
-Print the summary rules and Markdown template that the Agent skill, `summarize` and `pack` follow: the chosen template, or the one named. Several exist side by side: the built-in `标准` (claims as numbered propositions tagged 事实, 观点, 推断 or 引用, 要点 that leave nothing important out, the main line and the side paths, and the summarizer's additions marked 补充) and any of the user's own in `%APPDATA%\video-agent\templates`. A copy of `标准` never edited since it was made gives way to a changed built-in. `summarize` and `pack` take `--template NAME` for one summary.
+Print the summary rules and Markdown template that the Agent skill, `summarize` and `pack` follow: the chosen template, or the one named. Several exist side by side: the built-in `标准` (claims as numbered propositions tagged 事实, 观点, 推断 or 引用, 要点 that leave nothing important out, self-contained units and the main line they make, and the summarizer's additions marked 拓展 and 核对) and any of the user's own in `%APPDATA%\video-agent\templates`. A copy of `标准` never edited since it was made gives way to a changed built-in. `summarize` and `pack` take `--template NAME` for one summary.
 
 - `--list`: every template as JSON, the chosen one marked `current`.
 - `--use`: choose the named template for every summary from now on.

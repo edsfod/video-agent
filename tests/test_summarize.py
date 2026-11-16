@@ -399,7 +399,7 @@ def test_several_templates_one_chosen_and_one_named_per_summary(processed, capsy
   listed = json.loads(capsys.readouterr().out)
   assert [entry['name'] for entry in listed] == ['标准'], 'one built-in template since 2026-11-16'
   assert [entry['current'] for entry in listed] == [True]
-  assert all(name in template() for name in ('## 要点', '## 主线与旁路', '`旁路`', '补充：', '`引用`'))
+  assert all(name in template() for name in ('## 要点', '## 主线与单元', '→ 支撑', '拓展：', '核对：', '`引用`'))
 
   templates.edit('标准')
   own = templates.folder() / '标准.md'
@@ -578,7 +578,7 @@ def test_a_chat_ai_drops_pictures_and_asks_for_others_over_rounds(processed, cap
   # A 复查 that still adds something goes round again; one that changes nothing in the draft, with nothing wanted and
   # the checks passed, ends the rounds.
   body = '# 标题\n\n视频：x · 时长：0:08\n\n## 概要\n\n用上了候选，讲了彩条和测试图案各自的用途。\n\n## 详细内容\n\n- 彩条\n\n'
-  done = '## 画面调整\n\n无\n\n## 复查\n\n- 删掉的节：元信息、要点、主线与旁路、时间线、需留意、需确认（测试视频只有 8 秒）\n'
+  done = '## 画面调整\n\n无\n\n## 复查\n\n- 删掉的节：元信息、要点、主线与单元、时间线、需留意、需确认（测试视频只有 8 秒）\n'
   answer.write_text(body + done + '- 补上：`00:00:03` 测试图案\n', encoding='utf-8')
   assert cli.main(['summarize', str(video), '-o', str(workspace), '--import', str(answer), '--make-current']) == 0
   told = capsys.readouterr().err
@@ -734,7 +734,7 @@ def test_the_checks_name_what_a_chat_ais_summary_leaves_out(processed, monkeypat
   assert '画面调整' in pictures and '00:09:00' in late and '00:00:03–00:00:05' in gap
   # Sections left out on purpose, said in the 复查, are not asked for again; a stretch of speech is named only once,
   # and left out again it stays out, with no reason asked for (user decision, 2026-11-16).
-  review = '\n\n## 画面调整\n\n无\n\n## 复查\n\n- 补上：无\n- 删掉的节：元信息、要点、主线与旁路、时间线、需留意、需确认（太短）\n'
+  review = '\n\n## 画面调整\n\n无\n\n## 复查\n\n- 补上：无\n- 删掉的节：元信息、要点、主线与单元、时间线、需留意、需确认（太短）\n'
   import_summary(video, workspace, text.replace('`00:09:00` 结束', '结束') + review, rounds=True)
   state = summary_review.load(asset)
   assert state['problems'] == [] and not state['again'] and state['asked'] == [[3.0, 5.0]]
