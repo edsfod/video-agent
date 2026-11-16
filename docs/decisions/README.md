@@ -12,7 +12,8 @@ These were sections of ARCHITECTURE.md until 2026-10-29, when an outside review 
 | Collections | [collections.md](collections.md) | user, 2026-10-28 |
 | BCut client | [bcut.md](bcut.md) | user, 2026-10-28 |
 | Summary versions | [summary-versions.md](summary-versions.md) | user request, 2026-10-28 |
-| Other agents and chat AIs with a file limit | [other-agents.md](other-agents.md) | user requests, 2026-10-28 and 2026-10-29 |
+| Other agents and chat AIs with a file limit | [other-agents.md](other-agents.md) | user requests, 2026-10-28, 2026-10-29 and 2026-11-16 (Antigravity) |
+| Deleting videos | [deleting.md](deleting.md) | user request, 2026-11-16 |
 | Evidence for weaker chat AIs, local subtitles, folder names | [chat-ai-evidence.md](chat-ai-evidence.md) | user requests, 2026-10-28 |
 | Cleaned transcript | [cleaned-transcript.md](cleaned-transcript.md) | user, 2026-10-28 |
 | Layout and screen pages | [layout-and-screen-pages.md](layout-and-screen-pages.md) | user, 2026-10-27 and 2026-10-28 |

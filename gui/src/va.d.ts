@@ -65,6 +65,7 @@ export interface EnvInfo {
   cli: string[];
   claude: string | null;
   codex: string | null;
+  antigravity: string | null; // the Antigravity app's language server (antigravity.js)
   others: OtherAgent[];
   agents: Record<string, Preset>;
   shells: { id: string; label: string }[];

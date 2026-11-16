@@ -11,6 +11,7 @@ import { pictureSetLabel, showImage } from './video-view.js';
 const ROUTE_NOTES = {
   claude: '在后台运行 Claude Code，按 video-agent skill 写总结，会按需补截画面。使用你的 Claude 订阅。',
   codex: '在后台运行 Codex，按同一份 skill 写总结。使用你的 Codex 订阅。',
+  antigravity: '交给正在运行的 Antigravity 桌面版，在它里面新开一个对话，按同一份 skill 写总结并保存；默认用 Gemini 3.8 Flash (High)。用你的 Antigravity 账号和额度；它以你的身份运行命令，不限于工作区。要先打开 Antigravity。',
   api: '用设置里的模型 API 写总结（字幕和画面会发给该服务商）。支持工具调用的模型会按需补截画面。',
   deepseek: '在 DeepSeek 网页版里写总结：程序打开 DeepSeek 窗口（第一次要在里面登录），发去提示词和画面，开着深度思考和智能搜索，写完自动导入。之后每一轮请它对照字幕复查上一稿，补上漏掉的内容，并把程序查出的问题（缺的节、没写到的时间段）和它要补的画面一起发过去，直到复查不再补上或改正，最多的轮数在下面设。每一轮都能在窗口里看到。',
   copy: '把规则、模板和字幕材料复制到剪贴板，贴进任何聊天 AI。要连画面一起给，用「导出 zip」；不收 zip、文件数有上限的（如 DeepSeek 网页版最多 50 个），用「导出文件夹」，屏幕页和画面会拼成总图凑进上限。写好后用「导入总结」存回来，画面链接照样能点开。',
@@ -20,9 +21,12 @@ const ROUTE_NOTES = {
 const otherRoute = (route) => state.env.others.find((agent) => agent.key === route);
 // The route's name in task titles; another agent goes by the name the settings give it.
 export const routeName = (route) =>
-  ({ api: '模型 API', claude: 'Claude Code', codex: 'Codex', deepseek: 'DeepSeek 网页' })[route] || otherRoute(route)?.name;
+  ({ api: '模型 API', claude: 'Claude Code', codex: 'Codex', deepseek: 'DeepSeek 网页', antigravity: 'Antigravity' })[route] || otherRoute(route)?.name;
 export const routeMissing = (route) =>
-  (route === 'claude' && !state.env.claude) || (route === 'codex' && !state.env.codex) || otherRoute(route)?.found === false;
+  (route === 'claude' && !state.env.claude) ||
+  (route === 'codex' && !state.env.codex) ||
+  (route === 'antigravity' && !state.env.antigravity) ||
+  otherRoute(route)?.found === false;
 const routeNote = (route) =>
   (!route && '选一种总结方式。') ||
   ROUTE_NOTES[route] ||
@@ -45,7 +49,7 @@ function otherRouteLabels() {
 const CUSTOM_MODEL = '\u0000custom';
 export const modelFor = (route) => (state.settings.routeModels || {})[route] || '';
 export const effortFor = (route) => (state.settings.routeEfforts || {})[route] || '';
-export const modelTakes = (route) => ['api', 'claude', 'codex'].includes(route) || !!otherRoute(route)?.model;
+export const modelTakes = (route) => ['api', 'claude', 'codex', 'antigravity'].includes(route) || !!otherRoute(route)?.model;
 const modelLists = {};
 
 async function saveRouteChoice(changes) {
@@ -62,7 +66,10 @@ async function renderModel() {
     const saved = modelFor(route);
     const known = list.models.some((model) => model.value === saved);
     select.replaceChildren(
-      element('option', { value: '', textContent: route === 'api' ? '默认（设置里的模型）' : `默认（${routeName(route)} 自己的设置）` }),
+      element('option', {
+        value: '',
+        textContent: { api: '默认（设置里的模型）', antigravity: '默认（gemini-3.8-flash-high）' }[route] || `默认（${routeName(route)} 自己的设置）`,
+      }),
       ...list.models.map((model) => element('option', { value: model.value, textContent: model.label })),
       element('option', { value: CUSTOM_MODEL, textContent: '自定义…' }),
     );
@@ -108,7 +115,7 @@ function renderRoutes() {
     const missing = routeMissing(input.value);
     input.disabled = missing;
     input.parentElement.classList.toggle('unavailable', missing);
-    input.parentElement.title = missing ? `没有找到 ${otherRoute(input.value)?.file || input.value} 命令` : '';
+    input.parentElement.title = !missing ? '' : input.value === 'antigravity' ? '没有找到 Antigravity 桌面版' : `没有找到 ${otherRoute(input.value)?.file || input.value} 命令`;
     input.checked = input.value === state.route;
     input.onchange = () => {
       state.route = input.value;

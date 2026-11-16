@@ -1,7 +1,7 @@
 // The 视频 list in the sidebar: adding videos, reading each one's state, choosing one.
 
 import { loadCollections, renderCollectionList } from './collections.js';
-import { $, baseName, element, state } from './state.js';
+import { $, baseName, element, failed, state } from './state.js';
 import { addTask, sameVideo, videoTask } from './task-panel.js';
 import { renderVideo } from './video-view.js';
 
@@ -78,17 +78,35 @@ export const inCollection = (video) => state.collections.some((item) => item.vid
 export function renderList() {
   const list = $('video-list');
   const shown = state.videos.filter((video) => !inCollection(video));
+  const chosen = state.chosen;
   list.replaceChildren(
     ...shown.map((video) => {
       const active = state.view === 'video' && video.path === state.current;
-      const item = element('div', { className: 'video-item' + (active ? ' active' : '') }, [
-        element('span', { className: 'name', textContent: baseName(video.path), title: video.path }),
-        badge(video),
-      ]);
+      const text = [element('span', { className: 'name', textContent: baseName(video.path), title: video.path }), badge(video)];
+      if (chosen) {
+        const ticked = chosen.has(video.path);
+        const box = element('input', { type: 'checkbox', checked: ticked, tabIndex: -1 });
+        const item = element('div', { className: 'video-item choosing' + (ticked ? ' chosen' : '') }, [
+          box,
+          element('span', { className: 'text' }, text),
+        ]);
+        item.onclick = () => {
+          if (ticked) chosen.delete(video.path);
+          else chosen.add(video.path);
+          renderList();
+        };
+        return item;
+      }
+      const item = element('div', { className: 'video-item' + (active ? ' active' : '') }, text);
       item.onclick = () => (active ? showHome() : select(video.path));
       return item;
     }),
   );
+  $('choose-videos').textContent = chosen ? '完成' : '选择';
+  $('choose-videos').hidden = !shown.length && !chosen;
+  $('delete-chosen').hidden = !chosen;
+  $('delete-chosen').disabled = !chosen?.size;
+  $('delete-chosen').textContent = chosen?.size ? `删除 ${chosen.size} 个` : '删除';
   if (!shown.length && state.videos.length) {
     list.append(element('p', { className: 'muted small-text list-note', textContent: '视频都在上面的合集里。' }));
   }
@@ -127,3 +145,45 @@ export function showHome() {
 }
 
 $('add-videos').onclick = async () => addLocalVideos(await window.va.pickVideos());
+
+// Deleting videos (user request, 2026-11-16: one click, several at once): their processing folders with transcript,
+// pictures and every summary, their place in collections, and the file itself only when this program downloaded it
+// (the CLI's `delete` decides; `show` says which). A video with a task queued or running is left alone.
+export async function deleteVideos(paths) {
+  const videos = paths.map((path) => state.videos.find((video) => video.path === path) || { path, info: null });
+  const busy = videos.filter((video) => videoTask(video));
+  if (busy.length) {
+    alert(`这些视频还有任务在排队或运行，先停掉再删：\n${busy.map((video) => baseName(video.path)).join('\n')}`);
+    return false;
+  }
+  const mine = videos.filter((video) => video.info?.downloaded);
+  const own = videos.length - mine.length;
+  const what = [
+    `删除 ${videos.length} 个视频的字幕、画面和全部总结版本，并把它们移出所在的合集。`,
+    mine.length ? `其中 ${mine.length} 个是本程序下载的，视频文件和旁边的字幕文件也会删掉。` : '',
+    own ? `${own} 个是你从本地添加的，视频文件留着不动。` : '',
+    '删除后找不回来。',
+  ];
+  if (!confirm(what.filter(Boolean).join('\n'))) return false;
+  const result = await window.va.cliJson(['delete', ...videos.map((video) => video.path), '-o', state.settings.workspace, '--json']);
+  if (failed(result)) {
+    alert(`没有删完：${result.error}`);
+    await Promise.all(state.videos.map(refresh));
+    return false;
+  }
+  const gone = new Set(paths);
+  state.videos = state.videos.filter((video) => !gone.has(video.path));
+  if (state.current && gone.has(state.current)) state.current = null;
+  state.chosen = null;
+  await persistList();
+  await loadCollections();
+  renderList();
+  renderVideo();
+  return true;
+}
+
+$('choose-videos').onclick = () => {
+  state.chosen = state.chosen ? null : new Set();
+  renderList();
+};
+$('delete-chosen').onclick = () => state.chosen?.size && deleteVideos([...state.chosen]);

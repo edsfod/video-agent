@@ -784,6 +784,11 @@ def test_an_unedited_copy_of_the_built_in_template_gives_way_to_a_new_one():
   assert templates.text('标准') == templates.built_in('标准') and not own.exists(), 'nobody changed it: it goes'
   own.write_text(old.format('0123456789ab'), encoding='utf-8')
   assert templates.text('标准') == '# 旧的自带模板\n', 'one the user changed stays'
+  stale = templates.folder() / '.defaults' / '命题分析.md'
+  stale.parent.mkdir(exist_ok=True)
+  stale.write_text('# 以前自带的\n', encoding='utf-8')
+  templates.names()
+  assert not stale.exists(), 'nothing to compare with once a template is no longer built in'
 
 
 def test_an_unfinished_run_of_rounds_is_kept_and_gone_on_with(processed, capsys):

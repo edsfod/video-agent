@@ -219,4 +219,4 @@ function runToEnd(command, args, stdin) {
   });
 }
 
-module.exports = { AGENTS, VERSION, aboutFiles, bundledCli, childEnv, cliCommand, commandFound, launch, otherAgents, pluginRoot, presetProgram, runToEnd, shells, which };
+module.exports = { AGENTS, VERSION, aboutFiles, bundledCli, childEnv, cliCommand, commandFound, installFolders, launch, otherAgents, pluginRoot, presetProgram, runToEnd, shells, which };

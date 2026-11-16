@@ -14,6 +14,7 @@ from . import (
   picture_review,
   pictures,
   processor,
+  removal,
   settings,
   summary_review,
   templates,
@@ -469,6 +470,21 @@ def build_parser():
     help='the workspace passed to process (default: video-agent-output)',
   )
 
+  removing = commands.add_parser(
+    'delete',
+    help='delete videos from the workspace: their folders (transcript, pictures, every summary) and their place in '
+    'collections; the video file too, with its subtitle files, only when this program downloaded it',
+  )
+  removing.add_argument('videos', type=Path, nargs='+', metavar='VIDEO')
+  removing.add_argument(
+    '-o',
+    '--output',
+    type=Path,
+    default=Path.cwd() / 'video-agent-output',
+    help='the workspace passed to process (default: video-agent-output)',
+  )
+  removing.add_argument('--json', action='store_true', help='print what went and what stayed as JSON')
+
   rules = commands.add_parser(
     'template',
     help='print the summary rules and template to follow: the chosen one, or the one named; several can exist',
@@ -501,6 +517,7 @@ def build_parser():
     grouping: _collection,
     fixing: _fix,
     show: _show,
+    removing: _delete,
     rules: _template,
   }
   for command, handler in handlers.items():
@@ -562,6 +579,17 @@ def _emit(value, shape, indent=None):
   print(json.dumps(value, ensure_ascii=False, indent=indent), flush=True)
 
 
+def _delete(args) -> int:
+  done = [removal.delete(args.output, video) for video in args.videos]
+  if args.json:
+    _emit(done, list[contract.Deleted])
+    return 0
+  for entry in done:
+    kept = '，视频文件留着（不是本程序下载的）' if entry['video_kept'] else f'，删了 {len(entry["files"])} 个文件'
+    print(f'{entry["video"]}：删了 {len(entry["folders"])} 个处理文件夹{kept}')
+  return 0
+
+
 def _show(args) -> int:
   video, info = probe(args.video)
   asset = asset_folder(args.output, video)
@@ -586,6 +614,7 @@ def _show(args) -> int:
     # Where processing would take subtitles from without asking, so the window can ask about BCut first.
     'subtitles': _subtitles_here(video, info),
     'compression': _compression(video, info),
+    'downloaded': removal.downloaded(args.output, video),
   }
   _emit(shown, contract.Show)
   return 0

@@ -417,9 +417,9 @@ devTest('summary through DeepSeek\'s web chat, in rounds until it asks for no mo
   assert.ok(sent[3].files.length >= 1 && sent[3].files.every((name) => name.includes('补截')));
   assert.ok(output.some(([, text]) => text.includes('正在分析图片')), 'the hang is in the task output');
   assert.ok(output.some(([, text]) => text.includes('服务器繁忙')), 'the retry is in the task output');
-  // A summary was there already (the model API's), so the rounds are a version beside it, the second over the first.
+  // A summary was there already (the model API's), so the rounds are a version beside it, the second over the first, noted as converged.
   const versions = JSON.parse(cli(['versions', VIDEO, '-o', WORKSPACE, '--json'])).versions.filter((item) => item.source === 'DeepSeek 网页');
-  assert.deepEqual(versions.map((item) => item.note), ['第 2 轮']);
+  assert.deepEqual(versions.map((item) => item.note), ['第 2 轮，已收敛']);
 });
 
 devTest('the 画面 tab shows one set of pictures, and a picture dropped by hand leaves it as a new set', async () => {
@@ -1005,6 +1005,36 @@ devTest('added local videos are processed at once, and those without subtitles a
   await page.click('#nosubs-dialog button[value=later]');
   await page.waitForSelector('#video-list .video-item:has-text("with subs") .badge:text("已处理")', { timeout: 60_000 });
   assert.match(await page.textContent('#video-list .video-item:has-text("bare")'), /未处理/);
+});
+
+devTest('chosen videos are deleted together: a downloaded one with its file, a local one keeps its file', async () => {
+  const got = path.join(WORKSPACE, '下载', 'got [BV1].mp4');
+  fs.mkdirSync(path.dirname(got), { recursive: true });
+  fs.copyFileSync(VIDEO, got);
+  fs.copyFileSync(VIDEO.replace(/\.mp4$/, '.srt'), got.replace(/\.mp4$/, '.ai-zh.srt'));
+  cli(['process', got, '-o', WORKSPACE, '--subtitles', got.replace(/\.mp4$/, '.ai-zh.srt')]);
+  await app.evaluate(({ dialog }, chosen) => {
+    const open = dialog.showOpenDialog;
+    globalThis.vaRestoreDialogs = () => Object.assign(dialog, { showOpenDialog: open });
+    dialog.showOpenDialog = async () => ({ canceled: false, filePaths: chosen });
+  }, [got]);
+  await page.click('#add-videos');
+  await page.waitForSelector('#video-list .video-item:has-text("got [BV1]") .badge:text("已处理")', { timeout: 60_000 });
+  await app.evaluate(() => globalThis.vaRestoreDialogs());
+  const local = path.join(ROOT, 'local', 'with subs.mp4');
+  const folders = () => fs.readdirSync(WORKSPACE).filter((name) => /^(got|with-subs)/.test(name));
+  assert.equal(folders().length, 2);
+  await page.click('#choose-videos');
+  await page.click('#video-list .video-item:has-text("got [BV1]")');
+  await page.click('#video-list .video-item:has-text("with subs")');
+  assert.equal(await page.textContent('#delete-chosen'), '删除 2 个');
+  await page.click('#delete-chosen'); // its confirm() is accepted
+  await page.waitForFunction(() => !document.querySelector('#video-list .video-item.choosing'));
+  assert.equal(await page.locator('#video-list .video-item:has-text("got [BV1]")').count(), 0);
+  assert.equal(await page.locator('#video-list .video-item:has-text("with subs")').count(), 0);
+  assert.deepEqual(folders(), [], 'their folders are gone');
+  assert.equal(fs.existsSync(got) || fs.existsSync(got.replace(/\.mp4$/, '.ai-zh.srt')), false, 'downloaded: the files go');
+  assert.equal(fs.existsSync(local), true, 'added from disk: the file stays');
 });
 
 devTest('ticked tasks stop together, and 全部停止 stops the rest', async () => {

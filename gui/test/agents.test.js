@@ -1,5 +1,6 @@
-// The agent summary routes, run for real: Claude Code, Codex and the other agents' presets (pi, hermes, dsh). They
-// spend the user's subscription or API credit, so they run only when named, as in VA_E2E_AGENTS=claude,pi.
+// The agent summary routes, run for real: Claude Code, Codex, Antigravity (its desktop app running and signed in) and
+// the other agents' presets (pi, hermes, dsh). They spend the user's subscription or API credit, so they run only when
+// named, as in VA_E2E_AGENTS=claude,pi.
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -14,7 +15,7 @@ const GUI = path.resolve(__dirname, '..');
 
 const OTHERS = ['pi', 'hermes', 'dsh']; // presets in programs.js (AGENTS), each a route of its own once ticked in the settings
 
-for (const agent of ['claude', 'codex', ...OTHERS]) {
+for (const agent of ['claude', 'codex', 'antigravity', ...OTHERS]) {
   test(`summary through ${agent}`, { skip: !wanted.includes(agent) && `set VA_E2E_AGENTS=${agent}`, timeout: 600_000 }, async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), `va-agent-${agent}-`));
     const workspace = path.join(root, 'workspace');
@@ -42,7 +43,7 @@ for (const agent of ['claude', 'codex', ...OTHERS]) {
       await page.fill('#summary-request', '写得简短一些');
       await page.click('#run-summary');
       // Wait for the job to end either way, then judge it; a failed run says why in the log.
-      await page.waitForFunction(() => /·/.test(document.querySelector('#log-title').textContent), null, {
+      await page.waitForFunction(() => /· (完成|未完成|已停止)$/.test(document.querySelector('#log-title').textContent), null, {
         timeout: 540_000,
       });
       const log = await page.textContent('#log-text');

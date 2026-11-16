@@ -32,6 +32,7 @@ function registerIpc() {
     cli: cliCommand(),
     claude: which('claude'),
     codex: which('codex'),
+    antigravity: require('./antigravity').server(),
     others: otherAgents(),
     agents: Object.fromEntries(
       Object.entries(AGENTS).map(([key, { name, command, skills }]) => [
@@ -45,6 +46,7 @@ function registerIpc() {
 
   ipcMain.handle('plugin:install', (_, agent) => installPlugin(agent));
   ipcMain.handle('models:list', (_, route) => {
+    if (route === 'antigravity') return require('./antigravity').models().catch((error) => ({ models: [], efforts: [], error: error.message }));
     const [command, ...prefix] = cliCommand();
     return models.list(route, {
       other: otherAgents().find((entry) => entry.key === route),

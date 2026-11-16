@@ -80,6 +80,11 @@ def _drop_unedited():
     if found and found.group(1) == _fingerprint(_body(path)) != _fingerprint(built_in(name)):
       path.unlink()
       _compare_path(name).unlink(missing_ok=True)
+  # A built-in for comparing, of a template no longer built in (命题分析 before 2026-11-16).
+  if (folder() / '.defaults').is_dir():
+    for stale in (folder() / '.defaults').glob('*.md'):
+      if stale.stem not in BUILT_IN:
+        stale.unlink()
 
 
 def names():

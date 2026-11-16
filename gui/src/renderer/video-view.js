@@ -5,7 +5,7 @@ import { $, $$, baseName, clock, current, element, failed, fileUrl, joinPath, pa
 import { renderSummary } from './summary.js';
 import { addTask } from './task-panel.js';
 import { renderTerminal } from './terminal.js';
-import { inCollection, isVideo, refresh } from './video-list.js';
+import { deleteVideos, inCollection, isVideo, refresh } from './video-list.js';
 
 export function renderVideo() {
   $('collection').hidden = state.view !== 'collection';
@@ -462,3 +462,6 @@ export function showImage(file, caption) {
   $('lightbox').showModal();
 }
 $('lightbox').onclick = () => $('lightbox').close();
+
+// The page's own video, in the 视频 list or in a collection.
+$('delete-video').onclick = () => deleteVideos([pageVideo().path]);

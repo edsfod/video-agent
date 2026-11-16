@@ -11,7 +11,7 @@ What Video Agent is and is not. These hold for every change; why each exists, an
 ## Video and download
 
 - `process` takes any local video path and never downloads; `download` is separate and optional. yt-dlp is the downloader; Media Downloader is not a backend.
-- Never modify or move source videos, except `compress` replacing one with its checked smaller copy: this program's downloads by default, the user's own files only with their consent. Artifacts go to the workspace.
+- Never modify or move source videos, except `compress` replacing one with its checked smaller copy (this program's downloads by default, the user's own files only with their consent) and `delete` removing one this program downloaded. A video the user added from their own disk is never deleted. Artifacts go to the workspace.
 
 ## Transcript
 

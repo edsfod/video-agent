@@ -143,6 +143,12 @@ textarea { width: 100%; resize: vertical; }
 .crumb { padding: 2px 6px; margin: 0 0 4px -6px; font-size: 13px; color: var(--text-muted); }
 .list-note { padding: 4px 10px; margin: 0; }
 .badge { font-size: 11px; color: var(--text-muted); }
+.row-tools { display: inline-flex; gap: 4px; }
+button.danger { color: var(--danger); }
+/* Choosing videos to delete: a tick before each name. */
+.video-item.choosing { flex-direction: row; align-items: center; gap: 8px; }
+.video-item.choosing .text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.video-item.chosen { background: var(--bg-selected); }
 .badge.done { color: var(--ok); }
 .badge.busy { color: var(--warn); }
 .badge.error { color: var(--danger); }

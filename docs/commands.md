@@ -246,7 +246,15 @@ Prints where the external programs it would use are: FFmpeg, ffprobe, yt-dlp and
 video-agent show VIDEO [-o WORKSPACE]
 ```
 
-Prints JSON about a video's processing folder without changing anything: its length, whether it is processed, the paths of its manifest, summary, context and transcripts, its corrections, extra frames, subtitle files found beside the video and compression state. The desktop app reads it.
+Prints JSON about a video's processing folder without changing anything: its length, whether it is processed, the paths of its manifest, summary, context and transcripts, its corrections, extra frames, subtitle files found beside the video, compression state, and whether this program downloaded it (`downloaded`). The desktop app reads it.
+
+### `delete`
+
+```powershell
+video-agent delete VIDEO... [-o WORKSPACE] [--json]
+```
+
+Deletes videos from the workspace: each video's processing folders (the one its path names and any other whose manifest names it), with the transcript, pictures and every summary version, and its place in every collection. The video file, with the subtitle and info files saved beside it under its name, is deleted only when this program downloaded it, that is when it lies in the workspace's `下载` folder or a followed collection's download folder; a video added from elsewhere keeps its file. A folder a running job holds is not deleted. `--json` prints for each video what went (`folders`, `collections`, `files`) and whether its file stayed (`video_kept`).
 
 ### `versions`
 

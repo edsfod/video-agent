@@ -35,6 +35,8 @@ export const state = {
   shown: null, // { id, buffer, loading }: the task whose output the panel shows
   /** @type {Set<string>} */
   picked: new Set(), // ids of queued or running tasks ticked in the panel, to stop together
+  /** @type {Set<string> | null} */
+  chosen: null, // paths of videos ticked in the 视频 list, to delete together; null when not choosing
   /** @type {import('../cli-types').Collection[]} */
   collections: [], // `video-agent collection list`: each with its videos and their states
   /** @type {'video' | 'collection'} */

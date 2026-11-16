@@ -8,11 +8,12 @@ const fs = require('node:fs');
 const shared = require('./shared');
 const { send } = shared;
 const accounts = require('./accounts');
+const antigravity = require('./antigravity');
 const chatRounds = require('./chat-rounds');
 const models = require('./models');
 const { TaskQueue, DEFAULT_LIMITS } = require('./tasks');
 const { cookiesDir, loadSettings } = require('./settings');
-const { AGENTS, childEnv, cliCommand, launch, otherAgents, pluginRoot } = require('./programs');
+const { AGENTS, childEnv, cliCommand, launch, otherAgents, pluginRoot, runToEnd } = require('./programs');
 const { updateTray } = require('./window');
 
 /**
@@ -129,6 +130,7 @@ function removeLeftovers(video) {
 
 function startTask(task) {
   if (task.kind === 'summary' && task.route === 'deepseek') return chatRounds.startDeepSeek(task);
+  if (['summary', 'collection'].includes(task.kind) && task.route === 'antigravity') return startAntigravity(task);
   if (['summary', 'collection'].includes(task.kind) && task.route !== 'api') return startAgent(task);
   const [command, ...prefix] = cliCommand();
   const args = [...prefix, ...cliArgs(task)];
@@ -153,18 +155,11 @@ function startTask(task) {
     });
 }
 
-// Agent route: Claude Code with the plugin, or Codex or another agent told to follow the skill file.
-function startAgent(task) {
-  const { agent, video, folder, request, workspace, title } = task;
-  const skill = path.join(pluginRoot(), 'skills', 'video-agent', 'SKILL.md');
+// What an Agent is asked to do, the same for every agent: the video or collection, where things are, how to save.
+// Before it runs, the current text is kept as a version, so nothing is lost even if the agent writes over it.
+function agentTask(task, name) {
+  const { video, folder, request, workspace } = task;
   const file = task.guide ? '学习提纲.md' : '合集总结.md';
-  const other = agent === 'claude' || agent === 'codex' ? null : otherAgents().find((entry) => entry.key === agent);
-  if (agent !== 'claude' && agent !== 'codex' && !other) {
-    shared.queue.output(task.id, 'stderr', `设置里没有 ${agent} 这个 Agent。\n`);
-    return shared.queue.exited(task.id, -1);
-  }
-  const name = agent === 'claude' ? 'Claude Code' : agent === 'codex' ? 'Codex' : other.name;
-  // An Agent writes files itself; keep the current text as a version first, so nothing is lost even if it overwrites.
   const [command, ...prefix] = cliCommand();
   const target = task.kind === 'collection'
     ? ['--collection', task.collection, ...(task.guide ? ['--guide'] : [])]
@@ -187,6 +182,20 @@ function startAgent(task) {
     task.template ? [`按 video-agent template "${task.template}" 打印的规则和模板写，不用别的模板。`] : [],
     request ? [`用户的要求：${request}`] : [],
   ).filter(Boolean).join('\n');
+  return { text, target };
+}
+
+// Agent route: Claude Code with the plugin, or Codex or another agent told to follow the skill file.
+function startAgent(task) {
+  const { agent, workspace, title } = task;
+  const skill = path.join(pluginRoot(), 'skills', 'video-agent', 'SKILL.md');
+  const other = agent === 'claude' || agent === 'codex' ? null : otherAgents().find((entry) => entry.key === agent);
+  if (agent !== 'claude' && agent !== 'codex' && !other) {
+    shared.queue.output(task.id, 'stderr', `设置里没有 ${agent} 这个 Agent。\n`);
+    return shared.queue.exited(task.id, -1);
+  }
+  const name = agent === 'claude' ? 'Claude Code' : agent === 'codex' ? 'Codex' : other.name;
+  const { text } = agentTask(task, name);
   if (agent === 'claude') {
     const prompt = `用 video-agent skill 完成下面的任务。\n${text}`;
     startJob(task.id, 'claude', [
@@ -229,6 +238,51 @@ function startAgent(task) {
     args = args.map((arg) => (arg === '{prompt}' ? `读 ${taskFile} 并完成里面的任务。` : arg));
     startJob(task.id, other.file, args, { cwd: workspace, title, prompt, onClose });
   }
+}
+
+// The Antigravity route (antigravity.js): the same task, to the agent of the Antigravity app that is running. Its
+// commands run in the app's shell, which may not have this app's CLI on PATH, so the task names the CLI's full path.
+// It counts as done when a text with its name as the source was saved meanwhile.
+const antigravityRuns = new Map();
+function startAntigravity(task) {
+  const name = `Antigravity ${task.model || antigravity.DEFAULT_MODEL}`;
+  const log = shared.logs.job(task.id, { title: task.title, command: ['Antigravity'], cwd: task.workspace });
+  const say = (text) => {
+    log.write(text);
+    shared.queue.output(task.id, 'stdout', text);
+    send('job:output', { id: task.id, stream: 'stdout', text });
+  };
+  const [command, ...prefix] = cliCommand();
+  const listing = async () => {
+    const result = await runToEnd(command, [...prefix, 'versions', ...target, '-o', task.workspace, '--json']);
+    try {
+      const found = JSON.parse(result.out);
+      return [found.current, ...found.versions].filter(Boolean);
+    } catch {
+      return [];
+    }
+  };
+  const { text, target } = agentTask({ ...task, model: name.replace(/^Antigravity /, '') }, 'Antigravity');
+  const skill = path.join(pluginRoot(), 'skills', 'video-agent', 'SKILL.md');
+  const cli = [command, ...prefix].map((part) => `"${part.replace(/\\/g, '/')}"`).join(' ');
+  const prompt = `先读 ${skill} 并照它做，<video-agent> 用 ${cli}（写全路径，你的终端里可能没有 video-agent 命令）。`
+    + `不用问我，直接做完；做完说一句保存在哪里。\n${text.replace(/video-agent (summarize|collection|template)/g, `${cli} $1`)}`;
+  log.write(`----- 发给 Antigravity 的任务 -----\n${prompt}\n-----\n`);
+  const before = listing();
+  before.then((known) => {
+    const seen = new Set(known.map((entry) => `${entry.file} ${entry.created}`));
+    const saved = async () => (await listing()).some((entry) => entry.source.startsWith('Antigravity') && !seen.has(`${entry.file} ${entry.created}`));
+    const handle = antigravity.run(task, prompt, {
+      say,
+      saved,
+      done: (code) => {
+        antigravityRuns.delete(task.id);
+        log.close(code);
+        shared.queue.exited(task.id, code);
+      },
+    });
+    antigravityRuns.set(task.id, handle);
+  });
 }
 
 // The options that run another agent with the model chosen for this task (none: its own default). DeepSeek Harness
@@ -278,7 +332,11 @@ function followUp(task) {
 function createQueue() {
   shared.queue = new TaskQueue({
     start: startTask,
-    stop: (task) => (task.route === 'deepseek' ? chatRounds.stop(task.id) : stopJob(task.id)),
+    stop: (task) => {
+      if (task.route === 'deepseek') return chatRounds.stop(task.id);
+      if (task.route === 'antigravity') return antigravityRuns.get(task.id)?.stop();
+      return stopJob(task.id);
+    },
     changed: () => {
       updateTray();
       send('tasks:changed', shared.queue.list());

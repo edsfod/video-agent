@@ -119,6 +119,7 @@ export interface Show {
   extra_frames: string[];
   subtitles: string | null;
   compression: CompressionState;
+  downloaded: boolean;
 }
 
 /** `process --json`, one line per video that was processed. */
@@ -283,6 +284,15 @@ export interface Collection {
   videos: Member[];
 }
 
+/** `delete`: one video, what went and what stayed. */
+export interface Deleted {
+  video: string;
+  folders: string[];
+  collections: string[];
+  files: string[];
+  video_kept: boolean;
+}
+
 /** `inspect`: ffprobe's streams as they come. */
 export interface Inspected {
   path: string;
@@ -305,4 +315,5 @@ export interface CliOutputs {
   template: Template | TemplateDeleted | Template[];
   collection: Collection | Collection[] | Saved;
   models: string[];
+  delete: Deleted[];
 }

@@ -46,6 +46,7 @@ Agents and shells           other agents follow it        commands
 | `collection_summary.py` | A collection's overview and study guide, from its videos' summaries. |
 | `templates.py`, `prompts/` | Summary templates: the built-in ones and the user's. |
 | `versions.py` | Earlier versions of a summary. |
+| `removal.py` | `delete`: a video's folders, its place in collections, and its file when this program downloaded it. |
 | `collection.py` | Collections, and following a list for new videos. |
 | `compress.py` | `compress`: AV1 re-encoding in place. |
 | `files.py` | The per-folder lock and writes that readers never see half done. |
@@ -61,6 +62,7 @@ Agents and shells           other agents follow it        commands
 | `src/settings.js` | The window's settings. |
 | `src/programs.js` | Finding and running programs: the CLI, Claude Code, Codex and the other agents, shells, the plugin and licence files. |
 | `src/jobs.js` | Running the queue's tasks: each kind's command line, Agent routes, cookies for downloads, follow-ups. |
+| `src/antigravity.js` | The Antigravity route: the Agent task as a new conversation in the running Antigravity app, followed to its end through the app's local server. |
 | `src/chat-rounds.js` | The DeepSeek route: rounds of `pack --folder`, DeepSeek, `summarize --import`, until no more pictures are asked for, going on in a new conversation when one grows long. |
 | `src/extractor.js` | AutoSlides Extractor's portable build, downloaded from the settings into the data folder; `childEnv` points the CLI at it. |
 | `src/deepseek.js` | DeepSeek's web chat, a window per conversation: attach files (failed uploads again one by one), type, send (again when the answer does not start), read the answer's code block. Watches the page's requests: refusals for sending too often, which all windows wait out, and what each message carried. |

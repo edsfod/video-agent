@@ -138,6 +138,7 @@ class Show(TypedDict):
   extra_frames: list[str]
   subtitles: str | None  # where processing would take subtitles from: a file's label, 'embedded', or None
   compression: CompressionState
+  downloaded: bool  # this program downloaded it, so deleting it removes the file too (removal.py)
 
 
 class Processed(TypedDict):
@@ -318,6 +319,16 @@ class Collection(TypedDict):
   videos: list[Member]
 
 
+class Deleted(TypedDict):
+  """`delete`: one video, what went and what stayed."""
+
+  video: str
+  folders: list[str]
+  collections: list[str]
+  files: list[str]
+  video_kept: bool
+
+
 class Inspected(TypedDict):
   """`inspect`: ffprobe's streams as they come."""
 
@@ -341,6 +352,7 @@ OUTPUTS: dict[str, Any] = {
   'template': Template | TemplateDeleted | list[Template],
   'collection': Collection | list[Collection] | Saved,
   'models': list[str],
+  'delete': list[Deleted],
 }
 
 CHECK = False  # set by the tests: every printed value is checked against its type
