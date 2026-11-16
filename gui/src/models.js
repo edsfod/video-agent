@@ -129,6 +129,10 @@ async function list(route, { other, run, cli }) {
     return { models: piModels(out || ''), efforts: PI_THINKING };
   }
   if (route === 'hermes') return hermes();
+  if (route === 'agy') {
+    const { out } = await run(other.file, ['models']);
+    return { models: agyModels(out || ''), efforts: [] };
+  }
   if (route === 'dsh') {
     const profile = other.args[other.args.indexOf('--profile') + 1] || 'headless';
     const { out } = await run(other.file, ['--profile', profile, '--dump-config']);
@@ -148,4 +152,10 @@ function effortArgs(route, effort) {
   }[route] || [];
 }
 
-module.exports = { list, effortArgs, piModels, dshModels };
+// `agy models`: a line per model, its id and its name separated by a tab, after a line saying it is fetching them.
+function agyModels(text) {
+  return text.split(/\r?\n/).map((line) => line.split('\t')).filter((parts) => parts.length >= 2 && parts[0].trim())
+    .map(([id, label]) => ({ value: id.trim(), label: `${label.trim()}（${id.trim()}）` }));
+}
+
+module.exports = { list, effortArgs, piModels, dshModels, agyModels };

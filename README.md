@@ -41,7 +41,7 @@ Video Agent 由三部分组成，按需取用：
 - **课件**：可以导入一个放着课件图片的文件夹，有时间表的按时间表、没有的按画面对上时间，之后用它代替截下的屏幕页；[AutoSlides](https://github.com/bit-admin/Yanhekt-AutoSlides) 下载的屏幕录像（`screen_….mp4`）会自动用上它旁边的 `slides_…` 文件夹。装了 [AutoSlides Extractor](https://github.com/bit-admin/AutoSlides-Extractor) 时，屏幕页默认由它来找，讲者翻得快的页也不会漏；桌面程序的设置里可以一键下载它的免安装版。
 - **压缩**：用 AV1 重新编码，分辨率不变、看不出画质差别，屏幕录像大约剩五分之一。默认只压缩本程序下载的视频；本地添加的视频要你在设置里同意后才压缩，因为会替换原文件。
 - **三种总结方式**，都按总结页上选的模板写：自带「标准」（把视频里的说法拆成编号的命题，标出事实、观点、推断、引用；要点不漏重要的东西；画出主线和旁路；视频讲得简略的地方由 AI 以「补充」展开），也可以照着一份做你自己的：
-  - **Agent 应用**：Claude Code 或 Codex 按插件里的 skill 写，会自己补截画面；也可以在设置里换成 pi、Hermes Agent、DeepSeek Harness 或你自己填的命令行 Agent。
+  - **Agent 应用**：Claude Code 或 Codex 按插件里的 skill 写，会自己补截画面；也可以在设置里换成 pi、Hermes Agent、DeepSeek Harness、Antigravity CLI（`agy`）或你自己填的命令行 Agent。
   - **Antigravity**：装了 Antigravity 桌面版并打开着时，选「Antigravity」，任务交给它新开的一个对话，按同一份 skill 写完并保存，默认用 Gemini 3.8 Flash (High)，也可以在「模型」里换；进度在任务面板和 Antigravity 窗口里都能看。
   - **模型 API**：Anthropic，或 OpenAI 兼容接口（例如 ModelScope、本地 Ollama），支持工具调用的模型同样会补截画面。
   - **网页 AI**：点「复制材料」贴进任何聊天 AI；要连画面一起给，导出 zip，或者导出成文件夹（不收 zip、文件数有上限的，屏幕页和画面会拼成总图凑进上限），每张图左下角印着编号和时间。写好的总结点「导入总结」存回来。网页 AI 看不到视频，所以可以在总结最后写一节「画面调整」：用不上的画面写「不用」，以后不再发；从字幕推测缺图的地方写「补截」和时间段，程序在那段时间里截几张候选，下一轮发给它挑。程序还会检查每一稿缺了模板的哪几节、字幕里哪些讲话的时间段没写到，从第二轮起请它对照字幕复查上一稿，补上漏掉的论点、例子和数字，并逐张说明链接的图上有什么字幕里没有的内容，说不出的链接由程序去掉，直到复查不再补上或改正，几轮下来接近 Agent 自己看视频的效果。
@@ -78,7 +78,7 @@ FFmpeg 和 yt-dlp 会作为依赖一起装上，不需要 git。电脑上已经�
     codex plugin add video-agent@video-agent
     ```
 
-- pi、Hermes Agent、DeepSeek Harness：在设置里点“复制到 pi”等按钮，把 skill 文件夹复制到它们读 skill 的地方（pi 是 `~/.agents/skills`，Hermes Agent 是 `~/.hermes/skills/media`，DeepSeek Harness 是 `~/.dsh/skills`）。别的 Agent 点“复制到其他文件夹…”，选它读 skill 的文件夹；没装桌面程序时，把 `skills/video-agent/` 复制过去。
+- pi、Hermes Agent、DeepSeek Harness：在设置里点“复制到 pi”等按钮，把 skill 文件夹复制到它们读 skill 的地方（pi 是 `~/.agents/skills`，Hermes Agent 是 `~/.hermes/skills/media`，DeepSeek Harness 是 `~/.dsh/skills`，Antigravity CLI 是 `~/.gemini/antigravity-cli/skills`）。别的 Agent 点“复制到其他文件夹…”，选它读 skill 的文件夹；没装桌面程序时，把 `skills/video-agent/` 复制过去。
 
 插件找不到 `video-agent` 命令时，会用 uv 临时拉取同一版本。AutoSlides Extractor 要另外安装，或在桌面程序的设置里下载免安装版。
 

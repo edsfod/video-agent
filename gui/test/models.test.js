@@ -42,3 +42,12 @@ test('each agent gets the thinking level its own way, and nothing when none is c
   assert.deepEqual(effortArgs('dsh', 'high'), []);
   assert.deepEqual(effortArgs('claude', ''), []);
 });
+
+test('agy models: the id and the name on each line, the fetching line left out', () => {
+  const { agyModels } = require('../src/models');
+  const text = 'Fetching available models...\r\ngemini-3.8-flash-high\tGemini 3.8 Flash (High)\r\nclaude-opus-5-5-low\tClaude Opus 5.5 (Low)\r\n';
+  assert.deepEqual(agyModels(text), [
+    { value: 'gemini-3.8-flash-high', label: 'Gemini 3.8 Flash (High)（gemini-3.8-flash-high）' },
+    { value: 'claude-opus-5-5-low', label: 'Claude Opus 5.5 (Low)（claude-opus-5-5-low）' },
+  ]);
+});

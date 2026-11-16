@@ -32,7 +32,7 @@ const routeNote = (route) =>
   ROUTE_NOTES[route] ||
   (otherRoute(route)
     ? `在后台运行 ${otherRoute(route)?.name}，按同一份 skill 写总结。它以你的身份运行命令，不限于工作区。`
-    : '还没有其他 Agent：在「设置」→「其他 Agent」里勾上 pi、Hermes Agent、DeepSeek Harness，或填你自己的命令。');
+    : '还没有其他 Agent：在「设置」→「其他 Agent」里勾上 pi、Hermes Agent、DeepSeek Harness、Antigravity CLI，或填你自己的命令。');
 
 // With no other agent, a 其他 Agent route still shows, so it can be found, and says where to add one.
 function otherRouteLabels() {

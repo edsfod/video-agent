@@ -80,7 +80,17 @@ function splitCommand(text) {
 // takes a patch file instead (dshModel). `skills`: the folder it finds skills in without a plugin (its documentation,
 // 2026-10-29): pi reads the Agent Skills folder ~/.agents/skills; Hermes Agent <HERMES_HOME>/skills, one category
 // folder deep (its own skills sit in categories); DeepSeek Harness <dshHome>/skills (its skill-source table).
+// Antigravity's CLI `agy` (user request, 2026-11-16, installed with winget Google.AntigravityCLI 1.5.9): `-p` runs one
+// prompt and exits; in that mode an action that would ask is refused, so --dangerously-skip-permissions lets it run the
+// CLI and write the draft, as the other presets do; skills from ~/.gemini/antigravity-cli/skills (its documentation).
+// The effort is part of its model ids (gemini-3.8-flash-high), so it takes no effort option here.
 const AGENTS = {
+  agy: {
+    name: 'Antigravity CLI',
+    command: 'agy --dangerously-skip-permissions -p {prompt}',
+    model: '--model',
+    skills: () => path.join(os.homedir(), '.gemini', 'antigravity-cli', 'skills'),
+  },
   pi: { name: 'pi', command: 'pi -p', model: '--model', skills: () => path.join(os.homedir(), '.agents', 'skills') },
   hermes: {
     name: 'Hermes Agent',
