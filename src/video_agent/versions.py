@@ -35,6 +35,7 @@ def _load(target):
 
 
 def _save(target, data):
+  data['versions'] = [version for version in data['versions'] if target.with_name(version['file']).is_file()]
   files.write_text(_index_path(target), json.dumps(data, ensure_ascii=False, indent=2) + '\n')
 
 
@@ -129,18 +130,19 @@ def _find(target, data, name):
 
 
 def use(target, name):
-  """Makes a version the current text; the current one becomes a version."""
+  """Makes a version the current text; the current one becomes a version, whose file name is returned (None when
+  there was no current text)."""
   target = Path(target)
   data = _load(target)
   chosen = _find(target, data, name)
   text = target.with_name(name).read_text(encoding='utf-8')
-  if target.is_file():
-    _keep_current(target, data)
+  kept = _keep_current(target, data) if target.is_file() else None
   files.write_text(target, text)
   target.with_name(name).unlink()
   data['versions'].remove(chosen)
   data['current'] = {key: chosen[key] for key in ('created', 'source', 'note', 'pictures') if key in chosen}
   _save(target, data)
+  return kept.name if kept else None
 
 
 def delete(target, name):

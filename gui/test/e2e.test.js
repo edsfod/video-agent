@@ -226,7 +226,7 @@ const FAKE_DEEPSEEK = `<!doctype html><meta charset="utf-8"><title>DeepSeek</tit
       document.getElementById('chat').append(answer);
       icon.setAttribute('d', 'M8 1');
       // The last line reaches the page after the button is back, as on the real page.
-      if (!busy) setTimeout(() => (code.textContent += next ? '- 删掉的节：要点、时间线、详细内容、需留意、需确认（测试视频只有 8 秒）\\n' : '- 补截：00:00:01–00:00:06 彩条\\n'), 1000);
+      if (!busy) setTimeout(() => (code.textContent += next ? '- 删掉的节：元信息、要点、主线与旁路、时间线、详细内容、需留意、需确认（测试视频只有 8 秒）\\n' : '- 补截：00:00:01–00:00:06 彩条\\n'), 1000);
     }, 2500);
   };
 </script>`;
@@ -624,7 +624,6 @@ devTest('a collection lists its videos and copies the material for its overview'
 test('settings list the summary templates, a new one shows on the summary page, and the skill reads only', async () => {
   await page.click('#open-settings');
   await page.waitForSelector('#rules-list .rules-row:has-text("标准"):has-text("正在用")');
-  await page.waitForSelector('#rules-list .rules-row:has-text("命题分析")');
   assert.equal(await page.locator('#rules-list button:has-text("恢复自带的")').count(), 0);
   await app.evaluate(({ shell }) => {
     const open = shell.openPath;
@@ -632,11 +631,11 @@ test('settings list the summary templates, a new one shows on the summary page, 
     shell.openPath = async () => ''; // the new file would open in an editor
   });
   await page.fill('#rules-new-name', '测试模板');
-  await page.selectOption('#rules-new-from', '命题分析');
+  await page.selectOption('#rules-new-from', '标准');
   await page.click('#rules-new');
   await page.waitForSelector('#rules-list .rules-row:has-text("测试模板"):has-text("你自己的")');
   await page.waitForSelector('#route-template option[value="测试模板"]', { state: 'attached' });
-  assert.match(cli(['template', '测试模板']), /论证结构/);
+  assert.match(cli(['template', '测试模板']), /### 旁路/);
   await page.click('#rules-list .rules-row:has-text("测试模板") button:has-text("删除")');
   await page.waitForFunction(() => !document.querySelector('#route-template option[value="测试模板"]'));
   await app.evaluate(() => globalThis.vaRestoreDialogs());

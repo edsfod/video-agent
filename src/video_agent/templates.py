@@ -4,7 +4,10 @@ another (user request, 2026-10-29); the chosen one is the `template` setting.
 The built-in ones ship with the program. The user's are Markdown files in %APPDATA%\\video-agent\\templates: one with a
 built-in's name is the user's edited copy of it, whose first line records which version of the built-in it was copied
 from, so an update that changes the built-in can say so; any other name is a template of the user's own. Updates never
-touch the user's files.
+touch what the user wrote: only a copy never edited since it was made, which holds nothing of the user's, gives way to
+a changed built-in.
+
+One built-in since 2026-11-16 (user decision): 标准 took in 命题分析, which a user's copy keeps as a template of their own.
 """
 
 import hashlib
@@ -14,7 +17,7 @@ from importlib import resources
 from . import contract, files, settings
 
 STANDARD = '标准'
-BUILT_IN = {STANDARD: 'summary.md', '命题分析': 'propositions.md'}
+BUILT_IN = {STANDARD: 'summary.md'}
 BASE_MARK = re.compile(r'<!-- video-agent default: (\w+) -->\r?\n?')
 BAD_NAME = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 
@@ -66,8 +69,22 @@ def _migrate():
     old.replace(_path(STANDARD))
 
 
+def _drop_unedited():
+  """A copy of a built-in template that was never edited, its text still the one its first line records, is removed
+  once the built-in changes, so the new built-in is used rather than an old copy nobody changed."""
+  for name in BUILT_IN:
+    path = _path(name)
+    if not path.is_file():
+      continue
+    found = BASE_MARK.match(path.read_text(encoding='utf-8-sig'))
+    if found and found.group(1) == _fingerprint(_body(path)) != _fingerprint(built_in(name)):
+      path.unlink()
+      _compare_path(name).unlink(missing_ok=True)
+
+
 def names():
   _migrate()
+  _drop_unedited()
   own = sorted(path.stem for path in folder().glob('*.md') if path.stem not in BUILT_IN) if folder().is_dir() else []
   return [*BUILT_IN, *own]
 
@@ -89,6 +106,11 @@ def _known(name):
   if name not in names():
     raise TemplateError(f'No summary template named {name!r}; video-agent template --list lists them')
   return name
+
+
+def name(name=None):
+  """The template's name: the one given, or the chosen one."""
+  return _known(name)
 
 
 def text(name=None):

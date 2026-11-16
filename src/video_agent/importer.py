@@ -136,12 +136,16 @@ def import_summary(
         status(f'画面：去掉 {len(had - now)} 张，加上 {len(now - had)} 张，这个视频以后的总结用剩下的 {len(now)} 张')
         processor.write_context(asset)
     written = {'source': source or '导入', 'note': note, 'make_current': overwrite, 'pictures': node}
-    # A later round (an answer with a 复查, after an import that asked for another round) overwrites the round before.
+    # A later round of the same run (an answer with a 复查, after an import that asked for another round) writes over
+    # the round before, wherever that text is (current or a version), as long as it is still as the rounds wrote it
+    # and to the same template. Anything else is a new text beside the others: a first draft, an answer after a run
+    # that converged, a draft changed by hand, another template, and every text from another route (versions.py).
+    name = templates.name(template) if rounds else None
     before = summary_review.load(asset) if review is not None else {}
     later = before.get('again') or picture_review.load(asset).get('requests')
-    earlier = asset / before['draft'] if before.get('draft') else None
-    draft = earlier.read_text(encoding='utf-8') if earlier and earlier.is_file() else None  # to see what changed
-    if later and draft is not None:
+    earlier = summary_review.own_draft(asset, before, name) if later else None
+    draft = earlier.read_text(encoding='utf-8') if earlier else None  # to see what changed
+    if draft is not None:
       target, _ = versions.overwrite(asset / SUMMARY_NAME, before['draft'], text, **written)
     else:
       target, _ = versions.save(asset / SUMMARY_NAME, text, **written)
@@ -157,10 +161,20 @@ def import_summary(
     if not rounds:
       (asset / summary_review.NAME).unlink(missing_ok=True)  # a later round would rewrite an older draft
     else:
+      saved = target.read_text(encoding='utf-8')
+      asked = (before.get('asked') or []) if draft is not None else []
       problems = summary_review.check(
-        target.read_text(encoding='utf-8'), asset, templates.text(template), length, pictures=adjusted, review=review
+        saved, asset, templates.text(template), length, pictures=adjusted, review=review, asked=asked
       )
-      summary_review.record(asset, target, review, problems, status, before=draft)
+      again = summary_review.record(asset, target, review, problems, status, before=draft, asked=asked)
+      more = again or bool(picture_review.load(asset).get('requests'))
+      number = before.get('round', 0) + 1 if draft is not None else 1
+      summary_review.update(asset, round=number, template=name, digest=summary_review.digest(saved), more=more)
+      # The note says how far the rounds got, so a run cut short by the network or a rate limit is seen for what
+      # it is, kept and gone on with by the next run (summary_review.unfinished).
+      versions.set_note(
+        asset / SUMMARY_NAME, target.name, '，'.join(filter(None, (note, '未收敛' if more else '已收敛')))
+      )
   return target, pairs
 
 

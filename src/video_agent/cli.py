@@ -339,6 +339,12 @@ def build_parser():
     help='with --follow-up and --folder: for a new conversation, with the rules, transcript and pictures as well',
   )
   packing.add_argument(
+    '--resume',
+    action='store_true',
+    help='with --folder, for a first round: go on instead from where an unfinished run of rounds with the same template '
+    'stopped (in a new conversation), when there is one',
+  )
+  packing.add_argument(
     '--folder',
     type=Path,
     metavar='PARENT',
@@ -698,7 +704,9 @@ def _versions(args):
     if args.note:
       versions.set_note(target, *args.note)
     if args.use:
-      versions.use(target, args.use)
+      kept = versions.use(target, args.use)
+      if not args.collection:  # a chat AI's rounds follow their draft to its new name
+        summary_review.renamed(target.parent, {args.use: target.name, **({target.name: kept} if kept else {})})
     if args.delete:
       versions.delete(target, args.delete)
   found = versions.listing(target)
@@ -1047,10 +1055,18 @@ def _pack(args):
     return 0
   if args.new_chat and not (args.follow_up and args.folder):
     raise ValueError('--new-chat goes with --follow-up and --folder')
+  if args.resume and (args.follow_up or not args.folder):
+    raise ValueError('--resume goes with --folder, without --follow-up')
   chosen = {'request': args.request, 'template': args.template, 'follow': args.follow_up}
+  new_chat = args.new_chat
+  if args.resume:
+    stopped = summary_review.unfinished(asset_folder(args.output, probe(args.video)[0]), templates.name(args.template))
+    if stopped:
+      chosen['follow'] = new_chat = True
+      print(f'接着上次没有收敛的第 {stopped} 轮稿子复查（在新对话里）', file=sys.stderr)
   if args.folder:
     target, count = pack_folder(
-      args.video, args.output, args.folder, max_files=args.max_files, new_chat=args.new_chat, **chosen
+      args.video, args.output, args.folder, max_files=args.max_files, new_chat=new_chat, **chosen
     )
     print(f'{target} ({count} pictures)')
   elif args.zip:

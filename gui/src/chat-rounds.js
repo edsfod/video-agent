@@ -2,6 +2,8 @@
 // --import`, the next round with `pack --follow-up` while the import asks for one: a 复查 of the draft, what the checks
 // found, pictures wanted (summary_review.py, picture_review.py). The CLI does all the summary work; this only carries
 // the material and the answers. Each task has a conversation, in a window, of its own, so several run at once.
+// Each round writes over the one before; a run cut short (network, rate limit, stopped) keeps its last round, noted
+// 未收敛, and the next run with the same template goes on from it in a new conversation (`pack --resume`).
 
 const { app } = require('electron');
 const fs = require('node:fs');
@@ -46,25 +48,33 @@ async function startDeepSeek(task) {
   const longest = Number(process.env.VA_DEEPSEEK_NEW_CHAT_CHARS) || NEW_CHAT_AFTER_CHARS; // tests set less
   let said = 0;
   let code = 0;
+  let first = 1; // the round the run starts at: past 1 when it goes on from an unfinished run
   try {
     for (let round = 1; ; round++) {
-      if (round > most) {
-        say(`已经 ${most} 轮，DeepSeek 的复查还在补上或改正，先停在这里；最后一轮的总结已经保存。`);
+      if (round - first + 1 > most) {
+        say(`这次已经 ${most} 轮，DeepSeek 的复查还在补上或改正，先停在这里；最后一轮的总结已经保存，标着未收敛，下次接着它复查。`);
         break;
       }
-      const newChat = round === 1 || said > longest;
+      const newChat = round === first || said > longest;
       const args = ['pack', task.video, '-o', task.workspace, '--folder', work, '--max-files', String(task.maxFiles || 50)];
       if (round > 1) args.push('--follow-up');
       if (round > 1 && newChat) args.push('--new-chat');
-      if (newChat) {
+      if (round === 1) args.push('--resume');
+      if (newChat || round === 1) {
         if (task.template) args.push('--template', task.template);
         if (task.request) args.push('--request', task.request);
       }
       const packed = await cli(args);
       if (packed.code) throw new Error((packed.err || packed.out).trim());
+      const stopped = round === 1 && /接着上次没有收敛的第 (\d+) 轮/.exec(packed.err);
+      if (stopped) {
+        round = first = Number(stopped[1]) + 1;
+        say(`上次第 ${stopped[1]} 轮没有收敛，接着它复查`);
+      }
       const folder = packed.out.trim().split('\n').pop().replace(/ \(\d+ pictures\)$/, '');
       const files = fs.readdirSync(folder).filter((name) => name !== '提示词.md').sort().map((name) => path.join(folder, name));
-      say(`第 ${round} 轮：${round > 1 && newChat ? '对话太长，换一个新对话，' : ''}发给 DeepSeek，附 ${files.length} 张图`);
+      const fresh = round > first && newChat ? '对话太长，换一个新对话，' : '';
+      say(`第 ${round} 轮：${fresh}发给 DeepSeek，附 ${files.length} 张图`);
       const text = fs.readFileSync(path.join(folder, '提示词.md'), 'utf8');
       const { answer, fenced } = await chat.ask({ text, files, newChat, onStatus: say });
       said = (newChat ? 0 : said + text.length) + answer.length;
@@ -79,7 +89,7 @@ async function startDeepSeek(task) {
         throw new Error('导入失败，DeepSeek 的回答记在这个任务的日志里');
       }
       if (!saved.err.includes('--follow-up')) {
-        say(`这一稿没有再补上或改正什么，检查也都通过，${round} 轮完成。`);
+        say(`这一稿没有再补上、改正或删去什么，检查也都通过，${round} 轮完成。`);
         break;
       }
       say('开始下一轮');

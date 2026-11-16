@@ -203,7 +203,8 @@ def test_imports_never_lose_a_summary_and_versions_can_be_chosen(processed, monk
     return json.loads(capsys.readouterr().out)
 
   found = listing()
-  assert (found['current']['note'], found['current']['source']) == ('Gemini', '导入')
+  # A chat AI's answer says whether its rounds converged: this one's checks want another round.
+  assert (found['current']['note'], found['current']['source']) == ('Gemini，未收敛', '导入')
   [kept] = found['versions']
   assert kept['source'] == '网页 AI'
   assert cli.main(['versions', str(video), '-o', str(workspace), '--use', kept['file']]) == 0
@@ -212,7 +213,7 @@ def test_imports_never_lose_a_summary_and_versions_can_be_chosen(processed, monk
   found = listing()
   assert found['current']['source'] == '网页 AI'
   [old] = found['versions']
-  assert old['note'] == 'Gemini' and (target.parent / old['file']).read_text(encoding='utf-8') == SUMMARY
+  assert old['note'] == 'Gemini，未收敛' and (target.parent / old['file']).read_text(encoding='utf-8') == SUMMARY
   assert cli.main(['versions', str(video), '-o', str(workspace), '--note', old['file'], '第一版']) == 0
   capsys.readouterr()
   assert listing()['versions'][0]['note'] == '第一版'
@@ -396,11 +397,14 @@ def test_several_templates_one_chosen_and_one_named_per_summary(processed, capsy
 
   assert cli.main(['template', '--list']) == 0
   listed = json.loads(capsys.readouterr().out)
-  assert [entry['name'] for entry in listed] == ['标准', '命题分析']
-  assert [entry['current'] for entry in listed] == [True, False]
-  assert '论证结构' in templates.text('命题分析') and '论证结构' not in template()
+  assert [entry['name'] for entry in listed] == ['标准'], 'one built-in template since 2026-11-16'
+  assert [entry['current'] for entry in listed] == [True]
+  assert all(name in template() for name in ('## 要点', '### 主线', '### 旁路', '补充：', '`引用`'))
 
-  assert cli.main(['template', '命题分析', '--copy', '我的']) == 0
+  templates.edit('标准')
+  own = templates.folder() / '标准.md'
+  own.write_text(own.read_text(encoding='utf-8').replace('## 时间线', '## 我的时间线'), encoding='utf-8')
+  assert cli.main(['template', '标准', '--copy', '我的']) == 0
   assert json.loads(capsys.readouterr().out)['builtin'] is False
   with pytest.raises(templates.TemplateError):
     templates.copy('标准', '我的')
@@ -408,13 +412,14 @@ def test_several_templates_one_chosen_and_one_named_per_summary(processed, capsy
     templates.copy('标准', 'a/b')
   assert cli.main(['template', '我的', '--use']) == 0
   capsys.readouterr()
-  assert template() == templates.text('命题分析')
+  assert template() == templates.text('标准')
+  templates.reset('标准')
 
   video, workspace = processed
   assert cli.main(['pack', str(video), '-o', str(workspace)]) == 0
-  assert '论证结构' in capsys.readouterr().out
+  assert '我的时间线' in capsys.readouterr().out
   assert cli.main(['pack', str(video), '-o', str(workspace), '--template', '标准']) == 0
-  assert '论证结构' not in capsys.readouterr().out
+  assert '我的时间线' not in capsys.readouterr().out
   with pytest.raises(SystemExit):
     cli.main(['pack', str(video), '-o', str(workspace), '--template', '没有这个'])
   assert 'template --list' in capsys.readouterr().err
@@ -428,8 +433,8 @@ def test_the_one_copy_from_before_moves_into_the_templates(capsys):
 
   old = settings.settings_path().parent / 'summary.md'
   old.parent.mkdir(parents=True, exist_ok=True)
-  old.write_text('<!-- video-agent default: 0123456789ab -->\r\n' + templates.built_in('命题分析'), encoding='utf-8')
-  assert templates.current() == '命题分析' and not old.exists(), 'a copy that is a built-in word for word chooses it'
+  old.write_text('<!-- video-agent default: 0123456789ab -->\r\n' + templates.built_in('标准'), encoding='utf-8')
+  assert templates.current() == '标准' and not old.exists(), 'a copy that is a built-in word for word chooses it'
 
   old.write_text('<!-- video-agent default: 0123456789ab -->\n# 我自己的规则\n', encoding='utf-8')
   assert templates.text('标准') == '# 我自己的规则\n', 'any other copy becomes the copy of the standard one'
@@ -559,7 +564,7 @@ def test_a_chat_ai_drops_pictures_and_asks_for_others_over_rounds(processed, cap
   assert sorted(names) == sorted(['提示词.md', *wanted['candidates']])
   assert '00:00:01–00:00:06 彩条：\n  - frames/extra/' in prompt and '00:09:00–00:09:10 超出的：没有截到' in prompt
   assert '- 一点 `00:00:01`，讲了' in prompt and prompt.rstrip().endswith('整篇放进一个 ````markdown 代码块。')
-  assert '请对照前面的字幕复查上一稿' in prompt and '模板里的「概要」' in prompt
+  assert '请对照前面的字幕复查上一稿' in prompt and '模板里的「' in prompt
   capsys.readouterr()
   assert cli.main(['pack', str(video), '-o', str(workspace), '--follow-up', '--folder', str(workspace / 'out')]) == 0
   folder = next((workspace / 'out').iterdir())
@@ -569,7 +574,7 @@ def test_a_chat_ai_drops_pictures_and_asks_for_others_over_rounds(processed, cap
   # A 复查 that still adds something goes round again; one that changes nothing in the draft, with nothing wanted and
   # the checks passed, ends the rounds.
   body = '# 标题\n\n视频：x · 时长：0:08\n\n## 概要\n\n用上了候选，讲了彩条和测试图案各自的用途。\n\n## 详细内容\n\n- 彩条\n\n'
-  done = '## 画面调整\n\n无\n\n## 复查\n\n- 删掉的节：要点、时间线、需留意、需确认（测试视频只有 8 秒）\n'
+  done = '## 画面调整\n\n无\n\n## 复查\n\n- 删掉的节：元信息、要点、主线与旁路、时间线、需留意、需确认（测试视频只有 8 秒）\n'
   answer.write_text(body + done + '- 补上：`00:00:03` 测试图案\n', encoding='utf-8')
   assert cli.main(['summarize', str(video), '-o', str(workspace), '--import', str(answer), '--make-current']) == 0
   told = capsys.readouterr().err
@@ -653,7 +658,7 @@ def test_a_chat_ais_later_rounds_overwrite_the_round_before(processed):
   third, _ = import_summary(video, workspace, body.format(3) + review, rounds=True, note='第 3 轮')
   listed = versions.listing(asset / '总结.md')
   assert '留着不动' in (asset / '总结.md').read_text(encoding='utf-8'), 'the current summary is not touched'
-  assert [version['note'] for version in listed['versions']] == ['第 3 轮'], 'one version, the last round'
+  assert [version['note'] for version in listed['versions']] == ['第 3 轮，未收敛'], 'one version, the last round'
   assert all(not path.exists() for path in (first, second) if path != third), 'the earlier rounds are gone'
   assert '第 3 轮写的' in third.read_text(encoding='utf-8')
   # A new first draft, without a 复查, starts a version of its own.
@@ -708,10 +713,11 @@ def test_the_pictures_a_summary_is_given_grow_as_a_tree(processed, capsys):
   assert pictures.members(asset) == [first] + [path for path in every if path.startswith('frames/extra/')]
 
 
-def test_the_checks_name_what_a_chat_ais_summary_leaves_out(processed):
+def test_the_checks_name_what_a_chat_ais_summary_leaves_out(processed, monkeypatch):
   from video_agent import summary_review
   from video_agent.importer import import_summary
 
+  monkeypatch.setattr(summary_review, 'GAP_S', 1)  # the sample's speech is seconds long
   video, workspace = processed
   asset = asset_folder(workspace, video.resolve())
   # The subtitles speak at 0.5-2.5 s and 3-5 s; the detailed part covers only the first.
@@ -722,14 +728,12 @@ def test_the_checks_name_what_a_chat_ais_summary_leaves_out(processed):
   missing, pictures, late, gap = state['problems']
   assert '「要点」' in missing and '「时间线」' in missing and '「需确认」' in missing
   assert '画面调整' in pictures and '00:09:00' in late and '00:00:03–00:00:05' in gap
-  # Sections and spans left out on purpose, said in the 复查, are not asked for again.
-  review = (
-    '\n\n## 画面调整\n\n无\n\n## 复查\n\n- 补上：无\n- 删掉的节：要点、时间线、需留意、需确认（太短）\n'
-    '- 不写的时间段：00:00:03–00:00:05（片尾）\n'
-  )
+  # Sections left out on purpose, said in the 复查, are not asked for again; a stretch of speech is named only once,
+  # and left out again it stays out, with no reason asked for (user decision, 2026-11-16).
+  review = '\n\n## 画面调整\n\n无\n\n## 复查\n\n- 补上：无\n- 删掉的节：元信息、要点、主线与旁路、时间线、需留意、需确认（太短）\n'
   import_summary(video, workspace, text.replace('`00:09:00` 结束', '结束') + review, rounds=True)
   state = summary_review.load(asset)
-  assert state['problems'] == [] and not state['again'] and state['review']['skipped'] == [[3, 5]]
+  assert state['problems'] == [] and not state['again'] and state['asked'] == [[3.0, 5.0]]
   # Each linked picture needs a word in the 复查 on what it shows beyond the transcript: a link with none is taken out
   # and the picture not offered again, a picture with no line at all is named.
   from video_agent import pictures
@@ -744,8 +748,80 @@ def test_the_checks_name_what_a_chat_ais_summary_leaves_out(processed):
   saved = target.read_text(encoding='utf-8')
   assert shown in saved and card not in saved and '彩条 [表格：色块]' in saved
   assert card not in pictures.members(asset)
-  (problem,) = summary_review.load(asset)['problems']
-  assert silent in problem and shown not in problem
+  # After rounds that converged this is a new text, so the stretch of speech is named to it once more.
+  gap, problem = summary_review.load(asset)['problems']
+  assert '00:00:03–00:00:05' in gap and silent in problem and shown not in problem
   # An Agent's draft has no rounds; what an earlier chat AI's round left is cleared.
   import_summary(video, workspace, text, overwrite=True)
   assert summary_review.load(asset) == {}
+
+
+def test_the_checks_ask_that_key_points_leave_nothing_out(processed):
+  from video_agent import summary_review
+
+  text = (
+    '## 要点\n\n- `00:01:10` 结论（**P1**）\n\n## 详细内容\n\n'
+    '### 开场 `00:00:00`–`00:05:00`\n\n- **P1** `观点` `00:01:10` 结论。\n\n'
+    '### 一个演示 `00:05:00`–`00:20:00`\n\n- **P2** `事实` `00:21:30` 演示了什么。\n- **P3** `推断` ← P2 `00:06:00` 它说明的道理。\n\n'
+    '### 讲到的方法 `00:20:00`–`00:30:00`\n\n- **P4** `观点` `00:25:00` 方法。\n'
+  )
+  assert summary_review.unlisted_parts(text) == ['一个演示', '讲到的方法']
+  assert summary_review.unlisted_parts(text.replace('（**P1**）', '（**P1**）\n- 方法（P4）')) == ['一个演示']
+  assert summary_review.unlisted_parts(text, ['一个演示（只是铺垫）', '讲到的方法（重复）']) == []
+  # P2 is said after its part ends: it belongs to another part, or its time is wrong.
+  assert summary_review.misplaced(text) == ['P2 `00:21:30`（一个演示，00:05:00–00:20:00）']
+  # No 要点 at all is the missing-section check's to name.
+  assert summary_review.unlisted_parts(text.split('## 详细内容')[1]) == []
+
+
+def test_an_unedited_copy_of_the_built_in_template_gives_way_to_a_new_one():
+  from video_agent import templates
+
+  templates.edit('标准')
+  own = templates.folder() / '标准.md'
+  old = '<!-- video-agent default: {} -->\n# 旧的自带模板\n'
+  own.write_text(old.format(templates._fingerprint('# 旧的自带模板\n')), encoding='utf-8')
+  assert templates.text('标准') == templates.built_in('标准') and not own.exists(), 'nobody changed it: it goes'
+  own.write_text(old.format('0123456789ab'), encoding='utf-8')
+  assert templates.text('标准') == '# 旧的自带模板\n', 'one the user changed stays'
+
+
+def test_an_unfinished_run_of_rounds_is_kept_and_gone_on_with(processed, capsys):
+  from video_agent import cli, summary_review, versions
+  from video_agent.importer import import_summary
+
+  video, workspace = processed
+  asset = asset_folder(workspace, video.resolve())
+  body = '# 标题\n\n## 概要\n\n第 {} 轮写的测试总结，讲了彩条和测试图案各自的用途，以及怎样看出画面偏色。\n'
+  review = '\n## 复查\n\n- 补上：`00:00:03` 测试图案\n'
+  import_summary(video, workspace, body.format(1), rounds=True, note='第 1 轮')
+  second, _ = import_summary(video, workspace, body.format(2) + review, rounds=True, note='第 2 轮')
+  # The run stops here (rate limit): its last round stays, noted, and the next run goes on from it.
+  assert versions.listing(asset / '总结.md')['current']['note'] == '第 2 轮，未收敛'
+  assert summary_review.unfinished(asset, '标准') == 2
+  out = workspace / 'out'
+  command = ['pack', str(video), '-o', str(workspace), '--folder', str(out), '--resume']
+  assert cli.main(command) == 0
+  assert '接着上次没有收敛的第 2 轮' in capsys.readouterr().err
+  prompt = (next(out.iterdir()) / '提示词.md').read_text(encoding='utf-8')
+  assert '第 2 轮写的' in prompt and '请对照前面的字幕复查上一稿' in prompt
+  # Another text made current by hand meanwhile: the rounds follow their draft to its new name.
+  other = '# 另一篇\n\n## 概要\n\n别的路线写的总结，讲了彩条和测试图案各自的用途，以及怎样看出画面偏色。\n'
+  versions.save(asset / '总结.md', other, source='模型 API')
+  [kept] = versions.listing(asset / '总结.md')['versions']
+  assert second == asset / '总结.md'
+  assert cli.main(['versions', str(video), '-o', str(workspace), '--use', kept['file']]) == 0
+  capsys.readouterr()
+  moved = summary_review.load(asset)['draft']
+  assert moved != '总结.md' and '第 2 轮写的' in (asset / moved).read_text(encoding='utf-8')
+  third, _ = import_summary(video, workspace, body.format(3) + review, rounds=True, note='第 3 轮')
+  assert '第 3 轮写的' in third.read_text(encoding='utf-8') and '另一篇' in second.read_text(encoding='utf-8')
+  assert not (asset / moved).exists(), 'the round before is written over'
+  assert summary_review.load(asset)['round'] == 3
+  # A draft changed by hand is not written over: the next round is a new text beside it.
+  third.write_text(third.read_text(encoding='utf-8') + '\n我自己加的一句。\n', encoding='utf-8')
+  assert summary_review.unfinished(asset, '标准') is None
+  fourth, _ = import_summary(video, workspace, body.format(4) + review, rounds=True, note='第 4 轮')
+  assert fourth != third and '我自己加的一句' in third.read_text(encoding='utf-8')
+  # Nor is one written to another template.
+  assert summary_review.unfinished(asset, '我的') is None
