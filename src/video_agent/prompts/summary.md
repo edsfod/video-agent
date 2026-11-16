@@ -5,8 +5,8 @@ This file is shared by the Agent skill and the `summarize` command, so every rou
 ## Rules
 
 - **Keep what is worth noting, at the length it deserves.** 详细内容 is the body of the summary: go through the video part by part and keep what a viewer would want to note down, such as claims and the reasons given for them, figures, examples, demonstrations, steps, and what is shown on screen when it adds to what is said. The room a point gets follows what it is worth, not how long the video spends on it, nor a set size: a long stretch that says little gets a line, a short remark that carries an idea gets what it needs. Leave out repetition, filler, small talk and stretches with nothing worth noting (a break, setting up, talk off the subject) without accounting for them. Write notes a reader can scan, not the talk retold sentence by sentence in its order. Write in the language of the user's request, or of the video when there is no request.
-- **要点 leaves out nothing important.** 要点 is what a reader who reads nothing else must take away, and it is complete: every main conclusion, every side path (below) with the idea it leads to, every demonstration or worked example the video spends real time on together with what it shows, and everything the speaker stresses or comes back to. One line each, with its time and proposition numbers. Before finishing, go through 详细内容 part by part: a part with nothing in 要点 must hold nothing a reader needs to take away.
-- **A main line and side paths.** A talk is seldom one line with everything hung on it. 主线 is the video's main conclusions and what they rest on. A side path (旁路) is anything else that carries an idea of its own: a demonstration that leads to a general point, a digression the speaker develops, a method shown through one example, a story told for its lesson. For each side path write where it branches off (the proposition or time it starts from), what it shows or argues, the general idea it leads to, and where it joins the main line again, if it does. Do not hang a side path under a main conclusion it does not support, and do not shrink it to its example: write the idea the example stands for as the video develops it, including what is said about it in passing or much later.
+- **要点 leaves out nothing important, in the video's order.** 要点 is what a reader who reads nothing else must take away, and it is complete: every conclusion, every idea the video develops (wherever it sits in 主线与旁路), every demonstration or worked example the video spends real time on together with what it shows, and everything the speaker stresses or comes back to. One line each, in the order the video says them, with its time and proposition numbers; no grouping or classifying here, which is 主线与旁路's job. Before finishing, go through 详细内容 part by part: a part with nothing in 要点 must hold nothing a reader needs to take away.
+- **主线与旁路: by theme, in logical order.** Where 要点 follows the video's time, 主线与旁路 follows its logic. Group the content by theme; within a theme, order it logically and show the structure by indentation: under a conclusion, what supports it (`←`); under a point, a side path that branches off from it. A talk is seldom one line with everything hung on it: the main line is the video's main conclusions and what they rest on, and a side path (旁路) is anything else that carries an idea of its own, such as a demonstration that leads to a general point, a digression the speaker develops, a method shown through one example, a story told for its lesson. Put a side path under the point it branches off from, marked `旁路`, with what it shows or argues, the general idea it leads to, and where it joins the main line again, if it does; its own propositions are indented under it. Do not hang a side path as support under a conclusion it does not support, and do not shrink it to its example: write the idea the example stands for as the video develops it, including what is said about it in passing or much later. A theme may come back at several times in the video; it is still one group.
 - **Expand where the video is brief.** Do not stop at what the video says. Add what a reader needs to understand or use it: background, a definition, how something works, the general principle an example stands for when the video only hints at it, a connection to a known concept, method or result, a known counter-argument or correction. Put an addition under the point it serves, as a line starting with `补充：`; an addition that grows into an idea of its own is a side path marked `补充`. Add what helps a reader understand and use the video, not general knowledge for its own sake.
 - **Separate what is claimed from what is asked.** What can be true or false (claims, figures, reasons, conclusions) is written as numbered propositions in 详细内容. What cannot (attendance, quizzes, assignments and deadlines, assessment and grading, course requirements, instructions, notices, links and resources) is not a proposition and goes into 元信息. Examples, demonstrations, tables and steps go under the proposition they illustrate or serve; a procedure taught as such is written as numbered steps, and what is claimed about it (why it works, when to use it) as propositions.
 - **Tag each proposition by its standing in the video, not by whether it is true.** Ask in this order and take the first tag that fits:
@@ -70,33 +70,33 @@ This file is shared by the Agent skill and the `summarize` command, so every rou
 
 ## 要点
 
-读者只读这一节也不能漏掉的东西，按视频先后排，每条一句，附时间点和命题编号：主要结论；每条旁路和它引出的道理；讲者花了时间的演示或例子，和它说明了什么；讲者强调或反复回到的内容。
+读者只读这一节也不能漏掉的东西，按视频的先后排，不分类，每条一句，附时间点和命题编号：结论和视频展开的想法、讲者花了时间的演示或例子和它说明了什么、讲者强调或反复回到的内容。
 
 - `00:12:40` 一句话写清这一点（**P3**、**P7**）
 - `00:30:10` 演示或例子：做了什么，说明了什么（**P12**）
 
 ## 主线与旁路
 
-### 主线
+按主题分组；每个主题里按逻辑顺序排，用缩进表示结构：结论下面是支撑它的命题（`←`），一点下面是从它分出的旁路，旁路自己的命题再缩进在它下面。每行只写编号、标签和一句简述，展开在「详细内容」里。同一主题在视频里前后出现几次，也合在一组。
 
-视频的主要结论和它们靠什么成立。缩进表示支撑关系，每行只写编号、标签和一句简述，展开在「详细内容」里。
+### <主题>
 
 - **P9** `观点` 主要结论的简述
   - ← **P3** `事实` 简述
   - ← **P7** `推断` 简述
     - ← **P5** `引用` 简述
     - ← **P6** `补全` 简述
+  - **P5** `事实` 简述
+    - `旁路` **<旁路名>** `00:30:10`–`00:41:20`：引出的一般道理；在 **P20** `01:12:00` 接回主线（没有接回就不写这一句）
+      - **P12** `事实` 演示了什么
+      - **P14** `观点` ← P12 它说明的道理
+    - `旁路` `补充` **<旁路名>**：总结者拓展的内容，和它为什么有助于理解这一点
+
+### <另一个主题>
+
+- ……
 
 视频不论证（新闻、演示、按条讲授）时，按主题列出主要命题和它们之间的关系。
-
-### 旁路
-
-主线以外、自己带着一个道理的内容，每条一项：
-
-- **<旁路名>** `00:30:10`–`00:41:20`，从 **P5** 分出：讲了什么（**P12**–**P15**）；引出的一般道理；在 **P20** `01:12:00` 接回主线（没有接回就不写这一句）。
-- **<旁路名>** `补充`，从 **P8** 分出：总结者拓展的内容和它为什么有助于理解这一点。
-
-没有旁路就删掉这一小节。
 
 ## 时间线
 

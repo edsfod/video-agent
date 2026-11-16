@@ -1011,6 +1011,7 @@ def _import(args):
       text,
       **written,
       rounds=rounds,
+      agent=not rounds,
       template=args.template,
       status=lambda message: print(message, file=sys.stderr),
     )
@@ -1031,7 +1032,17 @@ def _import(args):
       print(
         f'pack the next round with: video-agent pack "{args.video}" -o "{args.output}" --follow-up', file=sys.stderr
       )
-  if draft:
+  checked = {} if args.collection else summary_review.load(asset_folder(args.output, probe(args.video)[0]))
+  if draft and checked.get('agent') and checked.get('problems') and checked.get('tries') == 1:
+    # Kept for the Agent to fix; importing it again writes over the text just saved.
+    print(
+      f'改好 {draft} 里上面这些问题，再运行同一条 summarize --import 命令：它会写在刚存的这一稿上，不会另存一个版本。'
+      '确实不用改的（比如这一节本来就没有内容），可以不管。',
+      file=sys.stderr,
+    )
+  elif draft:
+    if checked.get('agent') and checked.get('problems'):
+      print('上面的问题还在；这一稿照现在的样子保存了。', file=sys.stderr)
     draft.unlink(missing_ok=True)
   _written(target, args)
   return 0

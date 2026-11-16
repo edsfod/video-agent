@@ -96,6 +96,7 @@ def import_summary(
   source='',
   note='',
   rounds=False,
+  agent=False,
   template=None,
   status=lambda message: None,
 ):
@@ -104,8 +105,9 @@ def import_summary(
   one this program writes, a 字幕改正 section goes into the cleaned transcript and a 画面调整 section into
   picture-review.json, with the candidates it asks for taken. With a summary there already, the
   new one is kept as a version unless `overwrite` makes it current (versions.py). With `rounds` (a chat AI's answer,
-  written to `template`), a 复查 section is taken off and the summary checked for the next round. Returns (path
-  written, corrections applied)."""
+  written to `template`), a 复查 section is taken off and the summary checked for the next round. With `agent` (an
+  Agent's draft), the summary is checked too and what is found said, for the Agent to fix and import again, which
+  writes over its own text. Returns (path written, corrections applied)."""
   video, info, asset, manifest = processed(video, workspace)
   text, pairs = take_corrections(clean(text))
   adjusted = bool(picture_review.SECTION.search(text))
@@ -140,9 +142,14 @@ def import_summary(
     # the round before, wherever that text is (current or a version), as long as it is still as the rounds wrote it
     # and to the same template. Anything else is a new text beside the others: a first draft, an answer after a run
     # that converged, a draft changed by hand, another template, and every text from another route (versions.py).
-    name = templates.name(template) if rounds else None
-    before = summary_review.load(asset) if review is not None else {}
-    later = before.get('again') or picture_review.load(asset).get('requests')
+    name = templates.name(template) if rounds or agent else None
+    if agent:
+      # An Agent importing again after the checks found something: its own text of a moment ago, as it left it.
+      before = summary_review.load(asset)
+      later = before.get('agent') and before.get('tries') == 1 and before.get('source') == written['source']
+    else:
+      before = summary_review.load(asset) if review is not None else {}
+      later = before.get('again') or picture_review.load(asset).get('requests')
     earlier = summary_review.own_draft(asset, before, name) if later else None
     draft = earlier.read_text(encoding='utf-8') if earlier else None  # to see what changed
     if draft is not None:
@@ -158,7 +165,33 @@ def import_summary(
       known = [pair for pair in corrections.load(asset) if pair[0] not in {wrong for wrong, _ in pairs}]
       corrections.save(asset, known + pairs)
       processor.refresh_transcript(asset)
-    if not rounds:
+    if agent:
+      # The checks an Agent can act on (user request, 2026-11-16: an Agent's summary of the first NJU lecture left
+      # side paths and additions out and put a proposition in the wrong part, with nothing to tell it): the template's
+      # sections, long stretches of speech not covered, parts with nothing in 要点, propositions outside their part,
+      # times past the end. The pictures' checks belong to a chat AI's 画面调整 and 复查.
+      saved = target.read_text(encoding='utf-8')
+      asked = (before.get('asked') or []) if draft is not None else []
+      problems = summary_review.check(
+        saved, asset, templates.text(template), length, pictures=True, review=None, asked=asked, agent=True
+      )
+      if problems:
+        gaps = [list(span) for span in summary_review.gaps_in(saved, asset)]
+        state = {
+          'draft': target.name,
+          'agent': True,
+          'problems': problems,
+          'source': written['source'],
+          'template': name,
+        }
+        state |= {'digest': summary_review.digest(saved), 'asked': asked + [span for span in gaps if span not in asked]}
+        state['tries'] = before.get('tries', 1) + 1 if draft is not None else 1  # one chance to fix, then it stands
+        summary_review.save_state(asset, state)
+        for problem in problems:
+          status(f'检查：{problem}')
+      else:
+        (asset / summary_review.NAME).unlink(missing_ok=True)
+    elif not rounds:
       (asset / summary_review.NAME).unlink(missing_ok=True)  # a later round would rewrite an older draft
     else:
       saved = target.read_text(encoding='utf-8')

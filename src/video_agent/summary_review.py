@@ -184,17 +184,19 @@ def misplaced(text):
   return found
 
 
-def check(text, asset, template_text, length, *, pictures, review, asked=()):
+def check(text, asset, template_text, length, *, pictures, review, asked=(), agent=False):
   """What a program can see missing in a chat AI's summary, as lines to send back to it. `asked`: the stretches of
-  speech named in rounds before, not named again."""
+  speech named in rounds before, not named again. With `agent`, worded for an Agent, which writes no 复查."""
   problems = []
+  excuse = '确实没有就不用管' if agent else None
   present = set(TEMPLATE_HEADING.findall(text))
   dropped = ' '.join(review['dropped']) if review else ''
   missing = [name for name in sections(template_text) if name not in present and name not in dropped]
   if missing:
     listed = '、'.join(f'「{name}」' for name in missing)
     problems.append(
-      f'模板里的{listed}没有写：有内容就补上；确实没有内容，在「{HEADING}」里写「删掉的节：<节名>（为什么没有）」。'
+      f'模板里的{listed}没有写：有内容就补上；'
+      + (f'{excuse}。' if agent else f'确实没有内容，在「{HEADING}」里写「删掉的节：<节名>（为什么没有）」。')
     )
   if not pictures:
     problems.append('没有「画面调整」一节：没有要调整的画面也要写这一节，内容写「无」。')
@@ -216,8 +218,9 @@ def check(text, asset, template_text, length, *, pictures, review, asked=()):
     if missing:
       listed = '、'.join(f'「{title}」' for title in missing)
       problems.append(
-        f'详细内容里这些段落在「要点」里一条都没有：{listed}。有读者不能漏掉的内容（结论、旁路和它引出的道理、讲者花了'
-        f'时间的演示或例子、讲者强调的内容）就补进要点；确实没有，在「{HEADING}」里写「要点不收：<段落标题>（为什么）」。'
+        f'详细内容里这些段落在「要点」里一条都没有：{listed}。有读者不能漏掉的内容（结论和视频展开的想法、讲者花了'
+        f'时间的演示或例子、讲者强调的内容）就按时间顺序补进要点；'
+        + (f'{excuse}。' if agent else f'确实没有，在「{HEADING}」里写「要点不收：<段落标题>（为什么）」。')
       )
   wrong = misplaced(text)
   if wrong:
@@ -289,6 +292,10 @@ def record(asset, draft, review, problems, status=lambda message: None, before=N
 
 def digest(text):
   return hashlib.sha256(text.encode('utf-8')).hexdigest()[:16]
+
+
+def save_state(asset, state):
+  files.write_text(Path(asset) / NAME, json.dumps(state, ensure_ascii=False, indent=2) + '\n')
 
 
 def update(asset, **keys):

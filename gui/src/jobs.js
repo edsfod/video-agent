@@ -166,7 +166,7 @@ function agentTask(task, name) {
     : [video];
   spawnSync(command, [...prefix, 'versions', ...target, '-o', workspace, '--keep', name], { windowsHide: true, env: childEnv() });
   const save = (what, draft, args) =>
-    `写成 ${draft}，再运行 video-agent summarize ${args} -o "${workspace}" --import --source "${task.model ? `${name} ${task.model}` : name}" 保存为 ${what}（它会删掉草稿；已经有 ${what} 时另存为一个版本，由用户决定用哪个）。`;
+    `写成 ${draft}，再运行 video-agent summarize ${args} -o "${workspace}" --import --source "${task.model ? `${name} ${task.model}` : name}" 保存为 ${what}（它会删掉草稿；已经有 ${what} 时另存为一个版本，由用户决定用哪个）。导入时它若列出检查出的问题，照它说的改好草稿，再运行一次同一条命令。`;
   const text = (task.kind === 'collection'
     ? [
         `为合集「${task.collection}」写 ${file}，按 skill 里「A collection」的做法。`,

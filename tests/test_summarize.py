@@ -399,7 +399,7 @@ def test_several_templates_one_chosen_and_one_named_per_summary(processed, capsy
   listed = json.loads(capsys.readouterr().out)
   assert [entry['name'] for entry in listed] == ['标准'], 'one built-in template since 2026-11-16'
   assert [entry['current'] for entry in listed] == [True]
-  assert all(name in template() for name in ('## 要点', '### 主线', '### 旁路', '补充：', '`引用`'))
+  assert all(name in template() for name in ('## 要点', '## 主线与旁路', '`旁路`', '补充：', '`引用`'))
 
   templates.edit('标准')
   own = templates.folder() / '标准.md'
@@ -464,7 +464,11 @@ def test_a_draft_beside_the_summary_is_imported_and_removed(processed, capsys):
   draft = asset_folder(workspace, video.resolve()) / '总结.draft.md'
   draft.write_text(SUMMARY, encoding='utf-8')
   assert cli.main(['summarize', str(video), '-o', str(workspace), '--import', '--source', 'Claude Code']) == 0
-  assert (draft.parent / '总结.md').read_text(encoding='utf-8') == SUMMARY and not draft.exists()
+  assert (draft.parent / '总结.md').read_text(encoding='utf-8') == SUMMARY
+  # This short draft leaves sections out, so it stays for the Agent's one fix; imported again, it goes.
+  assert draft.exists()
+  assert cli.main(['summarize', str(video), '-o', str(workspace), '--import', '--source', 'Claude Code']) == 0
+  assert not draft.exists()
 
 
 def test_the_code_block_a_chat_ai_puts_the_summary_in_is_taken_off():
@@ -830,3 +834,42 @@ def test_an_unfinished_run_of_rounds_is_kept_and_gone_on_with(processed, capsys)
   assert fourth != third and '我自己加的一句' in third.read_text(encoding='utf-8')
   # Nor is one written to another template.
   assert summary_review.unfinished(asset, '我的') is None
+
+
+def test_an_agents_draft_is_checked_and_may_be_fixed_once_over_its_own_text(processed, capsys, monkeypatch):
+  from video_agent import cli, summary_review, versions
+  from video_agent.importer import draft_path
+
+  monkeypatch.setattr(summary_review, 'GAP_S', 1)  # the sample's speech is seconds long
+  monkeypatch.setattr(summary_review, 'OUTSIDE_S', 0)
+  video, workspace = processed
+  asset = asset_folder(workspace, video.resolve())
+  draft = draft_path(workspace, video)
+  command = ['summarize', str(video), '-o', str(workspace), '--import', '--source', 'Antigravity']
+  first = (
+    '# 标题\n\n## 概要\n\n测试视频，讲了彩条和测试图案各自的用途，以及怎样看出画面偏色。\n\n## 要点\n\n- `00:00:01` 彩条（**P1**）\n\n'
+    '## 详细内容\n\n### 彩条 `00:00:00`–`00:00:02`\n\n- **P1** `事实` `00:00:01` 彩条。\n\n'
+    '### 图案 `00:00:04`–`00:00:06`\n\n- **P2** `事实` `00:00:07` 测试图案。\n'
+  )
+  draft.write_text(first, encoding='utf-8')
+  assert cli.main(command) == 0
+  err = capsys.readouterr().err
+  assert '「图案」' in err and 'P2 `00:00:07`' in err and '再运行同一条 summarize --import' in err
+  assert '画面调整' not in err and '复查' not in err, "the pictures' checks and the 复查 are a chat AI's"
+  assert draft.is_file(), 'kept for the Agent to fix'
+  # Fixed and imported again: written over its own text, not a version beside it.
+  fixed = first.replace('（**P1**）', '（**P1**）\n- `00:00:04` 图案（**P2**）').replace('`00:00:07`', '`00:00:04`')
+  draft.write_text(fixed, encoding='utf-8')
+  assert cli.main(command) == 0
+  err = capsys.readouterr().err
+  listed = versions.listing(asset / '总结.md')
+  assert (
+    listed['current'] and not listed['versions'] and '图案（**P2**）' in (asset / '总结.md').read_text(encoding='utf-8')
+  )
+  # One chance only: what is left (here the sections it left out) is said, and the text stands as it is.
+  assert '上面的问题还在' in err and not draft.exists()
+  assert [problem[:9] for problem in summary_review.load(asset)['problems']] == ['模板里的「元信息」']
+  # The next run of an Agent is a text of its own, beside the last.
+  draft.write_text(first, encoding='utf-8')
+  assert cli.main(command) == 0
+  assert len(versions.listing(asset / '总结.md')['versions']) == 1 and draft.is_file()

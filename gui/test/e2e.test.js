@@ -635,7 +635,7 @@ test('settings list the summary templates, a new one shows on the summary page, 
   await page.click('#rules-new');
   await page.waitForSelector('#rules-list .rules-row:has-text("测试模板"):has-text("你自己的")');
   await page.waitForSelector('#route-template option[value="测试模板"]', { state: 'attached' });
-  assert.match(cli(['template', '测试模板']), /### 旁路/);
+  assert.match(cli(['template', '测试模板']), /## 主线与旁路/);
   await page.click('#rules-list .rules-row:has-text("测试模板") button:has-text("删除")');
   await page.waitForFunction(() => !document.querySelector('#route-template option[value="测试模板"]'));
   await app.evaluate(() => globalThis.vaRestoreDialogs());
