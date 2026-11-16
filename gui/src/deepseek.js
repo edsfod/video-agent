@@ -214,9 +214,17 @@ function conversation() {
     await debug.sendCommand('DOM.setFileInputFiles', { nodeId, files });
   }
 
-  /** The attachments whose upload failed. @returns {Promise<{ name: string, busy: boolean }[]>} */
-  const failedUploads = () =>
-    page(`${ATTACHMENTS}.filter((item) => ${UPLOAD_FAILED}.test(item.innerText)).map((item) => ({ name: (${NAME})(item), busy: ${UPLOAD_BUSY}.test(item.innerText) }))`);
+  /**
+   * The attachments whose upload failed, and whether the send button may be pressed, read at one moment: read one after
+   * the other, an upload ending in Server busy between the two left the button enabled (the file no longer uploading)
+   * and the message went out without the file being retried (seen in the end-to-end test on GitHub, 2026-11-16).
+   * @returns {Promise<{ failed: { name: string, busy: boolean }[], ready: boolean }>}
+   */
+  const uploadState = () =>
+    page(`(() => ({
+      failed: ${ATTACHMENTS}.filter((item) => ${UPLOAD_FAILED}.test(item.innerText)).map((item) => ({ name: (${NAME})(item), busy: ${UPLOAD_BUSY}.test(item.innerText) })),
+      ready: (() => { const b = ${SEND}; return !!b && !b.classList.contains('ds-button--disabled'); })(),
+    }))()`);
   const retryUploads = () =>
     page(`${ATTACHMENTS}.filter((item) => ${UPLOAD_FAILED}.test(item.innerText)).forEach((item) => item.querySelector('[role=button]')?.click())`);
 
@@ -225,14 +233,13 @@ function conversation() {
     if (files.length) await attach(files);
     await page(`document.querySelector('textarea').focus()`);
     win.webContents.insertText(text);
-    const ready = `(() => { const b = ${SEND}; return !!b && !b.classList.contains('ds-button--disabled'); })()`;
     const tries = new Map(files.map((file) => [path.basename(file), 1]));
     const start = Date.now();
     let told = false;
     for (;;) {
       if (stopped) throw new Error('已停止');
       if (wire.refused) throw Object.assign(new Error('DeepSeek 限流'), { refused: true });
-      const failed = await failedUploads();
+      const { failed, ready } = await uploadState();
       if (failed.length) {
         const lost = failed.filter(({ name }) => (tries.get(name) || TRIES) >= TRIES);
         if (lost.length && lost.every(({ busy }) => busy)) throw Object.assign(new Error('DeepSeek 上传繁忙'), { refused: true });
@@ -245,7 +252,7 @@ function conversation() {
         await pause(1000); // until the page has taken it, the send button still says what it said before
         continue;
       }
-      if (await page(ready)) return;
+      if (ready) return;
       if (Date.now() - start > UPLOAD_TIMEOUT_MS) throw Object.assign(new Error('图片五分钟没有传完'), { again: true });
       if (!told && Date.now() - start > 5000) {
         onStatus('等待图片上传完…');

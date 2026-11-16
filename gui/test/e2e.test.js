@@ -502,7 +502,7 @@ devTest('another agent writes a summary from standard input or from a task file'
     assert.equal(found.source, 'node');
   }
   await page.click('#open-settings');
-  for (const key of ['custom', 'pi', 'hermes', 'dsh']) await page.uncheck(`#set-agents input[data-agent=${key}]`);
+  for (const key of ['custom', 'pi', 'hermes', 'dsh', 'agy']) await page.uncheck(`#set-agents input[data-agent=${key}]`);
   await page.click('#save-settings');
   await page.waitForSelector('#routes .route-agent:has-text("其他 Agent")');
   // With none chosen it still shows, says where to choose one, and writes nothing.
