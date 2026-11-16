@@ -290,6 +290,12 @@ def build_parser():
   history.add_argument(
     '--keep', metavar='SOURCE', help='keep a copy of the current text as a version before something rewrites the file'
   )
+  history.add_argument(
+    '--settle',
+    action='store_true',
+    help='after what --keep was for has finished: drop the copy when the text is unchanged, or record a text written '
+    'over the current one as from that SOURCE',
+  )
   history.add_argument('--json', action='store_true', help='print the versions as JSON')
 
   sets = commands.add_parser(
@@ -730,6 +736,8 @@ def _versions(args):
       print(
         f'kept {kept}' if kept else 'nothing to keep: no current text, or an identical version exists', file=sys.stderr
       )
+    if args.settle:
+      versions.settle(target)
     if args.note:
       versions.set_note(target, *args.note)
     if args.use:

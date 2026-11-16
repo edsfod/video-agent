@@ -105,21 +105,59 @@ def overwrite(target, name, text, *, source='', note='', make_current=False, pic
 
 
 def keep(target, *, source=''):
-  """Keeps a copy of the current text as a version unless an identical one is kept already; for routes that write
-  the file themselves, such as an Agent. Returns the version's path or None."""
+  """Keeps a copy of the current text as a version unless an identical one is kept already; for routes that may
+  write the file themselves, such as an Agent. The current text keeps its record: it is still the same text. The copy
+  is marked as kept for `source` until `settle` sees what the route did. Returns the version's path or None."""
   target = Path(target)
   if not target.is_file():
     return None
   data = _load(target)
+  _settle(target, data)
   text = target.read_bytes()
   for version in data['versions']:
     path = target.with_name(version['file'])
     if path.is_file() and path.read_bytes() == text:
+      _save(target, data)
       return None
-  kept = _keep_current(target, data)
-  data['current'] = _meta(source, '')
+  meta = data['current'] or _meta('', '')
+  kept = _version_name(target, meta['created'])
+  shutil.copy2(target, kept)
+  data['versions'].append({'file': kept.name, **meta, 'kept_for': source})
   _save(target, data)
   return kept
+
+
+def settle(target):
+  """After the route a copy was kept for has finished: the copy goes when another file has the same text (the route
+  left the current text alone, or saved its own through the CLI, which keeps the old one itself); when the route
+  wrote over the current text itself, that text is recorded as the route's. Until 2026-11-16 `keep` recorded the
+  current text as the route's at once, so an Agent that saved through `summarize --import` left the old text labelled
+  as its own beside a duplicate of it."""
+  target = Path(target)
+  data = _load(target)
+  if _settle(target, data):
+    _save(target, data)
+
+
+def _settle(target, data):
+  changed = False
+  for version in list(data['versions']):
+    if 'kept_for' not in version:
+      continue
+    source = version.pop('kept_for')
+    changed = True
+    path = target.with_name(version['file'])
+    if not path.is_file():
+      continue
+    text = path.read_bytes()
+    others = [target] + [target.with_name(other['file']) for other in data['versions'] if other is not version]
+    if any(other.is_file() and other.read_bytes() == text for other in others):
+      data['versions'].remove(version)
+      path.unlink()
+    elif target.is_file() and data['current'] == {key: value for key, value in version.items() if key != 'file'}:
+      stamp = datetime.fromtimestamp(target.stat().st_mtime).isoformat(timespec='seconds')
+      data['current'] = {'created': stamp, 'source': source, 'note': ''}
+  return changed
 
 
 def _find(target, data, name):

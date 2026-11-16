@@ -156,7 +156,8 @@ function startTask(task) {
 }
 
 // What an Agent is asked to do, the same for every agent: the video or collection, where things are, how to save.
-// Before it runs, the current text is kept as a version, so nothing is lost even if the agent writes over it.
+// Before it runs, the current text is kept as a version, so nothing is lost even if the agent writes over it; when it
+// has finished, `settle` drops that copy if it was not needed (versions.py).
 function agentTask(task, name) {
   const { video, folder, request, workspace } = task;
   const file = task.guide ? '学习提纲.md' : '合集总结.md';
@@ -182,7 +183,9 @@ function agentTask(task, name) {
     task.template ? [`按 video-agent template "${task.template}" 打印的规则和模板写，不用别的模板。`] : [],
     request ? [`用户的要求：${request}`] : [],
   ).filter(Boolean).join('\n');
-  return { text, target };
+  const settle = () =>
+    spawnSync(command, [...prefix, 'versions', ...target, '-o', workspace, '--settle'], { windowsHide: true, env: childEnv() });
+  return { text, target, settle };
 }
 
 // Agent route: Claude Code with the plugin, or Codex or another agent told to follow the skill file.
@@ -195,7 +198,7 @@ function startAgent(task) {
     return shared.queue.exited(task.id, -1);
   }
   const name = agent === 'claude' ? 'Claude Code' : agent === 'codex' ? 'Codex' : other.name;
-  const { text } = agentTask(task, name);
+  const { text, settle } = agentTask(task, name);
   if (agent === 'claude') {
     const prompt = `用 video-agent skill 完成下面的任务。\n${text}`;
     startJob(task.id, 'claude', [
@@ -207,13 +210,13 @@ function startAgent(task) {
       '--output-format', 'stream-json', '--verbose',
       ...(task.model ? ['--model', task.model] : []),
       ...models.effortArgs('claude', task.effort),
-    ], { cwd: workspace, stdin: prompt, title, prompt });
+    ], { cwd: workspace, stdin: prompt, title, prompt, onClose: settle });
   } else if (agent === 'codex') {
     const prompt = `先读 ${skill} 并照它做，<video-agent> 用 video-agent 命令。\n${text}`;
     startJob(task.id, 'codex', [
       'exec', '--skip-git-repo-check', '--cd', workspace, '--sandbox', 'workspace-write', '--json',
       ...(task.model ? ['-m', task.model] : []), ...models.effortArgs('codex', task.effort), '-',
-    ], { cwd: workspace, stdin: prompt, title, prompt });
+    ], { cwd: workspace, stdin: prompt, title, prompt, onClose: settle });
   } else {
     const prompt = `先读 ${skill} 并照它做，<video-agent> 用 video-agent 命令。\n${text}`;
     const temporary = [];
@@ -229,7 +232,10 @@ function startAgent(task) {
     if (!args.includes('{prompt}') || args.indexOf('{prompt}') === args.length - 1) {
       args.splice(args.includes('{prompt}') ? args.length - 1 : args.length, 0, ...models.effortArgs(other.key, task.effort));
     }
-    const onClose = () => temporary.forEach((file) => fs.rmSync(file, { force: true }));
+    const onClose = () => {
+      temporary.forEach((file) => fs.rmSync(file, { force: true }));
+      settle();
+    };
     if (!args.includes('{prompt}')) return startJob(task.id, other.file, args, { cwd: workspace, stdin: prompt, title, prompt, onClose });
     // A command line keeps one line through cmd.exe, so the task goes in a file and the line points to it.
     const taskFile = path.join(app.getPath('temp'), `video-agent-task-${task.id}.md`);
@@ -262,7 +268,7 @@ function startAntigravity(task) {
       return [];
     }
   };
-  const { text, target } = agentTask({ ...task, model: name.replace(/^Antigravity /, '') }, 'Antigravity');
+  const { text, target, settle } = agentTask({ ...task, model: name.replace(/^Antigravity /, '') }, 'Antigravity');
   const skill = path.join(pluginRoot(), 'skills', 'video-agent', 'SKILL.md');
   const cli = [command, ...prefix].map((part) => `"${part.replace(/\\/g, '/')}"`).join(' ');
   const prompt = `先读 ${skill} 并照它做，<video-agent> 用 ${cli}（写全路径，你的终端里可能没有 video-agent 命令）。`
@@ -277,6 +283,7 @@ function startAntigravity(task) {
       saved,
       done: (code) => {
         antigravityRuns.delete(task.id);
+        settle();
         log.close(code);
         shared.queue.exited(task.id, code);
       },

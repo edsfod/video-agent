@@ -259,7 +259,7 @@ Deletes videos from the workspace: each video's processing folders (the one its 
 ### `versions`
 
 ```text
-video-agent versions VIDEO [-o WORKSPACE] [--use FILE | --delete FILE | --note FILE TEXT | --keep SOURCE] [--json]
+video-agent versions VIDEO [-o WORKSPACE] [--use FILE | --delete FILE | --note FILE TEXT | --keep SOURCE | --settle] [--json]
 video-agent versions --collection NAME [--guide] [...]
 ```
 
@@ -269,6 +269,7 @@ A summary written again does not replace the current one unless asked (`--make-c
 - `--delete FILE`: delete a version (never the current text).
 - `--note FILE TEXT`: set a version's note (`FILE` may be `总结.md`).
 - `--keep SOURCE`: keep a copy of the current text as a version before something rewrites the file.
+- `--settle`: after what `--keep` was for has finished: the copy goes when another file has the same text; when the current text was written over directly, it is recorded as from that SOURCE.
 - `--collection NAME`, `--guide`: the collection's overview or study guide instead of a video's summary.
 
 Each version records the set of pictures it was written with (`pictures` in `--json`, see `pictures`).
