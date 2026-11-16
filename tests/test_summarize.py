@@ -399,7 +399,7 @@ def test_several_templates_one_chosen_and_one_named_per_summary(processed, capsy
   listed = json.loads(capsys.readouterr().out)
   assert [entry['name'] for entry in listed] == ['标准'], 'one built-in template since 2026-11-16'
   assert [entry['current'] for entry in listed] == [True]
-  assert all(name in template() for name in ('## 要点', '## 主线与单元', '视频明说', '拓展：', '核对：', '`引用`'))
+  assert all(name in template() for name in ('## 要点', '## 主线与单元', '讲者接上', '拓展：', '核对：', '`引用`'))
 
   templates.edit('标准')
   own = templates.folder() / '标准.md'
