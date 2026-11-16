@@ -6,7 +6,7 @@ This file is shared by the Agent skill and the `summarize` command, so every rou
 
 - **Keep what is worth noting, at the length it deserves.** 详细内容 is the body of the summary: go through the video part by part and keep what a viewer would want to note down, such as claims and the reasons given for them, figures, examples, demonstrations, steps, and what is shown on screen when it adds to what is said. The room a point gets follows what it is worth, not how long the video spends on it, nor a set size: a long stretch that says little gets a line, a short remark that carries an idea gets what it needs. Leave out repetition, filler, small talk and stretches with nothing worth noting (a break, setting up, talk off the subject) without accounting for them. Write notes a reader can scan, not the talk retold sentence by sentence in its order. Write in the language of the user's request, or of the video when there is no request.
 - **要点 leaves out nothing important, in the video's order.** 要点 is what a reader who reads nothing else must take away, and it is complete: every conclusion, every idea the video develops (wherever it sits in 主线与单元), every demonstration or worked example the video spends real time on together with what it shows, and everything the speaker stresses or comes back to. One line each, in the order the video says them, with its time and proposition numbers; no grouping or classifying here, which is 主线与单元's job. Before finishing, go through 详细内容 part by part: a part with nothing in 要点 must hold nothing a reader needs to take away.
-- **主线与单元: self-contained units first, then the main line they make.** Where 要点 follows the video's time, 主线与单元 follows its logic, as a forest rather than one tree with everything hung on it (user decision, 2026-11-16). First find the units. A unit is a stretch the speaker develops as a block, which a reader can take away on its own: an argument with its conclusion, or an event (a demonstration, a story, a case, an observation) with what it shows. Its root is that conclusion or event; indented under it, what supports it (`←`) or the steps of the event, and under those what supports them. A demonstration used only to illustrate one point, with nothing of its own, is not a unit: it goes under that point. Units are not nested: a block inside another's stretch with a conclusion or event of its own is a unit of its own. Then see whether the units make a main line: when the conclusions of several units together support one higher conclusion, that conclusion and what directly supports it are the main line, written first, and under it the units it rests on are named by their root's number and the unit's name, not repeated. Where a unit bears on another unit or on the main line, write one line under its root, `→ 支撑 **P36**` or `→ 反驳 **P12**`, with the time and the words where the video makes the link; write the link the video makes, including one made in passing or much later, and do not make one it does not. A proposition that serves in several places is written once and named by number elsewhere. When no conclusion rests on several units (an interview, a talk over separate topics), there is no main line; list the units. The main line comes first, then the units in the order the video first comes to them. Do not shrink a unit to its example: write the idea it stands for as the video develops it.
+- **主线与单元: self-contained units first, then the main line they serve.** Where 要点 follows the video's time, 主线与单元 follows its logic, as a forest rather than one tree with everything hung on it (user decisions, 2026-11-16). First find the units. A unit is a stretch the speaker develops as a block, which a reader can take away on its own: an argument with its conclusion, or an event (a demonstration, a story, a case, an observation) with what it shows. Steps the speaker takes one after another in one go, such as a demonstration, what went wrong and how it was put right, are one unit, not one unit per step. Write each unit as a tree of its own: its root is that conclusion or event; indented under it, what supports the conclusion (`←`), or the steps of the event and what each shows, and under those what supports them. An event is the root or a step of its unit, never support for a conclusion it does not show. A unit is written as what it is on its own, with no link to another unit or to the main line. A demonstration used only to illustrate one point, with nothing of its own, is not a unit: it goes under that point. Units are not nested. Then the main line: when several units serve one higher conclusion, that conclusion is the main line, written first. What a unit gives the main line is written in the main line, not in the unit: under the main conclusion, the propositions that carry it there, often not the unit's root and often said elsewhere in the video, in passing or much later; each names the unit it comes from and how the link is known, `视频明说` with the time where the video makes it, or `总结者归纳` where the video leaves it implicit. A unit may give the main line nothing. A proposition used in several places is written once in 详细内容 and named by number elsewhere. When no conclusion is served by several units (an interview, a talk over separate topics), there is no main line; list the units. The main line comes first, then the units in the order the video first comes to them. Do not shrink a unit to what it gives the main line, nor to its example: write the idea it stands for on its own, as the video develops it.
 - **Expand where the video is brief: what 拓展 is.** Do not stop at what the video says. A `拓展：` line is not what the video says put in another place, not general knowledge for its own sake and not a check of the video (that is `核对：`), but what a reader needs to understand or use the video and the video does not give: background, a definition, how something works, the concept, method or principle an example is a case of, a connection to a known result, a known counter-argument or correction (user decision, 2026-11-16). What the speaker says, even in passing, is a proposition or an event of the video in its place, never a 拓展. Put it under the point it serves; one that grows into an idea of its own is a unit marked `拓展`.
 - **Separate what is claimed from what is asked.** What can be true or false (claims, figures, reasons, conclusions) is written as numbered propositions in 详细内容. What cannot (attendance, quizzes, assignments and deadlines, assessment and grading, course requirements, instructions, notices, links and resources) is not a proposition and goes into 元信息. Examples, demonstrations, tables and steps go under the proposition they illustrate or serve; a procedure taught as such is written as numbered steps, and what is claimed about it (why it works, when to use it) as propositions.
 - **Tag each proposition by its standing in the video, not by whether it is true.** Ask in this order and take the first tag that fits:
@@ -78,24 +78,31 @@ This file is shared by the Agent skill and the `summarize` command, so every rou
 
 ## 主线与单元
 
-先找单元：讲者成块讲的一段，单看也能带走的东西，是一个结论和它的论证，或一个事件（演示、故事、案例、观测）和它说明了什么。单元不嵌套。再看几个单元的结论是否共同支撑一个更高的结论：有，它就是主线，写在最前，它下面用编号和单元名指向各单元，不重写；没有就不写主线。单元按视频第一次讲到它的先后排。每行只写编号、标签和一句简述，展开在「详细内容」里。
+先找单元：讲者成块讲的一段，单看也能带走的东西，是一个结论和它的论证，或一个事件（演示、故事、案例、观测）和它说明了什么。讲者一口气讲下来、前后相承的几步（演示、出了什么问题、怎么改好）是一个单元，不按步骤切开。每个单元自成一棵树，只写它自身：不连到别的单元，也不连到主线；事件是单元的起点或其中一步，不当作它并不证明的结论的支撑。单元不嵌套。再看几个单元是否共同服务一个更高的结论：有，它就是主线，写在最前；各单元为主线贡献的东西写在主线里，不写在单元里；没有就不写主线。单元按视频第一次讲到它的先后排。每行只写编号、标签和一句简述，展开在「详细内容」里。
 
 ### 主线：<主要结论的简述>
 
-- **P36** `观点` 主要结论的简述
-  - ← **P31** `观点` 简述（单元：<单元名>）
-  - ← **P26** `推断` 简述（单元：<另一个单元名>）
-  - ← **P35** `引用` 简述
-  - ← **P37** `补全` 简述
+- **P50** `观点` 主要结论的简述
+  - ← **P53** `观点` 简述（来自单元：<单元名>；视频明说 `01:36:50`）
+  - ← **P41** `推断` 简述（来自单元：<另一个单元名>；总结者归纳）
+    - ← **P40** `事实` 简述
+  - ← **P45** `引用` 简述
+  - ← **P46** `补全` 简述
+
+### <单元名> `01:09:28`–`01:24:16`
+
+- **P39** `事实` 起点事件：做了什么、发生了什么
+  - **P40** `事实` 下一步：出了什么问题
+  - **P42** `事实` 再下一步：怎么改好
+    - **P43** `观点` ← P42 这个单元自身得出的道理
+  - 拓展：视频没讲、看懂这一点需要的背景或原理
 
 ### <单元名> `00:30:10`–`00:41:20`
 
-- **P12** `观点` 这个单元的结论（是事件时：`事实` 做了什么、发生了什么）
+- **P12** `观点` 这个单元的结论
   - ← **P10** `事实` 简述
     - ← **P9** `引用` 简述
   - ← **P11** `推断` 简述
-  - → 支撑 **P36**（主线）`01:36:50`：视频在哪里、用什么话把它接上
-  - 拓展：视频没讲、看懂这一点需要的背景或原理
 
 ### `拓展` <单元名>
 
