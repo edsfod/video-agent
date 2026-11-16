@@ -4,6 +4,11 @@ current one unless asked, and nothing is lost when it does (user request, 2026-1
 The current text stays at its usual name, which every link and route reads. Each other version is a file beside it,
 `总结 (2026-10-28 15-30-12).md`, in the same folder so its relative links to frames still work. `<name>.versions.json`
 records when each text was written, by what route and with what note, for the current one and the others.
+
+Each text also records where it came from (user decision, 2026-11-16): written afresh (`based_on` null), or written from
+an earlier version (`based_on` that version's id), which an import finds by the share of lines the two have word for
+word (`closest`). The ids stay with a text when it is renamed (made current, or current no longer), so the versions
+form a forest. Texts saved before that day have no record either way.
 """
 
 import json
@@ -16,6 +21,13 @@ from . import contract, files
 
 class VersionError(RuntimeError):
   pass
+
+
+UNKNOWN = object()  # how a text came about is not known (texts saved before 2026-11-16)
+# Two summaries of one video written apart share no line word for word; one written from another shares many (the first
+# NJU lecture, 2026-11-16: 0% between four versions written apart, 41% for one an Agent wrote after reading another).
+SHARED = 0.2
+LINE = 20  # shorter lines (headings, labels) are left out of the comparison
 
 
 def _index_path(target):
@@ -49,11 +61,26 @@ def _version_name(target, created):
   return name
 
 
-def _meta(source, note, pictures=None):
+def _meta(source, note, pictures=None, based_on=UNKNOWN):
   meta = {'created': datetime.now().isoformat(timespec='seconds'), 'source': source or '', 'note': note or ''}
   if pictures is not None:
     meta['pictures'] = pictures  # the set of pictures it was written with (pictures.py)
+  if based_on is not UNKNOWN:
+    meta['based_on'] = based_on
   return meta
+
+
+def _id(meta):
+  """A text's id: given when it was written; for texts written before ids, the time it was written."""
+  return meta.get('id') or meta['created']
+
+
+def _give_id(data, meta):
+  taken = {_id(other) for other in [data['current'], *data['versions']] if other}
+  meta['id'], number = meta['created'], 2
+  while meta['id'] in taken:
+    meta['id'] = f'{meta["created"]} {number}'
+    number += 1
 
 
 def _keep_current(target, data):
@@ -65,13 +92,16 @@ def _keep_current(target, data):
   return kept
 
 
-def save(target, text, *, source='', note='', make_current=False, pictures=None):
+def save(target, text, *, source='', note='', make_current=False, pictures=None, based_on=UNKNOWN, _same=None):
   """Writes a new text. The first one, or one asked to be current, becomes the current text (the one it replaces is
   kept as a version); otherwise it is kept as a version beside the current one. `pictures` names the set of pictures
-  it was written with. Returns (path written, is current)."""
+  it was written with, `based_on` the id of the version it was written from (None: written afresh). Returns (path
+  written, is current)."""
   target = Path(target)
   data = _load(target)
-  meta = _meta(source, note, pictures)
+  meta = _meta(source, note, pictures, based_on)
+  _give_id(data, meta)
+  meta |= _same or {}
   if target.is_file() and not make_current:
     path = _version_name(target, meta['created'])
     files.write_text(path, text)
@@ -86,22 +116,55 @@ def save(target, text, *, source='', note='', make_current=False, pictures=None)
   return target, True
 
 
-def overwrite(target, name, text, *, source='', note='', make_current=False, pictures=None):
+def overwrite(target, name, text, *, source='', note='', make_current=False, pictures=None, based_on=UNKNOWN):
   """Writes a new text over an earlier one, the current text (`name` the target's own name) or a version, keeping
   neither: a chat AI's later round over the round before (user request, 2026-10-30: the rounds of one summary
   overwrite each other, whether or not they become current). A version written over takes the new time in its name;
-  with `make_current` it becomes the current text. Returns (path written, is current)."""
+  with `make_current` it becomes the current text. It stays the same text in the record: its id, and where it came
+  from unless a source is found now. Returns (path written, is current)."""
   target = Path(target)
   data = _load(target)
+  old = data['current'] if name == target.name else _find(target, data, name)
+  same = {'id': _id(old)}
+  if based_on in (None, UNKNOWN) and 'based_on' in old:
+    same['based_on'] = old['based_on']
   if name == target.name:
     files.write_text(target, text)
-    data['current'] = _meta(source, note, pictures)
+    data['current'] = _meta(source, note, pictures, based_on) | same
     _save(target, data)
     return target, True
-  data['versions'].remove(_find(target, data, name))
+  data['versions'].remove(old)
   target.with_name(name).unlink(missing_ok=True)
   _save(target, data)
-  return save(target, text, source=source, note=note, make_current=make_current, pictures=pictures)
+  return save(
+    target, text, source=source, note=note, make_current=make_current, pictures=pictures, based_on=based_on, _same=same
+  )
+
+
+def closest(target, text, *, ignore=(), skip=None):
+  """The version a text was most likely written from: the one with which it shares the largest part of its lines word
+  for word, if that part is at least SHARED, as (id, file, share); else None. `ignore`: lines every text has (the
+  template's), `skip`: the file the text is about to write over."""
+  target = Path(target)
+  data = _load(target)
+  common = {line.strip() for line in ignore}
+
+  def lines(value):
+    return {line.strip() for line in value.splitlines() if len(line.strip()) >= LINE and line.strip() not in common}
+
+  mine = lines(text)
+  if not mine:
+    return None
+  found = None
+  texts = [(target.name, data['current'])] if target.is_file() and data['current'] else []
+  for file, meta in texts + [(version['file'], version) for version in data['versions']]:
+    path = target.with_name(file)
+    if file == skip or not path.is_file():
+      continue
+    share = len(mine & lines(path.read_text(encoding='utf-8'))) / len(mine)
+    if share >= SHARED and (found is None or share > found[2]):
+      found = (_id(meta), file, share)
+  return found
 
 
 def keep(target, *, source=''):
@@ -178,7 +241,7 @@ def use(target, name):
   files.write_text(target, text)
   target.with_name(name).unlink()
   data['versions'].remove(chosen)
-  data['current'] = {key: chosen[key] for key in ('created', 'source', 'note', 'pictures') if key in chosen}
+  data['current'] = {key: value for key, value in chosen.items() if key != 'file'}
   _save(target, data)
   return kept.name if kept else None
 
@@ -220,6 +283,9 @@ def listing(target) -> contract.Versions:
       'note': meta['note'],
       'path': str(path),
       'pictures': meta.get('pictures'),
+      'id': _id(meta),
+      'based_on': meta.get('based_on'),
+      'origin': 'revised' if meta.get('based_on') else 'fresh' if 'based_on' in meta else 'unknown',
     }
 
   current = entry(target.name, data['current']) if target.is_file() and data['current'] else None

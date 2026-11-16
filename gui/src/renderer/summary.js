@@ -190,15 +190,21 @@ export async function renderSummary(video) {
   }
 }
 
-const versionLabel = (entry) => [when(entry.created), entry.source, entry.note].filter(Boolean).join(' · ');
+// Where a text came from (versions.py): written afresh, or from another version, named by its time.
+const versionLabel = (entry, list) => {
+  const all = [list.current, ...list.versions].filter((other) => !!other);
+  const parent = all.find((other) => other.id === entry.based_on);
+  const origin = { fresh: '从头写', revised: `改自 ${parent ? when(parent.created) : '一个已删除的版本'}`, unknown: '' }[entry.origin];
+  return [when(entry.created), entry.source, entry.note, origin].filter(Boolean).join(' · ');
+};
 
 function renderVersions(list) {
   state.versionList = list;
   const others = list.versions;
   $('summary-versions').hidden = !others.length && !list.current?.note;
   $('summary-version-pick').replaceChildren(
-    element('option', { value: '', textContent: `当前：${list.current ? versionLabel(list.current) : ''}` }),
-    ...others.map((entry) => element('option', { value: entry.file, textContent: versionLabel(entry) })),
+    element('option', { value: '', textContent: `当前：${list.current ? versionLabel(list.current, list) : ''}` }),
+    ...others.map((entry) => element('option', { value: entry.file, textContent: versionLabel(entry, list) })),
   );
   $('summary-version-pick').value = state.version?.file || '';
   $('summary-version-use').disabled = $('summary-version-delete').disabled = !state.version;

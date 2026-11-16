@@ -152,6 +152,9 @@ def import_summary(
       later = before.get('again') or picture_review.load(asset).get('requests')
     earlier = summary_review.own_draft(asset, before, name) if later else None
     draft = earlier.read_text(encoding='utf-8') if earlier else None  # to see what changed
+    written['based_on'] = _based_on(
+      asset / SUMMARY_NAME, text, template, line, before['draft'] if draft is not None else None, status
+    )
     if draft is not None:
       target, _ = versions.overwrite(asset / SUMMARY_NAME, before['draft'], text, **written)
     else:
@@ -211,7 +214,9 @@ def import_summary(
   return target, pairs
 
 
-def import_collection(workspace, name, text, *, guide=False, overwrite=False, source='', note=''):
+def import_collection(
+  workspace, name, text, *, guide=False, overwrite=False, source='', note='', status=lambda message: None
+):
   """Saves a collection overview or study guide written elsewhere, as import_summary does for one video."""
   collection.load(workspace, name)
   target = collection.text_path(workspace, name, guide)
@@ -219,8 +224,20 @@ def import_collection(workspace, name, text, *, guide=False, overwrite=False, so
   if len(text.strip()) < 40:
     raise SummaryError('The text to import is empty or too short')
   with collection.lock(workspace, name, 'import into the collection'):
-    path, _ = versions.save(target, text, source=source or '导入', note=note, make_current=overwrite)
+    based_on = _based_on(target, text, None, None, None, status)
+    path, _ = versions.save(target, text, source=source or '导入', note=note, make_current=overwrite, based_on=based_on)
   return path
+
+
+def _based_on(target, text, template, line, skip, status):
+  """The id of the version a text was written from, said when there is one; None when it was written afresh
+  (versions.closest; user decision, 2026-11-16: the versions record which texts were written afresh and which from
+  another). Lines of the template and the 视频 line, which every text has, do not count."""
+  found = versions.closest(target, text, ignore=[*templates.text(template).splitlines(), line or ''], skip=skip)
+  if not found:
+    return None
+  status(f'这一稿有 {found[2]:.0%} 的内容行和「{found[1]}」一字不差，记为在那一版上改的')
+  return found[0]
 
 
 def draft_path(workspace, video=None, *, collection=None, guide=False):

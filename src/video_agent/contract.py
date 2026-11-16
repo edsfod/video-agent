@@ -222,6 +222,11 @@ class Version(TypedDict):
   note: str
   path: str
   pictures: str | None  # the set of pictures it was written with (`pictures --json`), None when not recorded
+  id: str  # stays with the text when it is renamed
+  based_on: str | None  # the id of the version it was written from
+  origin: Literal[
+    'fresh', 'revised', 'unknown'
+  ]  # written afresh, from another version, or not recorded (before 2026-11-16)
 
 
 class Versions(TypedDict):

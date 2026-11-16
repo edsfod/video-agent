@@ -89,7 +89,7 @@ def _summarize_locked(
   # An existing summary stays current unless the new one is asked to replace it; either way neither is lost.
   source = f'模型 API · {config["model"]}'
   path, _ = versions.save(
-    target, text, source=source, note=request, make_current=overwrite, pictures=pictures.current(asset)
+    target, text, source=source, note=request, make_current=overwrite, pictures=pictures.current(asset), based_on=None
   )
   return path
 

@@ -263,7 +263,7 @@ video-agent versions VIDEO [-o WORKSPACE] [--use FILE | --delete FILE | --note F
 video-agent versions --collection NAME [--guide] [...]
 ```
 
-A summary written again does not replace the current one unless asked (`--make-current`): the new text is kept as a version beside it, `总结 (<date time>).md`, with what wrote it and a note in `总结.versions.json`. With no option it lists the versions.
+A summary written again does not replace the current one unless asked (`--make-current`): the new text is kept as a version beside it, `总结 (<date time>).md`, with what wrote it and a note in `总结.versions.json`, and where it came from: written afresh (`从头写`), or from an earlier version (`改自 <file>`), which an import finds when at least a fifth of the new text's lines are word for word in that version, leaving out the template's lines; texts saved before 2026-11-16 show neither. The id of a text stays with it when it is renamed. With no option it lists the versions.
 
 - `--use FILE`: make this version current; the current text becomes a version.
 - `--delete FILE`: delete a version (never the current text).

@@ -92,5 +92,7 @@ def summarize_collection(
     text = clean(model_api.ask(config, key, rules, intro, [], None))
     if len(text.strip()) < 40:
       raise SummaryError('The model returned no usable text')
-    path, _ = versions.save(target, text, source=f'模型 API · {config["model"]}', note=request, make_current=overwrite)
+    path, _ = versions.save(
+      target, text, source=f'模型 API · {config["model"]}', note=request, make_current=overwrite, based_on=None
+    )
   return path

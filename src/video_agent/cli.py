@@ -751,9 +751,15 @@ def _versions(args):
     _emit(found, contract.Versions)
     return 0
   rows = ([found['current']] if found['current'] else []) + found['versions']
+  files_by_id = {row['id']: row['file'] for row in rows}
   for row in rows:
     mark = '*' if row is found['current'] else ' '
-    print(f'{mark} {row["created"]}  {row["file"]}  {row["source"]}  {row["note"]}'.rstrip())
+    origin = {
+      'fresh': '从头写',
+      'revised': f'改自 {files_by_id.get(row["based_on"] or "", "一个已删除的版本")}',
+      'unknown': '',
+    }[row['origin']]
+    print(f'{mark} {row["created"]}  {row["file"]}  {row["source"]}  {row["note"]}  {origin}'.rstrip())
   if not rows:
     print(f'{target.name} has no versions yet')
   return 0
@@ -1009,7 +1015,14 @@ def _import(args):
   text = source.decode('utf-8-sig')
   written = {'overwrite': args.overwrite, 'source': args.source, 'note': args.note}
   if args.collection:
-    target = import_collection(args.output, args.collection, text, guide=args.guide, **written)
+    target = import_collection(
+      args.output,
+      args.collection,
+      text,
+      guide=args.guide,
+      **written,
+      status=lambda message: print(message, file=sys.stderr),
+    )
   else:
     # A chat AI's answer, from a file or pasted, goes through rounds; an Agent's draft (--import alone) does not.
     rounds = draft is None

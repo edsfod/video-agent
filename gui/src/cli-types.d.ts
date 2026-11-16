@@ -197,6 +197,9 @@ export interface Version {
   note: string;
   path: string;
   pictures: string | null;
+  id: string;
+  based_on: string | null;
+  origin: 'fresh' | 'revised' | 'unknown';
 }
 
 /** `versions --json`: the current text and the others, newest first. */

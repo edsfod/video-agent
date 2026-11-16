@@ -171,12 +171,14 @@ function agentTask(task, name) {
   const text = (task.kind === 'collection'
     ? [
         `为合集「${task.collection}」写 ${file}，按 skill 里「A collection」的做法。`,
+        `不要读已有的 ${file} 和它的旧版本（${file.replace(/\.md$/, '')} (…).md），从各集的总结从头写；用户的要求里提到它们时除外。`,
         `工作区是 ${workspace}，合集文件夹是 ${folder}。先运行 video-agent collection show "${task.collection}" -o "${workspace}" 看各集的状态；还没有总结的视频先按 skill 写总结，几乎没有内容的视频用 collection skip 跳过并写明原因。不要上传音频。`,
         save(file, path.join(folder, file.replace(/\.md$/, '.draft.md')), `--collection "${task.collection}"${task.guide ? ' --guide' : ''}`),
       ]
     : [
         `总结这个视频：${video}`,
         `工作区是 ${workspace}，这个视频已经处理过，处理结果在 ${folder}。不要上传音频。`,
+        '不要读这个视频已有的总结（总结.md 和 总结 (…).md），从处理结果从头写；用户的要求里提到已有总结时除外。',
         save('总结.md', path.join(folder, '总结.draft.md'), `"${video}"`),
       ]
   ).concat(

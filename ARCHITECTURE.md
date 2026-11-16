@@ -45,7 +45,7 @@ Agents and shells           other agents follow it        commands
 | `summary_review.py` | A chat AI's rounds: the checks on each answer (template sections, long speech not covered, parts with nothing in 要点, propositions outside their part, times past the end, linked pictures without a word in the 复查), its 复查 section, links taken out that show nothing beyond the transcript, whether another round is needed, which draft a later round may write over, and where an unfinished run goes on. |
 | `collection_summary.py` | A collection's overview and study guide, from its videos' summaries. |
 | `templates.py`, `prompts/` | Summary templates: the built-in ones and the user's. |
-| `versions.py` | Earlier versions of a summary. |
+| `versions.py` | Earlier versions of a summary, and which version each was written from. |
 | `removal.py` | `delete`: a video's folders, its place in collections, and its file when this program downloaded it. |
 | `collection.py` | Collections, and following a list for new videos. |
 | `compress.py` | `compress`: AV1 re-encoding in place. |
