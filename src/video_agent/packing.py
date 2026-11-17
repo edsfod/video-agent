@@ -42,59 +42,40 @@ CORRECTIONS_SECTION = f"""## 字幕改正（网页 AI 写在总结最后）
 
 
 # After the long evidence, a chat AI has the rules far behind it; DeepSeek's web chat wrote a retelling with mixed-up
-# times and pictures from other points, though the rules said otherwise (user, 2026-10-28). The points it missed, once
-# more at the end; the rules themselves stay in the template.
-REMINDER = f"""写之前，再对一遍上面规则里的这几条：
+# times and pictures from other points, though the rules said otherwise (user, 2026-10-28). The template's own 自查
+# comes once more at the end, with what only a chat AI has to do, so no rule is written a second time (user,
+# 2026-11-17: one prompt that covers the old one, instead of patches restated in several places).
+def reminder(template_text):
+  checks = templates.checklist(template_text)
+  return '\n\n'.join(
+    part
+    for part in (
+      '写之前，再对一遍上面规则里的「自查」：' if checks else '写之前，再对一遍上面的规则。',
+      checks,
+      f"""另外：
 
-- 一个正文、两种视图：详细内容是正文，每样值得记下的东西只写一次，按出现顺序编号；要点是按时间看的视图，主线与单元是按逻辑看\
-的视图，都只用编号加一句简述指向正文，不另写内容。所以先写详细内容，再写要点，再写主线与单元，最后写概要和元信息，输出仍按模板\
-的顺序；同一个编号处处指同一个命题，关于它的拓展、核对和画面只在详细内容里写一次。
-- 每句话按它做什么归类：断言了什么、可真可假的（说法、数字、理由、事件、定义）写成命题；要求或告知的（要做什么、要求、禁止、\
-怎么考核、截止、有什么资源）不是命题，放进元信息的需留意，讲者为它讲了理由也一样，理由才写成命题。
-- 每个命题、每层关系都有一个来源并注明：讲者（命题附时间点；讲者自己接上的关系附讲者的时间和原话）；讲者引用的人（标「引用」，\
-引的话是那个人的，不是讲者的）；你自己（「补全」「拓展：」「核对：」「总结者归纳」、标「拓展」的单元）。你的东西不能写得像讲者说的。
-- 详细内容是总结的主体：值得记下的论点和理由、例子、演示、数字、定义、条件、步骤和结论都要写到；每一点写多少看它值多少，\
-不看视频在上面花了多久。没有价值的时间段（重复、闲聊、课间、调设备、和主题无关的话）直接略过，不用交代。写成笔记，不要按讲\
-话顺序逐段复述（「作者说……他还说……」），每一部分自己判断用几句话、列表、表格还是步骤。
-- 要点按视频的先后排，不分类，不能漏掉重要的东西：结论和视频展开的想法、讲者花了时间的演示或例子和它说明了什么、讲者强调\
-或反复回到的内容。写完逐段对一遍详细内容：每一段要么在要点里有一条，要么确实没有读者必须带走的东西。
-- 主线与单元是一片森林。关系只有几种：支撑（←，视频论证了，或你的补全）、反驳、事件的步骤和每一步说明了什么；事件只以它说明\
-了什么连到结论。单元是讲者围绕一点展开、单看也能带走的东西（一个结论和它的论证，或一个演示、故事、案例和它说明了什么），连同讲者\
-围绕这一点一口气讲下来的步骤和波折；每个单元自成一棵树，只写内部的关系，不连到别处。几个单元共同服务的结论是主线，写在最前，\
-下面写各单元为它贡献的命题和这层关系的来源（讲者接上或总结者归纳）。每个命题在森林里只占一处：主结论和把单元接到主线的话都归\
-主线，不管讲者在视频哪里说的。写出单元自身的道理，不要只剩它对主线的用处或只剩例子。
-- 拓展补的是读者缺的：读者没看过视频，未必知道视频当作已知的东西。逐点想一想视频默认观众知道什么（元信息的「预设」）、点到\
-为止没说透什么：背景、定义、原理、例子背后的一般道理、相关的已知结论或方法、已知的反驳；读者要看懂或用上这一点需要的，就在这一\
-点下面写一条「拓展：」。视频说了的是视频自己的命题，放在原处；放在哪一点下都成立的话对哪一点都没用。引用的出处凭你所知核对，\
-不对或拿不准用「核对：」说明；支撑弱于结论时也用「核对：」指出。
-- 详细内容的各段按视频的先后排，时间范围不交错；每个命题标的时间点就是视频讲到它的时候，放在时间范围包含它的那一段里。
-- 画面是材料，不是配图：表格、图表、文件和政策截图、公式、代码里的内容要读出来写进总结，尤其是讲者没念出来的数字和\
-条文。画面链接只放在它确实显示了这一点的地方，不按时间顺手配一张；链接文字写图上是什么，写成 `[<图表、截\
-图……>：<图上是什么>](frames/…)`，说不出图上有和这一点相关的内容就不链接；素材画面、空镜、讲者特写不链接。
-- 讲者的说法保留原来的分寸，「不建议」不写成「禁止」；你加的内容和讲者的话分开。
-- 写完对一遍画面：附上的图里和内容无关的（素材、空镜、讲者），在「{picture_review.HEADING}」里写「不用」；再从字幕推测哪\
-里屏幕上应该有图而附图里没有（讲者在念一串数字、描述图表或曲线、逐条读文件或条文、说「看这里」「如图」），在那里写「补\
-截」和推测的时间段。
-- 照模板的各节写；字幕识别错的词写进最后的「{CORRECTIONS_HEADING}」，不写进「需确认」；「{picture_review.HEADING}」一定要写，没有要调整的就写「无」；整篇放进一个 ````markdown 代码块。"""
+- 照模板的各节写；字幕识别错的词写进最后的「{CORRECTIONS_HEADING}」，不写进「需确认」。
+- 写完对一遍画面，结果写进「{picture_review.HEADING}」：附上的图里用不上的（素材、空镜、讲者）写「不用」；从字幕推测屏幕上\
+应该有图而附图里没有的（讲者在念一串数字、描述图表或曲线、逐条读文件或条文、说「看这里」「如图」），写「补截」和推测的时\
+间段。这一节一定要写，没有要调整的就写「无」。
+- 整篇放进一个 ````markdown 代码块。""",
+    )
+    if part
+  )
 
-# From the second round on (summary_review.py): the chat AI goes through the transcript again against its draft and
-# says what it added, corrected and took out. What goes in is what is worth noting, and 要点 misses nothing important
+
+# From the second round on (summary_review.py): the chat AI goes through the transcript again against its draft, then
+# through the template's 自查, and says what it added, corrected and took out. What goes in is what is worth noting
 # (user decision, 2026-11-16, replacing "every point said" of 2026-10-30, which made summaries long-winded).
-REVIEW_SECTION = f"""请对照前面的字幕复查上一稿，再输出改好的整篇：
+def review_section(template_text):
+  checks = '按规则里的「自查」逐条对一遍（附在最后）' if templates.checklist(template_text) else '按规则逐条对一遍'
+  return f"""请对照前面的字幕复查上一稿，再输出改好的整篇：
 
-- 逐段对照字幕：值得记下的论点和理由、例子、演示、数字、定义、条件、步骤和结论，漏了就补上；没有价值的（重复、口头禅、\
-闲聊、和主题无关的）不用写，上一稿写了的可以删去。补上和删去都看内容值不值得，不要为了改而改；这一稿已经合适，就什么都\
-不改，复查写「无」。
-- 对一遍「要点」：按视频先后排，结论和视频展开的想法、讲者花了时间的演示或例子、讲者强调的内容，漏了就补进去。对一遍「主线\
-与单元」：单元是不是讲者围绕一点展开的、自成一棵树、不连到别处，有没有只剩它对主线的用处或只剩例子；主结论和把单元接到主线的话\
-是不是都在主线里，注明了讲者接上（时间和讲者自己的原话）还是总结者归纳。
-- 逐点对一遍读者缺什么：视频默认观众知道、点到为止没说透、而读者要看懂或用上需要的，用「拓展：」补上；「拓展：」里写成了\
-讲者说过的话的，改成命题放回原处。要求或告知的内容（要做什么、禁止什么、怎么考核）放进需留意，不当命题。引用的出处凭你所知核对，\
-写在「核对：」里。
-- 核对每个时间点、命题的标签、链接的画面和它旁边写的内容，有错就改。
+- 逐段对照字幕：读者会记下的东西漏了就补上，不值得记的删去。补和删都看内容值不值得，不要为了改而改；这一稿已经合适，就什么\
+都不改，复查写「无」。
+- {checks}，再核对每个时间点、命题的标签、链接的画面和它旁边写的内容，有错就改。
 - 每张链接的图，在「{summary_review.HEADING}」里写一行「画面」：图上有、而字幕里没有的内容（表格里的数字、条文原文、图表\
 的走势……）。图上的字就是讲者那时说的话（标题卡、字幕），或者只是讲者、素材、空镜，就写「无」，程序会去掉这个链接。
-- 字幕识别错的词写进「{CORRECTIONS_HEADING}」，不写进「需确认」。
 - 最后写「{summary_review.HEADING}」一节，每行一条，只写这一稿比上一稿补上、改正、删去了什么（前几轮写过的不要再列）；模板\
 里有意删掉的节、详细内容里确实没有东西进要点的段落也写在这里，说明原因。什么都没有改，就写「无」。导入时程序会把这一节去掉。
 
@@ -108,6 +89,7 @@ REVIEW_SECTION = f"""请对照前面的字幕复查上一稿，再输出改好�
 - 要点不收：<段落标题>（<为什么没有读者必须带走的东西>）
 - 画面：<链接里的 frames/… 路径> <图上有、字幕里没有的内容；没有就写「无」>
 ```"""
+
 
 # A chat AI cannot look at the video (user request, 2026-10-29: delete the frames that are no use, add the ones that
 # are missing, over several rounds as an Agent would): it says which pictures it does not need and where one is missing.
@@ -253,6 +235,7 @@ def material(video, workspace, *, request='', max_images=40, work_dir=None, max_
         f'如果一次收不了这么多图片，就看 {SHEET_FOLDER}/ 里的 {len(sheets)} 张总图：每张拼了 4 页屏幕页，从左到右、'
         '从上到下，对应下表。链接时仍写原来的屏幕页路径。' + SHEET_NOTE + '\n\n' + '\n'.join(lines)
       )
+  rules = templates.text(template)
   text = '\n\n'.join(
     part
     for part in (
@@ -260,13 +243,13 @@ def material(video, workspace, *, request='', max_images=40, work_dir=None, max_
       f'我的要求：{request}' if request else '',
       *notes,
       f'「视频」那一行的开头照抄：{video_line(video, media.duration(info))}',
-      templates.text(template),
+      rules,
       CORRECTIONS_SECTION,
       PICTURES_SECTION if work_dir is not None else '',
       '---',
       (asset / 'summary-context.md').read_text(encoding='utf-8'),
       '---',
-      REMINDER,
+      reminder(rules),
     )
     if part
   )
@@ -283,6 +266,7 @@ def follow_up(video, workspace, *, work_dir=None, max_files=None, new_chat=False
   the whole of `material` comes first, with the current set of pictures, and the candidates take at most half the
   files."""
   video, _, asset, _ = processed(video, workspace)
+  rules = templates.text(template)
   state = picture_review.load(asset)
   review = summary_review.load(asset)
   name = review.get('draft') or state.get('draft')
@@ -341,14 +325,14 @@ def follow_up(video, workspace, *, work_dir=None, max_files=None, new_chat=False
     part
     for part in (
       opening,
-      REVIEW_SECTION,
+      review_section(rules),
       found if problems else '',
       OUTPUT_FENCE,
       '\n'.join(lines),
       '上一稿（导入后的样子，字幕改正已经照办）：',
       draft.read_text(encoding='utf-8').strip(),
       '---',
-      REMINDER,
+      reminder(rules),
     )
     if part
   )

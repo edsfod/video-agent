@@ -402,7 +402,7 @@ devTest('summary through DeepSeek\'s web chat, in rounds until it asks for no mo
   assert.equal(sent.length, 4, 'sent again after it hung and after the busy notice; a second round for the pictures, then none');
   assert.equal(sent[1].text, sent[0].text, 'the same message again');
   assert.equal(sent[2].text, sent[0].text, 'the same message again');
-  assert.match(sent[2].text, /# Writing a video summary/);
+  assert.match(sent[2].text, /# 总结的规则和模板/);
   assert.deepEqual(sent[2].toggles, ['DeepThink', 'Search'], 'DeepThink and Search on');
   assert.ok(sent[2].files.length > 0 && sent[2].files.every((name) => name.endsWith('.jpg')));
   const attached = await app.evaluate(({ BrowserWindow }) =>
@@ -455,7 +455,7 @@ devTest('copy material puts the rules and transcript on the clipboard', async ()
   await page.click('#run-summary');
   await page.waitForFunction(() => document.querySelector('#summary-state').textContent.includes('已复制'));
   const copied = await app.evaluate(({ clipboard }) => clipboard.readText());
-  assert.match(copied, /# Writing a video summary/);
+  assert.match(copied, /# 总结的规则和模板/);
   assert.match(copied, /我们看看这张图表/);
 });
 
@@ -816,7 +816,7 @@ devTest('a long conversation goes on in a new one, with what the next round need
   const [first, second] = deepseekApi.messages.slice(before);
   assert.equal(second.parent_message_id, null, 'not in the conversation before');
   assert.match(second.prompt, /换了一个新对话/);
-  assert.match(second.prompt, /# Writing a video summary/, 'the rules');
+  assert.match(second.prompt, /# 总结的规则和模板/, 'the rules');
   assert.match(second.prompt, /大家好，今天讲测试视频/, 'the transcript');
   assert.match(second.prompt, /第一轮写的测试总结/, 'the draft');
   assert.ok(second.ref_file_ids.length > 0 && second.ref_file_ids.length <= first.ref_file_ids.length + 4, 'the pictures');

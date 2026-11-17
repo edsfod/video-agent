@@ -126,6 +126,19 @@ def text(name=None):
   return _body(path) if path.is_file() else built_in(name)
 
 
+# The list under a heading that names 自查, up to the next heading.
+CHECKS = re.compile(r'^#{2,4} [^\n]*自查[^\n]*\n(.*?)(?=^#{1,4} |\Z)', re.MULTILINE | re.DOTALL)
+ITEM = re.compile(r'^\s*(?:\d+\.|[-*]) ', re.MULTILINE)
+
+
+def checklist(template_text):
+  """A template's own checks before finishing (the list in its 自查 section), which a chat AI's prompt repeats at its
+  end and a 复查 goes through, so the rules are written once; '' for a template without one."""
+  match = CHECKS.search(template_text)
+  item = ITEM.search(match[1]) if match else None
+  return match[1][item.start() :].strip() if item else ''
+
+
 def info(name=None) -> contract.Template:
   """Where a template is, whether it is built in, whether the user changed it, and whether the built-in one changed
   since it was copied. For an outdated copy, the current built-in is written to `default` for comparing."""

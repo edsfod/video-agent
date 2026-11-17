@@ -271,9 +271,9 @@ def test_pack_zips_the_prompt_with_frames_at_their_folder_paths(processed, capsy
   assert '左下角印着编号和时间' in prompt, 'each picture carries its number'
   assert '我的要求：写短一点' in prompt
   assert '「视频」那一行的开头照抄：视频：sample clip [test] · [打开视频]' in prompt
-  assert '我们看看这张图表' in prompt and '# Writing a video summary' in prompt
+  assert '我们看看这张图表' in prompt and '# 总结的规则和模板' in prompt
   # The 字幕改正 section comes after the template with its form, like the template's own sections (user, 2026-10-28).
-  assert prompt.index('# Writing a video summary') < prompt.index('## 字幕改正\n\n- 错的写法 → 正确写法')
+  assert prompt.index('# 总结的规则和模板') < prompt.index('## 字幕改正\n\n- 错的写法 → 正确写法')
   # The points a chat AI missed come once more after the evidence, and the transcript marks the page on screen.
   assert prompt.rstrip().endswith('整篇放进一个 ````markdown 代码块。') and re.search(
     r'▶ (screen page|frame) from 00:00:0\d: frames/', prompt
@@ -390,6 +390,18 @@ def test_the_users_copy_of_a_template_is_used_and_knows_when_the_built_in_one_ch
     templates.built_in = original
   assert templates.reset()['customized'] is False
   assert template() == templates.built_in(templates.STANDARD)
+
+
+def test_the_checks_are_written_once_in_the_template_and_repeated_from_it():
+  from video_agent import packing, templates
+
+  rules = templates.built_in(templates.STANDARD)
+  checks = templates.checklist(rules)
+  assert checks.startswith('1. ') and '## ' not in checks and '每个单元自成一棵树' in checks
+  assert checks in packing.reminder(rules) and '「自查」' in packing.review_section(rules)
+  own = '# 我的模板\n\n## 视频总结\n\n```markdown\n## 概要\n```\n'
+  assert templates.checklist(own) == '' and '对一遍上面的规则' in packing.reminder(own)
+  assert '自查' not in packing.review_section(own)
 
 
 def test_several_templates_one_chosen_and_one_named_per_summary(processed, capsys):
@@ -625,9 +637,7 @@ def test_a_next_round_in_a_new_conversation_carries_what_it_needs(processed, cap
   # The rules, the transcript, the round's request and the draft, in the order the words 「前面的字幕」 need.
   assert prompt.startswith(packing.NEW_CHAT_NOTE)
   assert (
-    prompt.index('# Writing a video summary')
-    < prompt.index('请对照前面的字幕复查上一稿')
-    < prompt.index('上一稿特有的句子')
+    prompt.index('# 总结的规则和模板') < prompt.index('请对照前面的字幕复查上一稿') < prompt.index('上一稿特有的句子')
   )
   # The set in use alone, each picture sharp, and the candidates, none of them sharing a printed number.
   names = sorted(path.name for path in folder.iterdir() if path.name != packing.PROMPT_NAME)

@@ -306,7 +306,7 @@ def test_environment_key_is_the_fallback(isolated_settings, monkeypatch):
 def test_template_is_packaged(capsys):
   assert cli.main(['template']) == 0
   out = capsys.readouterr().out
-  assert out.startswith('# Writing a video summary') and '## 视频总结 `总结.md`' in out
+  assert out.startswith('# 总结的规则和模板') and '## 视频总结 `总结.md`' in out
 
 
 def test_process_json_and_show(sample_video, tmp_path, capsys):

@@ -1,47 +1,126 @@
-# Writing a video summary
+# 总结的规则和模板
 
-This file is shared by the Agent skill and the `summarize` command, so every route writes the same kind of summary. Print it with `video-agent template`.
+本文件由 Agent skill、`summarize` 命令和网页 AI 的材料共用，所以每条路线写出的是同一种总结。用 `video-agent template` 打印。
 
-## Rules
+## 一、总结给谁看
 
-The summary rests on three ideas, from which the sections and the rules below follow: one body seen in two views, each statement sorted by what it does, and every item and every link marked with its source.
+读者没看过视频。他读总结，是为了知道视频讲了什么、记住要照办的事、日后能用上视频的内容。所以：读者需要的写到他能看懂、能用上为止，不需要的不写；读者要能分清哪些是视频说的、哪些是视频引用别人的、哪些是总结者加的。下面的规则都从这一点来。
 
-- **One body, two views.** 详细内容 is the body: every item worth noting from the video, written once, numbered `P1`, `P2`… in order, in parts that follow the video's own structure. 要点 and 主线与单元 add no content of their own; they are two views of the body that name its items by number with a short description: 要点 the time view (what a reader must take away, in the video's order), 主线与单元 the logic view (how the items hang together). So work in that order: 详细内容 first, then 要点, then 主线与单元, then 概要 and 元信息, and write the finished summary in the template's order. A number names the same item wherever it appears, and anything said about an item (a 拓展, a 核对, a picture) is written once, with the item in 详细内容.
-- **Sort each statement by what it does.** A statement that asserts something, which can be true or false (a claim, a figure, a reason, an event, a definition), is a numbered proposition in 详细内容. A statement that directs or announces (what someone is to do, what is required, banned, assessed, due or available) is not a proposition: it goes into 元信息, under 需留意 when the viewer must act on or remember it. A statement keeps what it does when the speaker argues for it: the direction goes into 需留意, the reasons for it are propositions. Examples, demonstrations, tables and steps go under the proposition they serve; a procedure taught as such is written as numbered steps, and what is claimed about it (why it works, when to use it) as propositions.
-- **Every item and every link has one source, and says which.** The speaker: a proposition with its timestamp, from the transcript, a frame or a slide, with frames that support it linked; a link between items that the speaker makes, with the speaker's time and words. Someone the speaker quotes: a proposition tagged `引用` with its source and the speaker's stance; quoted words are that person's, not the speaker's. You: a premise you supply (`补全`), what you add (`拓展：`), your check of a source or of the support (`核对：`), a link you infer (`总结者归纳`), a unit of your own (marked `拓展`). Nothing of yours is written so that it could be taken for the speaker's, and nothing is put into the video, words or pictures, that it does not have. What is doubtful in the video is marked `需确认` with its timestamp instead of guessed.
-- **Keep what is worth noting, at the length it deserves.** 详细内容 is the body of the summary: go through the video part by part and keep what a viewer would want to note down, such as claims and the reasons given for them, figures, examples, demonstrations, steps, and what is shown on screen when it adds to what is said. The room a point gets follows what it is worth, not how long the video spends on it, nor a set size: a long stretch that says little gets a line, a short remark that carries an idea gets what it needs. Leave out repetition, filler, small talk and stretches with nothing worth noting (a break, setting up, talk off the subject) without accounting for them. Write notes a reader can scan, not the talk retold sentence by sentence in its order. Write in the language of the user's request, or of the video when there is no request.
-- **要点: the time view, complete.** 要点 is what a reader who reads nothing else must take away: every conclusion, every idea the video develops, every demonstration or worked example the video spends real time on together with what it shows, and everything the speaker stresses or comes back to. One line each, in the order the video says them, with its time and numbers, not grouped. Before finishing, go through 详细内容 part by part: a part with nothing in 要点 must hold nothing a reader needs to take away.
-- **主线与单元: the logic view, a forest.** The items are joined by relations: `←` for support (where the video argues, or a `补全` of yours), `反驳` for an attack, and the steps of an event with what each shows; an event relates to a conclusion only by what it shows. A unit is what the speaker develops around one point that a reader can take away on its own: an argument with its conclusion, or an event (a demonstration, a story, a case, an observation) with what it shows, together with everything the speaker develops in one go around that point, steps and setbacks included. Each unit is a tree of its own: its root is its conclusion or event, under it only the relations inside the unit, and no link leaves it. An item that only illustrates another point belongs under that point and is no unit. The main line is the conclusion that several units serve: written first, and under it the relations that carry each unit's contribution there, often from an item that is not the unit's root, each naming the unit and the link's source (`讲者接上` with the speaker's time and words, or `总结者归纳`). Every item has one place in the forest: the main conclusion, and every statement that links a unit to it, belong to the main line, wherever in the video they are said; an item needed in another place is named there by its number. When no conclusion is served by several units, there is no main line. The main line comes first, then the units in the order the video first comes to them. Write a unit's own idea as the video develops it, not only what it gives the main line nor only its example.
-- **拓展: what the reader lacks.** The reader has not seen the video and may not share what it takes for granted. For each point, ask what the video assumes its viewer knows (the 预设 in 元信息 names the main of it) or hints at without saying: background, a definition, how something works, the principle an example is a case of, a known result, method or counter-argument it connects to. Where a reader needs that to understand or use the point, add it under the point as a `拓展：` line. What makes a 拓展 is this point's need and the video's silence: what the video says is its own item, and a line that would fit any point serves none. One that grows into an idea of its own is a unit marked `拓展`.
-- **Tag each proposition by its standing in the video, not by whether it is true.** Ask in this order and take the first tag that fits:
-  1. `引用`: the speaker attributes it to someone else (a paper, a book, a person, an institution, "有研究表明"). Name the source as the video gives it, and the speaker's stance: 认同, 反对 or 只转述. Check, as far as you know, that the attribution holds: that the source exists and says this. When it does not, or you cannot tell, say so in a `核对：` line under it.
-  2. `观点`: it says what is good, right, important, advisable or likely, or how something should be understood, rather than what is the case: an evaluation, a recommendation, a norm, an interpretation or a prediction.
-  3. `推断`: it says what is the case, and the video derives it from other propositions; list them as `← P2, P5`.
-  4. `事实`: it says what is the case, without a derivation in the video: an observation, data, an event, how something works, a definition (written as `定义：<术语>指……`).
-  An `观点` the video argues for lists its premises too. A tag records how the speaker presents a claim; `事实` is not a verdict that the claim is true.
-- **Show the reasoning.** Where the video argues, write what supports or attacks what (`← P3`, `反驳 P4`). A premise a step needs but the video does not state is added as a proposition tagged `补全`: the weakest premise that makes the step work. Where the support is weaker than the conclusion (a general claim from a few examples, a correlation taken for a cause, a conclusion stronger than its premises), say so in a `核对：` line.
-- **Make each proposition exact.** Rewrite what is said as a well-defined proposition: name the subject and what it is about; state the quantifier (all, most, some, in which cases, how many) and the conditions (if, only if, unless); replace words that depend on the moment ("这个", "这里", "我们", "现在", "去年") with what they refer to; give the time and scope it holds for. Keep the speaker's strength: "一般" does not become "总是", nor "可能" become "会".
-  - Take the reading that someone who knows the subject would take in context, and among such readings the one the speaker most likely meant. Do not change what was said to make it true.
-  - When a statement has several such readings and they would make materially different propositions, list them as options that exclude each other and together cover every case, say which you take and why, and add it to 需确认 when the context does not decide. When it has no such reading (the transcript is garbled and no frame helps), give the nearest guess and add it to 需确认.
-  - Where words easily blur the structure (nested conditions, the order of quantifiers, a necessary against a sufficient condition, a definition against a claim about the thing defined), add a formal version (logic, sets or a formula) followed by one sentence in plain language. Elsewhere write naturally.
-- **The pictures are material, not illustrations.** Screen pages and frames show text, tables, charts, documents, formulas, code and objects that the speech refers to or leaves out. Read them and work what they add into the propositions: the figures in a table, what a chart shows and its key values, the wording of a document or a policy, a formula, the steps of a demonstration, above all what the speaker does not read out. Link a picture only where it shows the proposition beside it, not because it was on screen at that time: stock footage, a background, the speaker or a blank screen is not linked. The link text says what the picture shows, as `[<kind>：<what it shows>](frames/…)`; a picture whose content you cannot name in a few words that fit the point is not linked. There is no need to link every picture.
-- **Claims belong to the speaker.** Write figures, news and opinions as what the video says ("视频称……", "作者认为……"), not as established fact, and keep the speaker's hedges and strength: what the speaker advises against stays advised against, not forbidden. Apart from checking attributions (above) and the corrections you add, check claims against other sources at length only when the user asks, in a separate section.
-- **Clean the transcript of recurring mishearings; keep the original.** Speech recognition turns names and terms into homophones. Take the right form from the screen pages and frames (titles, slides, burned-in subtitles) or from context. A form that is wrong every time it occurs goes into the cleaned transcript (`video-agent fix`, which keeps `transcript.srt` as it was and writes `transcript.clean.*`, used from then on); a one-off mistake, or a form that is also a real word, is corrected only in the summary. When the right form is uncertain, mark it `需确认`.
-- **One current version.** Rewrite `总结.md` in place when asked for changes; do not append update sections or save copies.
+用用户要求的语言写；没有要求，就用视频的语言。
 
-## 总结模板
+## 二、总结由什么组成
 
-每个视频一篇 `<视频文件夹>/总结.md`，写在 `process` 为它建的文件夹里，和 `summary-context.md` 放在一起。几个相关视频（一个合集、一门课的几讲）另写一篇 `<工作区>/合集总结.md`。模板定下标题和顺序；每一点写多少看它值多少。
+### 条目
 
-写法：
+视频里值得记下的每句话，按它做什么分成两种：
+
+- **命题**：断言了什么、可真可假的：说法、数字、理由、事件、观测、定义。命题写进「详细内容」，编号 `P1`、`P2`……
+- **事项**：对观众的要求或告知：要他们做什么、要求什么、禁止什么、怎么考核、何时截止、有什么资源。事项不是命题，写进「元信息」的「需留意」。
+
+界线在对谁说：对这些观众说要他们怎样（「这门课不许手写代码」），是事项；泛泛地说事情应当怎样（「程序员应当让 Agent 写代码」），是命题。
+
+一句话归哪种，看它做什么，不看讲者怎样支持它：讲者为一项要求讲了理由，要求仍是事项，理由才是命题。例子、演示、表格和步骤放在它们服务的命题下面；当作方法来教的过程写成编号的步骤，关于它的说法（为什么有效、什么时候用）写成命题。
+
+### 来源
+
+每个条目、每层关系都只有一个来源，并且写明：
+
+| 来源 | 怎么写 |
+| --- | --- |
+| 讲者 | 命题附时间点，取自字幕、画面或屏幕页，有画面显示它就链接；讲者自己说出的关系，附讲者说它的时间和原话 |
+| 讲者引用的人（论文、书、某人、机构、「有研究表明」） | 命题标 `引用`，写明视频给的出处和讲者的态度（认同、反对、只转述）；引的话是那个人的，不是讲者的 |
+| 总结者（你） | 补出的前提标 `补全`，读者缺的东西写 `拓展：`，对出处或支撑的核查写 `核对：`，你推出的关系和主结论标 `总结者归纳`，你自己展开的单元标 `拓展` |
+
+你的东西不能写得让人当成讲者的；视频里没有的话和画面，不能写成视频里有。讲者的说法写成视频的说法（「视频称」「作者认为」），不写成定论，并保留讲者的分寸：「一般」不写成「总是」，「可能」不写成「会」，「不建议」不写成「禁止」。视频里拿不准的地方（听不清、前后矛盾、专有名词拿不准、歧义定不下来）标 `需确认` 和时间点，不猜。
+
+### 标签
+
+命题的标签记录讲者怎样呈现它，不是判断它真不真：`事实` 不等于确认为真。按顺序问，取第一个合适的：
+
+1. `引用`：讲者把它归给别人。凭你所知核对出处是否存在、是否这样说；不对或拿不准，在它下面写 `核对：`。
+2. `观点`：说的是什么好、什么对、什么重要、一般应当怎样做、可能怎样、该怎样理解，而不是事情是怎样：评价、建议、规范、解读、预测。对这些观众的要求是事项，不是观点。
+3. `推断`：说事情是怎样，视频从别的命题推出它；写出前提，如 `← P2, P5`。
+4. `事实`：说事情是怎样，视频没有推导：观测、数据、事件、事物怎样运作、定义（写成 `定义：<术语>指……`）。
+
+视频论证了的 `观点` 也写出前提。
+
+### 关系
+
+条目之间只有三种关系：
+
+- **支撑** `←`：视频论证了，或是你的 `补全`。一步推理需要、视频却没说的前提，补成命题标 `补全`，取能让这一步成立的最弱的那个。
+- **反驳** `反驳 P4`。
+- **事件的步骤**：一个事件（演示、故事、案例、观测）的各步，和每步说明了什么。事件只通过它说明了什么连到结论。
+
+支撑弱于结论时（从几个例子推出全称、把相关当成因果、结论比前提强），写 `核对：` 指出。
+
+### 拓展和核对
+
+- `拓展：` 不是把视频讲过的话换个地方再说一遍，也不是和这一点无关的常识，而是视频没讲、读者要看懂或用上这一点所需要的东西。逐点想一想：视频默认观众知道什么（其中主要的写进「预设」），点到为止没说透什么：背景、定义、原理、例子背后的一般道理、相关的已知结论、方法或反驳。视频说了的，是视频自己的命题；放在哪一点下都成立的话，对哪一点都没用。长成一个独立想法的，写成标 `拓展` 的单元。
+- `核对：` 写出处对不对、支撑够不够。除此以外，只有用户要求时，才对照别的来源核查视频的说法，写在单独一节。
+
+## 三、各节：一个正文，两种视图
+
+「详细内容」是正文：每个条目只在这里写一次，连同它的拓展、核对和画面。「要点」和「主线与单元」不另写内容，只用编号加一句简述指向正文：要点是按时间看的视图，主线与单元是按逻辑看的视图。同一个编号处处指同一个命题。
+
+- **详细内容**：逐部分写读者会记下的东西：论点和理由、数字、例子、演示、步骤、定义、条件、结论，以及画面上补充了讲话的内容。
+  - 每一点写多少看它值多少，不看视频在上面花了多久，也没有固定篇幅：一大段没说什么的给一行，一句话带出一个想法的给它需要的篇幅。重复、口头禅、闲聊、课间、调设备、跑题的话直接略过，不用交代。
+  - 写成能扫读的笔记，不按讲话顺序逐句复述；每部分自己决定用句子、列表、表格还是步骤。
+  - 按视频自己的结构分段，每段一个小标题和时间范围；各段按视频先后排，时间范围不交错；较长的单元可以单独成段。命题按写下的先后编号，它的时间点是视频讲到它的时候，放在时间范围包含它的那一段里。由你归纳的主结论写在最后的「总结者归纳」一段（见主线与单元）。
+- **要点**：只读这一节的读者也不能漏掉的：每个结论和视频展开的想法、讲者花了时间的演示或例子和它说明了什么、讲者强调或反复回到的内容。按视频的先后排，不分类，每条一句，附时间点和编号。写完逐段对一遍详细内容：没有一条进要点的段，必须确实没有读者要带走的东西。
+- **主线与单元**：条目按关系组成一片森林。每个条目只在一处展开，即在它下面列出它的下级；别处要用，只写编号和简述，不带下级。森林只收和别的条目有关系的条目：既不支撑别的、也不被别的支撑的条目，只留在详细内容里，不为了放进单元而编出关系。每行只写编号、标签和一句简述。
+  - 单元是讲者围绕一点展开、单看也能带走的东西：一个结论和它的论证，或一个事件和它说明了什么，连同讲者围绕这一点一口气讲下来的步骤和波折。单元自成一棵树：根是它的结论或事件，下面只写单元内部的关系，不连到别处。只用来说明另一点的条目放在那一点下面，不成单元。写出单元自身的道理，不要只剩它对主线的用处，也不要只剩例子。
+  - 主线是几个单元共同服务的结论，写在最前。它下面写各单元为它贡献的条目（常常不是单元的根），只写编号和简述，不带下级，下级在单元里；每条注明来自哪个单元、这层关系的来源。`讲者接上` 不是讲者说出这个条目的话，而是讲者把它和主结论连起来的话（如「所以前面那个例子说明……」），附这句话的时间和原话；讲者没有这样连过，就写 `总结者归纳`；主结论由你归纳时，讲者没说过它，也就没把什么接到它上面，每条都是 `总结者归纳`。不属于任何单元、直接支撑主结论的条目（引用、补全），在主线里展开。主结论和把单元接到主线的话都归主线，不管讲者在视频哪里说的。
+  - 主结论是讲者说的，就是详细内容里的那个命题；讲者没有直接说、由你归纳的，也写进详细内容最后的「总结者归纳」一段，标 `总结者归纳`，不附时间点，写出前提。没有几个单元共同服务的结论，就没有主线；视频不论证时（新闻、演示、按条讲授），单元就是各个话题。
+  - 主线在前，单元按视频第一次讲到它的先后排。
+- **元信息**：类型、讲者、主题和范围、预设；「需留意」列出所有事项，附时间点。
+- **概要**：两到四句话：视频讲什么，主要结论是什么（附编号），有哪些重要的单元。
+- **时间线**：每段一行：讲什么、为什么值得回看；画面上有关键信息的，写出来并链接。
+- **需确认**：所有标了 `需确认` 的地方。
+
+## 四、命题怎么写
+
+把说出的话改写成定义清楚的命题：
+
+- 写明主语和它关于什么；写出量词（全部、大多数、有些、在哪些情况下、多少）和条件（如果、只有、除非）；把依赖当时情境的词（「这个」「这里」「我们」「现在」「去年」）换成所指的东西；写明它在什么时间、什么范围内成立。
+- 取熟悉这个话题的人在上下文里会采用的读法，其中讲者最可能想说的那个；不为了让它成立而改动原话。
+- 一句话有几种这样的读法、得出的命题有实质差别时，把读法列成两两互斥、合起来穷尽的选项，说明取哪个、为什么；上下文定不了，就加进需确认。一种这样的读法都没有时（字幕乱了，画面也帮不上），写最接近的猜测，加进需确认。
+- 文字容易把结构弄混的地方（条件嵌套、量词的顺序、必要条件和充分条件、定义和关于被定义物的说法），加一个形式写法（逻辑、集合或公式），后面跟一句自然语言；其余地方自然地写。
+
+## 五、画面和字幕
+
+- 画面是材料，不是配图。屏幕页和画面上有讲话提到或没提到的文字、表格、图表、文件、公式、代码和实物：读出来写进命题，如表格里的数字、图表说明了什么和关键数值、文件或政策的原文、公式、演示的步骤，尤其是讲者没念出来的。
+- 画面确实显示了旁边的命题，才链接它；不按时间顺手配一张。素材画面、背景、讲者、空屏不链接。链接文字写图上是什么：`[<种类>：<图上是什么>](frames/…)`；说不出图上有和这一点相关的内容，就不链接。不必每张都链接。
+- 语音识别会把名字和术语识别成同音字。从屏幕页和画面（标题、幻灯片、内嵌字幕）或上下文找出正确写法。每次出现都错的写法，整理进字幕（`video-agent fix`：原来的 `transcript.srt` 保留，另写 `transcript.clean.*`，此后都用它）；只错一次的、错的写法本身也是正常词语的，只在总结里改。拿不准就标需确认。
+
+## 六、怎么做
+
+先写详细内容，边写边编号；再写要点，再写主线与单元；最后写概要和元信息。输出按模板的顺序。要改总结时改写整篇，不追加「更新」之类的一节，也不自己另存副本：旧版本由程序保留。
+
+### 自查
+
+写完逐条对一遍：
+
+1. 每个条目只在详细内容里写了一次，要点和主线与单元只写编号和简述；同一个编号处处指同一个命题。
+2. 对观众的要求和告知在需留意里，不是命题，也不是观点；讲者为它讲的理由才是命题。
+3. 每个命题、每层关系都注明了来源；你加的内容没有写得像讲者说的；讲者的分寸没有放大或缩小。
+4. 详细内容写到了读者会记下的东西，篇幅跟着价值走，没有逐句复述，没有价值的时间段直接略过；各段按先后排，每个命题的时间点落在所在的段里。
+5. 要点按先后排、不分类，逐段对过：没有一条进要点的段，确实没有读者要带走的东西。
+6. 每个单元自成一棵树，写出了它自身的道理，里面的每层关系都是视频里真有的；主线里来自单元的条目只写编号，不带下级；`讲者接上` 引的是讲者把这一点连到主结论的话，不是这一点本身，没有这样的话、或主结论是你归纳的，就是 `总结者归纳`；主结论在详细内容里有。
+7. 逐点问过读者缺什么，缺的写成了那一点下面的 `拓展：`；`拓展：` 里没有视频讲过的话；引用的出处核对过，支撑弱的地方写了 `核对：`。
+8. 画面里的内容读出来写进了命题；每个链接的画面确实显示了旁边的内容，链接文字写了图上是什么。
+
+## 七、格式
 
 - 只链接确实存在的文件。视频文件夹里的文件用相对路径，如 `[字幕](transcript.txt)`、`[画面](frames/extra/frame-00-01-10.jpg)`；源视频用绝对路径，斜杠用 `/`；路径里有空格或方括号时写成 `[名字](<路径>)`，名字里的方括号写成 `\[`、`\]`。源视频写成普通文字的视频名加一个 `[打开视频](<路径>)` 链接：视频名是文件名去掉扩展名，再把下载工具为文件名替换的 `⧸`、`⧹` 换回 `/`、`\`，方括号照原样写，不用转义。
-- 时间点统一写成 `HH:MM:SS`，放在反引号里。
-- 命题编号写成粗体 `**P3**`，标签放在反引号里：`事实`、`观点`、`推断`、`引用`，总结者补出的前提标 `补全`。
-- 总结者自己加的内容另起一行。`拓展：` 不是把视频讲过的话换个地方再说一遍，也不是和视频无关的常识，而是视频没讲、读者要看懂或用上它所需要的东西：背景、定义、原理、它是哪个已知概念或方法的一个例子、已知的反驳或更正。`核对：` 写出处对不对、支撑够不够。
-- 某一节确实没有内容就删掉这一节，「需确认」除外：没有就写 `无`。
+- 时间点写成 `HH:MM:SS`，放在反引号里。
+- 命题编号写成粗体 `**P3**`，标签放在反引号里。
+- 写在命题下面的 `拓展：`、`核对：`、`形式：`、`歧义：`、`例子：` 各占一行。
+- 某一节确实没有内容就删掉，「需确认」除外：没有就写 `无`。「需留意」：课堂录像写全六项，没有的写 `无`；其他视频只写有的项，都没有就删掉这一小节。
 
 ## 视频总结 `总结.md`
+
+每个视频一篇，写在 `process` 为它建的文件夹里，和 `summary-context.md` 放在一起。
 
 ```markdown
 # <视频标题>
@@ -57,8 +136,6 @@ The summary rests on three ideas, from which the sections and the rules below fo
 
 ### 需留意
 
-不分真假、但要照办或记住的内容，附时间点：
-
 - 点名、签到、小测：
 - 作业和截止时间：
 - 考核和评分标准：
@@ -66,40 +143,34 @@ The summary rests on three ideas, from which the sections and the rules below fo
 - 考试和复习提示：
 - 通知、链接和资源：
 
-课堂录像写全这六项，没有的写 `无`；其他视频只写有的项，都没有就删掉这一小节。
-
 ## 概要
 
-两到四句话：视频讲什么，主要结论是什么（附命题编号），有哪些重要的单元。
+<两到四句话>
 
 ## 要点
-
-读者只读这一节也不能漏掉的东西，按视频的先后排，不分类，每条一句，附时间点和命题编号：结论和视频展开的想法、讲者花了时间的演示或例子和它说明了什么、讲者强调或反复回到的内容。
 
 - `00:12:40` 一句话写清这一点（**P3**、**P7**）
 - `00:30:10` 演示或例子：做了什么，说明了什么（**P12**）
 
 ## 主线与单元
 
-先找单元：讲者围绕一点展开、单看也能带走的东西，是一个结论和它的论证，或一个事件（演示、故事、案例、观测）和它说明了什么，连同讲者围绕这一点一口气讲下来的步骤和波折。每个单元自成一棵树，下面只写单元内部的关系，不连到别处。再看有没有几个单元共同服务的结论：有，它就是主线，写在最前，下面写各单元为它贡献的命题和这层关系的来源；主结论和把单元接到主线的话都归主线，不管讲者在视频哪里说的；每个命题在这里只占一处，别处要用就写编号。单元按视频第一次讲到它的先后排。每行只写编号、标签和一句简述，展开在「详细内容」里。
-
 ### 主线：<主要结论的简述>
 
 - **P50** `观点` 主要结论的简述
-  - ← **P53** `观点` 简述（来自单元：<单元名>；讲者接上 `01:36:50`：「<讲者接上时说的话>」）
-  - ← **P41** `推断` 简述（来自单元：<另一个单元名>；总结者归纳）
-    - ← **P40** `事实` 简述
+  - ← **P53** `观点` 简述（来自单元：<单元名>；讲者接上 `01:36:50`：「<讲者把这一点连到主结论的原话>」）
+  - ← **P43** `观点` 简述（来自单元：<另一个单元名>；总结者归纳）
   - ← **P45** `引用` 简述
+    - ← **P44** `事实` 简述
   - ← **P46** `补全` 简述
 
-### <单元名> `01:09:28`–`01:24:16`
+### <单元名>
 
 - **P39** `事实` 起点事件：做了什么、发生了什么
   - **P40** `事实` 下一步：出了什么问题
   - **P42** `事实` 再下一步：怎么改好
     - **P43** `观点` ← P42 这个单元自身得出的道理
 
-### <单元名> `00:30:10`–`00:41:20`
+### <另一个单元名>
 
 - **P12** `观点` 这个单元的结论
   - ← **P10** `事实` 简述
@@ -110,8 +181,6 @@ The summary rests on three ideas, from which the sections and the rules below fo
 
 - 总结者拓展出的一个完整想法，和它为什么有助于理解视频
 
-视频不论证（新闻、演示、按条讲授）时，单元就是各个话题，列出主要命题和它们之间的关系，没有主线。
-
 ## 时间线
 
 | 时间 | 内容 | 出处 |
@@ -120,8 +189,6 @@ The summary rests on three ideas, from which the sections and the rules below fo
 | `00:01:10` | 展示的图表或画面上的关键信息 | [<图表、截图……>：<图上是什么>](frames/extra/frame-00-01-10.jpg) |
 
 ## 详细内容
-
-按视频自己的结构分段，每段一个小标题和时间范围，段里按命题写；一个单元较长时单独成段。数据、例子、步骤和表格放在它们支撑或说明的命题下面；需要背景、原理或一般道理才看得懂的地方，用「拓展：」展开。写到没看视频的人也能明白、能用上的程度。
 
 ### <段落标题> `00:12:30`–`00:25:10`
 
@@ -137,6 +204,10 @@ The summary rests on three ideas, from which the sections and the rules below fo
   - 拓展：这个做法背后的一般原理是……
 - 核对：P3 只从两个例子推出全称结论。
 
+### 总结者归纳
+
+- **P60** `总结者归纳` ← P43, P53 讲者没有直接说、由你归纳的主结论，这时主线的根就是它。（主结论是讲者说的，就没有这一段。）
+
 ## 需确认
 
 - `00:03:20` 字幕听不清、前后矛盾、专有名词拿不准或歧义定不下来的地方
@@ -144,14 +215,14 @@ The summary rests on three ideas, from which the sections and the rules below fo
 
 ## 合集总结 `合集总结.md`
 
-几个相关的视频（一门课、一个系列、一个播放列表）组成一个合集，合集总结写在合集文件夹里（`<工作区>/合集/<合集名>/合集总结.md`），链接各集的总结用相对路径 `../../<视频文件夹>/总结.md`。先有各集的总结，再写合集总结。
+几个相关的视频（一门课、一个系列、一个播放列表）组成一个合集。先有各集的总结，再写合集总结。它写在合集文件夹里（`<工作区>/合集/<合集名>/合集总结.md`），链接各集的总结用相对路径 `../../<视频文件夹>/总结.md`。每写完或改完一集的总结，就把它并进合集总结：需留意、一览里的那一行、主线里相关的主题。
 
 ```markdown
 # <合集名>
 
 ## 需留意
 
-- 各集提到的截止时间、要做的事、考核要求、通知和资源，按时间先后，附出处：[<视频名> `00:42:10`](../../<视频文件夹>/总结.md)
+- 各集提到的事项，按时间先后，附出处：[<视频名> `00:42:10`](../../<视频文件夹>/总结.md)
 
 ## 各集一览
 
@@ -161,7 +232,7 @@ The summary rests on three ideas, from which the sections and the rules below fo
 
 ## 主线
 
-按主题而不是按视频顺序串起各集：每个主题一段，写各集的主要结论怎样接续、补充或修正，指向讲它的视频总结、时间点和命题编号（如 第 3 集 P7）。各集的单元在后面几集被接上或用到的，也写在这里。
+<按主题串起各集，每个主题一段>
 
 ## 跳过的视频
 
@@ -172,11 +243,12 @@ The summary rests on three ideas, from which the sections and the rules below fo
 - 各集之间矛盾的说法，附各自的视频、时间点和命题编号
 ```
 
-「需留意」那一列：这一集的总结里有「需留意」的内容就打 ✅。没有跳过的视频就删掉那一节。每写完或改完一集的总结，就把它并进合集总结：需留意、一览里的那一行、主线里相关的主题。
+- 主线按主题而不是按视频顺序：每个主题一段，写各集的主要结论怎样接续、补充或修正，指向讲它的视频总结、时间点和命题编号（如 第 3 集 P7）。各集的单元在后面几集被接上或用到的，也写在这里。
+- 「需留意」那一列：这一集的总结里有「需留意」的内容就打 ✅。没有跳过的视频就删掉那一节。
 
 ## 学习提纲 `学习提纲.md`
 
-用户要复习、自学或准备考试时，在合集文件夹里写学习提纲。它根据各集的总结、字幕和画面写；视频以外的内容只以「拓展：」或「核对：」出现；范围按用户的要求，默认是整个合集。
+用户要复习、自学或准备考试时，在合集文件夹里写学习提纲。它根据各集的总结、字幕和画面写；视频以外的内容只以 `拓展：` 或 `核对：` 出现；范围按用户的要求，默认是整个合集。
 
 ```markdown
 # <合集名> 学习提纲
