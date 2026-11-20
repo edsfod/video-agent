@@ -21,7 +21,7 @@ if [ "$new" = no ]; then
 fi
 
 # 和 GitHub 一样按改动挑检查（.github/scripts/changed-jobs.sh）：只改文档什么都不跑。
-cli=false gui=false installer=false
+cli=false gui=false installer=false packaging=no
 while read -r local_ref local_sha remote_ref remote_sha; do
   case "$remote_ref" in refs/heads/*) ;; *) continue ;; esac   # 标签不另外检查
   [ "$local_sha" = "$zero" ] && continue                       # 删分支
@@ -29,7 +29,13 @@ while read -r local_ref local_sha remote_ref remote_sha; do
   picked=$(bash .github/scripts/changed-jobs.sh "$base" 2>/dev/null) || picked='cli=true gui=true installer=true'
   case "$picked" in *cli=true*) cli=true ;; esac
   case "$picked" in *gui=true*) gui=true ;; esac
-  case "$picked" in *installer=true*) installer=true ;; esac
+  case "$picked" in *installer=true*)
+    installer=true
+    if [ -n "$base" ] && git diff --name-only "$base" "$local_sha" | grep -q -E '^(packaging/|gui/package\.json|\.github/(workflows/test\.yml|actions/))'; then
+      packaging=yes
+    fi
+    ;;
+  esac
 done <<EOF_REFS
 $refs
 EOF_REFS
@@ -48,10 +54,7 @@ fi
 if [ -n "${cli_pid:-}" ] && ! wait "$cli_pid"; then tail -30 "$logs/cli.log" >&2; fail "命令行检查（ruff、pytest；日志在 $logs/cli.log）"; fi
 if [ -n "${gui_pid:-}" ] && ! wait "$gui_pid"; then grep -E "^✖|error TS|Error|expected|actual" "$logs/gui.log" | head -30 >&2; fail "GUI 测试（日志在 $logs/gui.log）"; fi
 [ -n "${cli_pid:-}${gui_pid:-}" ] && echo "pre-push：测试通过，用了 $(( $(date +%s) - start )) 秒" >&2
-packaging=no
-if [ "$installer" = true ] && git diff --name-only "$(git merge-base HEAD origin/main)" HEAD | grep -q -E '^(packaging/|gui/package\.json|\.github/(workflows/test\.yml|actions/))'; then
-  packaging=yes
-fi
+rm -rf "$logs"
 if [ "$packaging" = yes ]; then
   bash packaging/ffmpeg/fetch.sh >/dev/null || fail "准备并校验 LGPL FFmpeg（bash packaging/ffmpeg/fetch.sh 看详情）"
   echo "pre-push：改了打包相关的文件，本机打包命令行工具并跑冒烟测试（约 2 分钟）" >&2

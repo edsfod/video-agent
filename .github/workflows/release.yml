@@ -2,8 +2,8 @@ name: release
 
 # A tag v<version> builds the installer and the wheel, signs latest.yml for the in-app updater and creates a draft
 # release with the notes from docs/releases/v<version>.md. The release also carries the source of the LGPL FFmpeg in
-# the installer (FFmpeg and dav1d tarballs and how they were built), as the LGPL requires. The draft is published by
-# hand after checking it; the app only sees published releases.
+# the installer (FFmpeg, dav1d and SVT-AV1 tarballs and how they were built), as the LGPL requires. The draft is
+# published by hand after checking it; the app only sees published releases.
 
 on:
   push:
@@ -15,7 +15,7 @@ permissions:
 jobs:
   release:
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     defaults:
       run:
         shell: bash

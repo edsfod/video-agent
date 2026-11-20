@@ -14,8 +14,9 @@ on:
 # cache itself and makes its test video with that LGPL build instead of installing another FFmpeg.
 #
 # Each job runs only when the push changed something it tests (.github/scripts/changed-jobs.sh): a change to the
-# documentation runs none, the window's code runs gui and installer, the CLI's code runs all three. A skipped job counts
-# as passed, so fast-forwarding main after a passed run still means every needed job passed.
+# documentation runs none, the window's code runs gui, the CLI's code runs cli and gui, and packaging or updater
+# changes run installer. A skipped job counts as passed, so fast-forwarding main after a passed run still means every
+# needed job passed.
 concurrency:
   group: test-${{ github.ref }}
   cancel-in-progress: true
@@ -50,7 +51,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.cli == 'true'
     runs-on: windows-latest # Windows only (docs/requirements.md)
-    timeout-minutes: 20
+    timeout-minutes: 35 # ~2 min on FFmpeg hit/prebuilt; cold MSYS2 FFmpeg compile takes ~22 min
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v10.3.0 # publishes no major-version tag
@@ -66,7 +67,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.gui == 'true'
     runs-on: windows-latest
-    timeout-minutes: 20
+    timeout-minutes: 35 # ~3 min on FFmpeg hit/prebuilt; cold MSYS2 FFmpeg compile takes ~22 min
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v10.3.0
@@ -94,11 +95,11 @@ jobs:
     needs: changes
     if: needs.changes.outputs.installer == 'true'
     runs-on: windows-latest
-    timeout-minutes: 30 # about 5 minutes when FFmpeg comes from the cache; a cold FFmpeg build adds about 15
+    timeout-minutes: 40 # ~5 min when FFmpeg comes from cache or prebuilt; cold MSYS2 FFmpeg compile adds ~22 min
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/ffmpeg
-      # Kept for .git/hooks/pre-push, which takes the FFmpeg for its local packaging smoke test from the last run.
+      # Kept as a CI artifact for inspecting or packaging a newly compiled FFmpeg before publishing a prebuilt archive.
       - uses: actions/upload-artifact@v7
         with:
           name: ffmpeg-lgpl

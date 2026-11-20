@@ -2,7 +2,7 @@
 # Builds the LGPL FFmpeg that the desktop installer ships: ffmpeg.exe and ffprobe.exe, statically linked, with dav1d
 # to decode AV1 and SVT-AV1 to encode it (for `compress`), and nothing under the GPL (no x264, x265, or GPL-only filters
 # such as mpdecimate). Video Agent runs them as
-# separate programs. Run it in an MSYS2 UCRT64 shell with the packages listed in .github/workflows/ffmpeg.yml; it
+# separate programs. Run it in an MSYS2 UCRT64 shell with the packages listed in .github/actions/ffmpeg/action.yml; it
 # writes build/ffmpeg/. The LGPL requires the corresponding source, so the exact tarballs land in build/ffmpeg/source
 # and go onto every release beside the installer (see docs/design/distribution.md).
 set -euo pipefail

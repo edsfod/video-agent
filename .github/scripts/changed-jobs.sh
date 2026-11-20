@@ -6,7 +6,7 @@
 # logic), and the installer bundles the CLI, the window and the skill. The CLI's code runs cli and gui, the window's
 # code gui, and documentation none. The installer job, the slowest (about 5 minutes: building, installing, updating),
 # runs only for what changes the package or the install: dependencies, the packaging and installer scripts, the icons
-# and the updater (user request, 2026-10-29: every change waited five minutes). The release workflow builds and
+# and the updater. The release workflow builds and
 # smoke-tests the packaged app anyway, so a change that broke only packaging still stops a release. A file no rule
 # knows runs every job, so a missing rule costs time, never a test.
 #
@@ -64,7 +64,7 @@ fi
 
 # A release commit (scripts/bump_version.py and its notes) changes nothing but the version where it is written; the
 # code it carries passed on the commit before, so only the cli job's check that every file agrees runs, and the
-# release workflow builds the installer itself (user request, 2026-10-29: releasing took ten minutes).
+# release workflow builds the installer itself.
 if [ -n "$base" ] && [ "$gui$installer" != falsefalse ]; then
   # python3 on Linux; on Windows that name may be only the Store's placeholder, so uv's Python then.
   if python3 -c '' 2>/dev/null; then py=(python3); else py=(uv run --no-project --quiet python); fi
