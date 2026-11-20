@@ -19,6 +19,7 @@ These were sections of ARCHITECTURE.md until 2026-10-29, when an outside review 
 | Layout and screen pages | [layout-and-screen-pages.md](layout-and-screen-pages.md) | user, 2026-10-27 and 2026-10-28 |
 | Summary depth | [summary-depth.md](summary-depth.md) | user, 2026-10-27 and 2026-10-28 |
 | 主线与单元 laid out by the program | [forest-from-body.md](forest-from-body.md) | user, 2026-11-20 |
+| Summarizing articles | [article-skill.md](article-skill.md) | user, 2026-11-20 (designed, not built) |
 | Summary templates | [summary-templates.md](summary-templates.md) | user, 2026-10-27 and 2026-10-29 |
 | Skill steps in code | [skill-steps.md](skill-steps.md) | user request, 2026-10-29 |
 | Concurrent jobs | [concurrent-jobs.md](concurrent-jobs.md) | user, 2026-10-27 |

@@ -50,5 +50,6 @@ Both lectures followed the format: relations on the proposition lines (lecture 1
 
 ## Next
 
+- The speaker's words in `接上：` (proposed 2026-11-20, not decided): the model gives only the time or span where the speaker links a point, and the program writes the words from the cleaned transcript, so they cannot be paraphrased; a time with no speech is told as a problem. Whether the words link the point or only say it stays a judgment, for the review below.
 - A review for judgment errors with a slice of the transcript (discussed 2026-11-20, not decided): the parts' time ranges and the items' times give the range a question needs; a command such as `video-agent excerpt VIDEO 01:05:15-01:14:40` would print that stretch of `summary-context.md`; an Agent would be pointed at it, and a chat AI given it in a new conversation, its answer merged back by number.
 - 时间线 could be derived the same way (one line per part); not done.
