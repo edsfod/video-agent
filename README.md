@@ -133,7 +133,7 @@ video-agent pack "D:\Videos\lecture.mp4" -o D:\Video-Work --zip D:\lecture-材�
 video-agent summarize "D:\Videos\lecture.mp4" -o D:\Video-Work --import D:\总结.md
 ```
 
-还有按时间补截（`frame`）、改正字幕（`fix`）、合集和跟踪连载（`collection`）、总结版本（`versions`）、总结模板（`template`）、删除视频（`delete`）、压缩（`compress`）、查看用到的外部程序（`tools`）等。全部命令和选项见 [docs/commands.md](docs/commands.md)，处理流程见 [docs/cli.md](docs/cli.md)，程序结构见 [ARCHITECTURE.md](ARCHITECTURE.md)，设计决定和缘由见 [docs/decisions/](docs/decisions/README.md)。
+还有按时间补截（`frame`）、改正字幕（`fix`）、合集和跟踪连载（`collection`）、总结版本（`versions`）、总结模板（`template`）、删除视频（`delete`）、压缩（`compress`）、查看用到的外部程序（`tools`）等。全部命令和选项见 [docs/commands.md](docs/commands.md)，处理流程见 [docs/cli.md](docs/cli.md)，程序结构和设计见 [docs/README.md](docs/README.md)。
 
 ## 隐私和使用须知
 
