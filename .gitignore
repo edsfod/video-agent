@@ -10,3 +10,6 @@ dist/
 node_modules/
 gui/dist/
 notes/
+
+# 用户亲手写的原始材料，仓库公开，不提交
+docs/user-notes/

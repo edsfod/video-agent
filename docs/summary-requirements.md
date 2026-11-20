@@ -8,7 +8,7 @@
 - **网页 AI 的附加部分**：在 `src/video_agent/packing.py` 里，只有网页 AI 的材料会带上。包括 `reminder`（材料末尾重复模板的「自查」，再加三条网页 AI 才有的事）、`review_section`（复查轮的要求）、`CORRECTIONS_SECTION`、`PICTURES_SECTION`，以及认图、总图、新对话的说明。
 - **其他路线的附加部分**：`summarize.py` 的截帧工具提示，`skills/video-agent/SKILL.md` 的步骤，`gui/src/jobs.js` 给 Agent 的任务。这些在 2026-11-17 的重写里没有改动。
 
-「旧位置」指 2026-11-17 重写之前（提交 fe1173f）的位置：S 是 `summary.md` 的行号，R 是 `REMINDER` 的第几条，V 是 `REVIEW_SECTION` 的第几条。「新位置」指重写后模板里的节，如「二·来源」。「程序」指不再由模型去做、由程序做到的：2026-11-20 起「主线与单元」由 `src/video_agent/forest.py` 照详细内容里的关系排出（见 [forest-from-body.md](decisions/forest-from-body.md)）。
+「旧位置」指 2026-11-17 重写之前（提交 fe1173f）的位置：S 是 `summary.md` 的行号，R 是 `REMINDER` 的第几条，V 是 `REVIEW_SECTION` 的第几条。「新位置」指重写后模板里的节，如「二·来源」。「程序」指不再由模型去做、由程序做到的：2026-11-20 起「主线与单元」由 `src/video_agent/forest.py` 照详细内容里的关系排出（见 [forest-from-body.md](archive/2026-11-20/decisions/forest-from-body.md)）。
 
 ## 目的
 

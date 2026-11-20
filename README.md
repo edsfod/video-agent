@@ -141,6 +141,8 @@ video-agent summarize "D:\Videos\lecture.mp4" -o D:\Video-Work --import D:\总�
 
 ## 开发
 
+项目文档从 [docs/README.md](docs/README.md) 看起。
+
 ```powershell
 uv run pytest              # 命令行工具的测试
 cd gui; npm ci; npm test   # 桌面程序的端到端测试（会打开窗口）

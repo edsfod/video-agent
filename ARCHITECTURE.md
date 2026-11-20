@@ -1,6 +1,6 @@
 # Architecture
 
-Video Agent turns a local video into material for a summary (transcript, screen pages, representative frames) and writes or imports the summary. This page describes how it is built now. Why each part is as it is, who decided and when, is in [docs/decisions/](docs/decisions/README.md); how each release was checked is in [docs/release-log.md](docs/release-log.md); the release notes are in `docs/releases/`. Windows only.
+Video Agent turns a local video into material for a summary (transcript, screen pages, representative frames) and writes or imports the summary. This page describes how it is built now. Why each part is as it is, who decided and when, is in [docs/decisions/](docs/archive/2026-11-20/decisions/README.md); how each release was checked is in [docs/release-log.md](docs/release-log.md); the release notes are in `docs/releases/`. Windows only.
 
 ## Parts
 
@@ -40,7 +40,7 @@ Agents and shells           other agents follow it        commands
 | `summarize.py` | `summarize` for one video with a model API. |
 | `packing.py` | `pack`: the prompt for chat AIs, alone, in a zip, or in a folder of numbered pictures. |
 | `importer.py` | `summarize --import`: a text written elsewhere saved as a summary or collection text, with its links and corrections repaired. |
-| `forest.py` | 主线与单元 laid out from the relations in 详细内容 when the template leaves the section to the program: trees grouped by part, the main line from `接上：`, each item once ([forest-from-body.md](docs/decisions/forest-from-body.md)). |
+| `forest.py` | 主线与单元 laid out from the relations in 详细内容 when the template leaves the section to the program: trees grouped by part, the main line from `接上：`, each item once ([forest-from-body.md](docs/archive/2026-11-20/decisions/forest-from-body.md)). |
 | `picture_review.py` | The 画面调整 section of a chat AI's summary: pictures it does not need, and the candidates taken where it misses one. |
 | `pictures.py` | The tree of a video's picture sets: which pictures every summary route is given, grown by a chat AI's rounds or by hand; each summary version names the set it was written with. |
 | `summary_review.py` | A chat AI's rounds: the checks on each answer (template sections, long speech not covered, parts with nothing in 要点, propositions outside their part, what 主线与单元 could not be laid out from, times past the end, linked pictures without a word in the 复查), its 复查 section, links taken out that show nothing beyond the transcript, whether another round is needed, which draft a later round may write over, and where an unfinished run goes on. |
@@ -126,7 +126,7 @@ The folder and file names, Chinese ones included, are read by the app, the skill
 
 - **App and CLI.** The app runs the CLI as a child process (`cli:json` parses its `--json` output, `cli:text` returns its text; API keys go on stdin). What the JSON holds is `src/video_agent/contract.py`: mypy checks the code that builds it, the tests check every value the CLI prints against it, and the app's copy, `gui/src/cli-types.d.ts`, is written from it. `tools --json` gives `json_version`, and the window says when a CLI set in the settings prints another.
 - **Page and main process.** The page runs sandboxed with context isolation and a strict CSP and reaches the main process only through `window.va` (`preload.js`). Markdown is rendered with marked and sanitized with DOMPurify; `fs:read` reads only inside the workspace; `shell:open` opens any path, as a link in a summary may point anywhere (user decision).
-- **Concurrency.** Jobs are separate processes that share files. The CLI locks a video's folder while writing and writes files atomically; the app's queue keeps one processing or summary task per video and limits each kind. Details: [Concurrent jobs](docs/decisions/concurrent-jobs.md).
+- **Concurrency.** Jobs are separate processes that share files. The CLI locks a video's folder while writing and writes files atomically; the app's queue keeps one processing or summary task per video and limits each kind. Details: [Concurrent jobs](docs/archive/2026-11-20/decisions/concurrent-jobs.md).
 - **Outside tools.** yt-dlp, FFmpeg and AutoSlides Extractor are run as programs, never copied in; a copy on `PATH` comes first.
 
 ## Build, release, update
