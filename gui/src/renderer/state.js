@@ -27,7 +27,7 @@ export const state = {
   /** @type {string | null} the path of the video shown */
   current: null,
   tab: 'process',
-  /** @type {string | null} the summary route; none until the user picks one (user decision, 2026-10-30) */
+  /** @type {string | null} the summary route; none until the user picks one */
   route: null,
   /** @type {any[]} */
   tasks: [], // the queue in the main process (tasks.js), without output

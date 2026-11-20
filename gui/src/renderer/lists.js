@@ -69,7 +69,7 @@ $('collection-add-files').onclick = async () => {
 // Every video of the collection; compress itself skips those compressed before or already efficient. Videos that are
 // not this program's downloads are the user's own files: replaced only with the setting on, or after asking here.
 $('collection-compress-all').onclick = async () => {
-  // Checked first (user request, 2026-10-29): those compressed already, or not worth it, are not queued at all.
+  // Checked first so videos already compressed or not worth compressing are not queued at all.
   const candidates = pageCollection().videos.filter((entry) => !entry.skipped);
   $('collection-state').textContent = '正在检查哪些已经压缩过…';
   const checked = candidates.length ? await window.va.cliText(['compress', '--check', '--json', ...candidates.map((member) => member.video)]) : { out: '' };

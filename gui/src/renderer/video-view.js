@@ -59,8 +59,8 @@ for (const button of $$('#video .tabs button')) {
 function renderProcess(video) {
   $('opt-interval').value = state.settings.frameInterval;
   $('opt-bcut').checked = state.settings.bcut !== false;
-  // AutoSlides Extractor finds the screen pages where the CLI finds it, unless turned off here (user decision,
-  // 2026-10-29); state.tools is null until `tools` answered.
+  // AutoSlides Extractor finds the screen pages where the CLI finds it, unless turned off here; state.tools is null
+  // until `tools` answered.
   const extractor = !state.tools || state.tools.slide_extractor;
   $('opt-slides').disabled = !extractor;
   $('opt-slides').checked = !!extractor && state.settings.extractor !== false;
@@ -332,8 +332,7 @@ function frameCard(item, toggle) {
 const EXTRA = /frame-(\d\d)-(\d\d)-(\d\d)\.jpg$/;
 
 // The 画面 tab shows one set of pictures (pictures.py): by default the one the summary shown on the 总结 tab was
-// written with, else the one later summaries are given (user request, 2026-10-30: the pictures not needed out of
-// sight). The pictures it leaves out show only when asked for.
+// written with, else the one later summaries are given, keeping unneeded pictures out of sight until asked for.
 async function renderFrames(video) {
   const box = $('frames');
   const manifest = video.info?.manifest;
@@ -367,8 +366,8 @@ async function renderFrames(video) {
   const shownId = /** @type {{ id: string }} */ (state.pictureSet).id;
   const node = /** @type {import('../cli-types').PictureNode} */ (sets.nodes.find((item) => item.id === shownId));
   $('picture-sets').hidden = false;
-  // A round that changes no picture keeps the set before it, so a set made in round 3 may be the one round 5's summary
-  // was written with (user report, 2026-10-30): each set names the summaries written with it.
+  // A round that changes no picture keeps the set before it, so a set made in an earlier round may be the one a later
+  // summary was written with; each set names the summaries written with it.
   const summaries = versions ? [versions.current, ...versions.versions].filter((entry) => !!entry) : [];
   const usedBy = (id) => {
     const names = summaries.filter((entry) => entry.pictures === id).map((entry) => `「${entry.note || entry.source || '总结'}」`);

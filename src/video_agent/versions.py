@@ -1,14 +1,14 @@
 """Versions of a written file (a video's 总结.md, a collection's overview or study guide): a new text never replaces the
-current one unless asked, and nothing is lost when it does (user request, 2026-10-28).
+current one unless asked, and nothing is lost when it does (docs/design/summary.md).
 
 The current text stays at its usual name, which every link and route reads. Each other version is a file beside it,
 `总结 (2026-10-28 15-30-12).md`, in the same folder so its relative links to frames still work. `<name>.versions.json`
 records when each text was written, by what route and with what note, for the current one and the others.
 
-Each text also records where it came from (user decision, 2026-11-16): written afresh (`based_on` null), or written from
-an earlier version (`based_on` that version's id), which an import finds by the share of lines the two have word for
-word (`closest`). The ids stay with a text when it is renamed (made current, or current no longer), so the versions
-form a forest. Texts saved before that day have no record either way.
+Each text also records where it came from: written afresh (`based_on` null), or written from an earlier version
+(`based_on` that version's id), which an import finds by the share of lines the two have word for word (`closest`). The
+ids stay with a text when it is renamed (made current, or current no longer), so the versions form a forest. Older
+records without `based_on` show neither.
 """
 
 import json
@@ -118,10 +118,9 @@ def save(target, text, *, source='', note='', make_current=False, pictures=None,
 
 def overwrite(target, name, text, *, source='', note='', make_current=False, pictures=None, based_on=UNKNOWN):
   """Writes a new text over an earlier one, the current text (`name` the target's own name) or a version, keeping
-  neither: a chat AI's later round over the round before (user request, 2026-10-30: the rounds of one summary
-  overwrite each other, whether or not they become current). A version written over takes the new time in its name;
-  with `make_current` it becomes the current text. It stays the same text in the record: its id, and where it came
-  from unless a source is found now. Returns (path written, is current)."""
+  neither: a chat AI's later round over the round before, whether or not it became current. A version written over
+  takes the new time in its name; with `make_current` it becomes the current text. It stays the same text in the
+  record: its id, and where it came from unless a source is found now. Returns (path written, is current)."""
   target = Path(target)
   data = _load(target)
   old = data['current'] if name == target.name else _find(target, data, name)

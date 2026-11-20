@@ -6,7 +6,7 @@ import { SOURCE_PAGE } from './updates.js';
 import { refresh } from './video-list.js';
 import { renderVideo } from './video-view.js';
 
-// Several summary templates exist side by side (user request, 2026-10-29). The one chosen on the summary page is the
+// Several summary templates exist side by side. The one chosen on the summary page is the
 // CLI's chosen template, so an Agent run from a terminal follows it too; each task keeps the one it was added with.
 
 export const STANDARD_TEMPLATE = '标准';

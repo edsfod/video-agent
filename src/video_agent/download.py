@@ -70,8 +70,8 @@ def executable(explicit=None):
 # not subtitles. Bilibili lists its subtitles, including the AI ones, only to a logged-in account (pass --cookies).
 SUBTITLE_LANGS = 'all,-danmaku,-live_chat'
 
-# Windows file names cannot hold / or \. yt-dlp puts look-alike maths symbols there (⧸ ⧹), which read oddly; the
-# user chose a plain _ instead (2026-10-28), not the fullwidth forms.
+# Windows file names cannot hold / or \. yt-dlp puts look-alike maths symbols there (⧸ ⧹), which read oddly; use a
+# plain _ instead of those or the fullwidth forms.
 TITLE_FIXES = ['--replace-in-metadata', 'title', r'[/\\]', '_']
 
 # Entry titles reported for a list found without --playlist, so a front end can show what it would download.

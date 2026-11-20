@@ -21,8 +21,7 @@ const RELEASES = `https://github.com/${REPO}/releases`;
 const MIRRORS = ['https://gh-proxy.com/', 'https://ghfast.top/'];
 const REQUEST_TIMEOUT = 15_000; // per metadata request; Electron's requests never time out on their own
 const STALL_TIMEOUT = 60_000; // a download with no progress for this long is cancelled and the next source tried
-// A download that is moving but slowly also moves on, to the next source that downloads only the changed blocks
-// (user request, 2026-10-29: 0.9.0 came from github.com at about 0.4 MB/s, where gh-proxy.com had given 2.5 MB/s).
+// A download that is moving but slowly also moves on, to the next source that downloads only the changed blocks.
 // After SLOW.after ms, a source averaging under SLOW.speed bytes/s with more than SLOW.left s still to go at that
 // speed is left. The last such source is kept however slow, and a slow source left behind is tried once more, without
 // this check, when every later one failed. Tests: VA_UPDATE_SLOW=<after ms>,<bytes/s>,<seconds left>.
@@ -171,7 +170,7 @@ function createUpdater({ logs, send, settings, remember, running }) {
   if (proxy) autoUpdater.netSession.setProxy({ proxyRules: proxy }).catch(() => {});
 
   // The last check that got an answer, kept across restarts so the window can say when it was rather than only
-  // "up to date" (user request, 2026-10-28).
+  // "up to date".
   let state = { status: 'idle', current: app.getVersion(), lastCheck: settings().lastUpdateCheck || null };
   let index = 0; // the source that answered the last check
   let token = null;
@@ -211,8 +210,7 @@ function createUpdater({ logs, send, settings, remember, running }) {
     return source;
   }
 
-  // 接收测试版: off unless chosen, but on by default for someone running a pre-release (user request, 2026-10-29: a
-  // beta could not be found by 检查更新).
+  // 接收测试版: off unless chosen, but on by default while running a pre-release so 检查更新 finds newer betas.
   const betas = () => settings().betaUpdates ?? !!semver.prerelease(app.getVersion());
 
   async function check() {

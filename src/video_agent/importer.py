@@ -46,7 +46,7 @@ def _local_target(target, base):
 
 
 def repair_links(text, base):
-  """Puts back the relative links a chat AI turned into search or sandbox links (user report, 2026-10-28)."""
+  """Puts back the relative links a chat AI turned into search or sandbox links."""
   return LINK.sub(lambda m: m[1] + (_local_target(m[2], base) or m[2]) + m[3], text)
 
 
@@ -170,10 +170,9 @@ def import_summary(
       corrections.save(asset, known + pairs)
       processor.refresh_transcript(asset)
     if agent:
-      # The checks an Agent can act on (user request, 2026-11-16: an Agent's summary of the first NJU lecture left
-      # side paths and additions out and put a proposition in the wrong part, with nothing to tell it): the template's
-      # sections, long stretches of speech not covered, parts with nothing in 要点, propositions outside their part,
-      # times past the end. The pictures' checks belong to a chat AI's 画面调整 and 复查.
+      # The checks an Agent can act on: the template's sections, long stretches of speech not covered, parts with
+      # nothing in 要点, propositions outside their part, times past the end. The pictures' checks belong to a chat AI's
+      # 画面调整 and 复查.
       saved = target.read_text(encoding='utf-8')
       asked = (before.get('asked') or []) if draft is not None else []
       problems = summary_review.check(
@@ -232,8 +231,7 @@ def import_collection(
 
 def _based_on(target, text, template, line, skip, status):
   """The id of the version a text was written from, said when there is one; None when it was written afresh
-  (versions.closest; user decision, 2026-11-16: the versions record which texts were written afresh and which from
-  another). Lines of the template and the 视频 line, which every text has, do not count."""
+  (versions.closest). Lines of the template and the 视频 line, which every text has, do not count."""
   found = versions.closest(target, text, ignore=[*templates.text(template).splitlines(), line or ''], skip=skip)
   if not found:
     return None

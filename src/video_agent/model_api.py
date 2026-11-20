@@ -30,9 +30,9 @@ FRAME_TOOL = {
   },
 }
 
-# How hard the model thinks, chosen per summary (user request, 2026-10-29). OpenAI-compatible APIs take it as
-# `reasoning_effort`; Anthropic's as an extended-thinking budget, in tokens, added to the output allowance (Claude
-# judgment: the budgets). Not sent when not chosen, so a model or server without it is not refused.
+# How hard the model thinks, chosen per summary. OpenAI-compatible APIs take it as `reasoning_effort`; Anthropic's as
+# an extended-thinking budget, in tokens, added to the output allowance. Not sent when not chosen, so a model or server
+# without it is not refused.
 EFFORTS = ('low', 'medium', 'high')
 THINKING_BUDGET = {'low': 2000, 'medium': 8000, 'high': 24000}
 

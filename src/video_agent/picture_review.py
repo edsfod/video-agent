@@ -90,7 +90,7 @@ def candidates(video, asset, start, end, length):
 
 def sent(asset, paths):
   """Records the pictures a chat AI's material holds (on contact sheets too); what its answer does not link of them,
-  it has seen and found no use for (user decision, 2026-10-30: it names only some of the useless ones as 不用)."""
+  it has seen and found no use for."""
   state = load(asset)
   state['sent'] = list(paths)
   files.write_text(Path(asset) / NAME, json.dumps(state, ensure_ascii=False, indent=2) + '\n')

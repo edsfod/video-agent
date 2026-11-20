@@ -1,4 +1,4 @@
-"""Re-encode a video in place to take less space without visible loss (user decision, 2026-10-28).
+"""Re-encode a video in place to take less space without visible loss.
 
 Measured on 5-minute clips of a Yanhekt lecture, at the source resolution, against the clip with VMAF: a 1080p screen
 recording (H.264, 835 kbps) came to 20 % of its size at 10 frames a second with SVT-AV1 at CRF 40 (VMAF 96.8), and a

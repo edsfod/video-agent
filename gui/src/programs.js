@@ -70,20 +70,20 @@ function splitCommand(text) {
   return (text.match(/"[^"]*"|\S+/g) || []).map((part) => part.replace(/^"|"$/g, ''));
 }
 
-// Agents besides Claude Code and Codex that run one task and exit (user request, 2026-10-28), with the commands their
-// help gives for that (pi 0.99, Hermes Agent 0.21, DeepSeek Harness's README; dsh is in developer preview). Each reads
-// the skill file as Codex does. None is limited to the workspace the way Codex's sandbox and Claude Code's allowed
-// tools are: they run commands as the user. The user may edit the command in the settings.
+// Agents besides Claude Code and Codex that run one task and exit, with the commands their help gives for that (pi
+// 0.99, Hermes Agent 0.21, DeepSeek Harness's README; dsh is in developer preview). Each reads the skill file as Codex
+// does. None is limited to the workspace the way Codex's sandbox and Claude Code's allowed tools are: they run commands
+// as the user. The user may edit the command in the settings.
 // `installed`: where the program sits inside its desktop app, for one not on PATH: DeepSeek Harness's installer puts
-// `dsh` there and adds nothing to PATH (user report, 2026-10-28, installed on D:).
-// `model`: the option that names a model for one run (each agent's --help, 2026-10-29); DeepSeek Harness has none and
-// takes a patch file instead (dshModel). `skills`: the folder it finds skills in without a plugin (its documentation,
-// 2026-10-29): pi reads the Agent Skills folder ~/.agents/skills; Hermes Agent <HERMES_HOME>/skills, one category
-// folder deep (its own skills sit in categories); DeepSeek Harness <dshHome>/skills (its skill-source table).
-// Antigravity's CLI `agy` (user request, 2026-11-16, installed with winget Google.AntigravityCLI 1.5.9): `-p` runs one
-// prompt and exits; in that mode an action that would ask is refused, so --dangerously-skip-permissions lets it run the
-// CLI and write the draft, as the other presets do; skills from ~/.gemini/antigravity-cli/skills (its documentation).
-// The effort is part of its model ids (gemini-3.8-flash-high), so it takes no effort option here.
+// `dsh` there and adds nothing to PATH.
+// `model`: the option that names a model for one run; DeepSeek Harness has none and takes a patch file instead
+// (dshModel). `skills`: the folder it finds skills in without a plugin: pi reads the Agent Skills folder
+// ~/.agents/skills; Hermes Agent <HERMES_HOME>/skills, one category folder deep (its own skills sit in categories);
+// DeepSeek Harness <dshHome>/skills (its skill-source table).
+// Antigravity's CLI `agy` (Google.AntigravityCLI): `-p` runs one prompt and exits; in that mode an action that would
+// ask is refused, so --dangerously-skip-permissions lets it run the CLI and write the draft, as the other presets do;
+// skills from ~/.gemini/antigravity-cli/skills. The effort is part of its model ids (gemini-3.8-flash-high), so it
+// takes no effort option here.
 const AGENTS = {
   agy: {
     name: 'Antigravity CLI',

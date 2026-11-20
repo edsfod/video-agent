@@ -1,8 +1,8 @@
 """检查仓库里的文字是不是写成了过程记录（docs/writing.md）。
 
-扫：docs/（不含 archive、user-notes、releases 和 release-log.md）、.claude/rules/、README.md、PRIVACY.md，以及代码里的注释
+扫：docs/（不含 archive、user-notes、releases 和 release-log.md）、.claude/rules/、README.md、PRIVACY.md，以及代码里的注释和文档字符串
 （src/、tests/、scripts/、packaging/、gui/src、gui/test、gui/scripts、.github/）。
-找：归给用户的引语、「Claude 判断」这类过程标记、带钟点的过程记录。
+找：归给用户的引语、「Claude 判断」这类过程标记、带钟点的过程记录、指向已归档旧文档的引用，以及代码注释里「谁哪天说了什么」。
 
 用法：
     python scripts/lint_writing.py              # 全部查一遍，有问题时退出码 1
@@ -15,10 +15,13 @@
 
 from __future__ import annotations
 
+import ast
+import io
 import json
 import re
 import subprocess
 import sys
+import tokenize
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -43,15 +46,35 @@ ALLOW = {ROOT / 'docs' / 'writing.md', Path(__file__).resolve()}
 # 只追加的记录：发布检查记录
 ALLOW |= {ROOT / 'docs' / 'release-log.md'}
 
-QUOTE = r'["“「]'
+QUOTE = r'["“「『]'
 RULES_ANY = [
-  ('归给用户的引语', re.compile(r'用户[^。；\n]{0,24}[：:]\s*' + QUOTE + r'|\buser\b[^.;\n]{0,40}[：:]\s*' + QUOTE, re.I)),
-  ('过程标记', re.compile(r'Claude judgment|Claude 判断|Claude\'s proposal|等用户定')),
+  (
+    '归给用户的引语',
+    re.compile(r'用户[^。；\n]{0,24}[：:]\s*' + QUOTE + r'|\buser\b[^.;\n]{0,40}[：:]\s*' + QUOTE, re.IGNORECASE),
+  ),
+  ('过程标记', re.compile(r"Claude judgment|Claude 判断|Claude's proposal|等用户定")),
+  (
+    '已归档的旧文档路径',
+    re.compile(
+      r'(?<!archive/2026-11-20/)(?:\bdocs/(?:product-rules\.md|working-rules\.md|decisions/)|(?<![A-Za-z0-9_/-])ARCHITECTURE\.md|\(decisions/)'
+    ),
+  ),
 ]
 RULES_DOC = [
   ('带钟点的过程记录', re.compile(r'20\d\d-\d\d-\d\d \d{1,2}:\d{2}(?!:)')),
 ]
-COMMENT = re.compile(r'(#|//|/\*|^\s*\*|<!--|"""|\'\'\')')
+RULES_CODE = [
+  (
+    '代码注释记谁哪天说了什么',
+    re.compile(
+      r'\buser\s+(?:decision|request|report|correction|question)s?\b|\(\s*user\s*,\s*20\d\d|'
+      r'\buser\s+(?:chose|asked|said|wanted|rejected|approved)\b[^.\n]{0,60}20\d\d-\d\d-\d\d|'
+      r'用户\s*20\d\d-\d\d-\d\d\s*定',
+      re.IGNORECASE,
+    ),
+  ),
+]
+LINE_COMMENT = re.compile(r'(#|//)')
 
 
 def _skipped(path: Path) -> bool:
@@ -72,12 +95,67 @@ def code_files() -> list[Path]:
   return out
 
 
+def _python_comment_lines(text: str) -> list[tuple[int, str]]:
+  """Python 里的 # 注释行和文档字符串行（含多行 docstring 中间行）。"""
+  lines = text.splitlines()
+  chosen: set[int] = set()
+  try:
+    for tok in tokenize.generate_tokens(io.StringIO(text).readline):
+      if tok.type == tokenize.COMMENT:
+        chosen.add(tok.start[0])
+  except tokenize.TokenError:
+    pass
+  try:
+    tree = ast.parse(text)
+    for node in ast.walk(tree):
+      if (
+        isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef))
+        and node.body
+        and isinstance(node.body[0], ast.Expr)
+        and isinstance(node.body[0].value, ast.Constant)
+        and isinstance(node.body[0].value.value, str)
+      ):
+        expr = node.body[0]
+        for lineno in range(expr.lineno, (expr.end_lineno or expr.lineno) + 1):
+          chosen.add(lineno)
+  except SyntaxError:
+    return [(no, line) for no, line in enumerate(lines, 1) if '#' in line or '"""' in line or "'''" in line]
+  return [(no, lines[no - 1]) for no in sorted(chosen) if 1 <= no <= len(lines)]
+
+
+def _other_comment_lines(text: str) -> list[tuple[int, str]]:
+  """非 Python 代码里的单行注释和 /* ... */、<!-- ... --> 块注释行。"""
+  out: list[tuple[int, str]] = []
+  in_block: str | None = None
+  for no, line in enumerate(text.splitlines(), 1):
+    if in_block:
+      out.append((no, line))
+      if in_block in line:
+        in_block = None
+      continue
+    if '/*' in line:
+      out.append((no, line))
+      if '*/' not in line[line.index('/*') + 2 :]:
+        in_block = '*/'
+    elif '<!--' in line:
+      out.append((no, line))
+      if '-->' not in line[line.index('<!--') + 4 :]:
+        in_block = '-->'
+    elif LINE_COMMENT.search(line):
+      out.append((no, line))
+  return out
+
+
 def check(path: Path, is_doc: bool) -> list[str]:
   problems = []
-  rules = RULES_ANY + (RULES_DOC if is_doc else [])
-  for no, line in enumerate(path.read_text(encoding='utf-8', errors='replace').splitlines(), 1):
-    if not is_doc and not COMMENT.search(line):
-      continue  # 代码只看带注释或文档字符串的行
+  text = path.read_text(encoding='utf-8', errors='replace')
+  if is_doc:
+    rules = RULES_ANY + RULES_DOC
+    targets = list(enumerate(text.splitlines(), 1))
+  else:
+    rules = RULES_ANY + RULES_CODE
+    targets = _python_comment_lines(text) if path.suffix == '.py' else _other_comment_lines(text)
+  for no, line in targets:
     for name, pattern in rules:
       if pattern.search(line):
         problems.append(f'{path.relative_to(ROOT).as_posix()}:{no}: {name}: {line.strip()[:100]}')
@@ -101,7 +179,7 @@ def in_scope(path: Path) -> bool | None:
 
 
 def git_paths(*args: str) -> list[Path]:
-  out = subprocess.run(['git', *args], cwd=ROOT, capture_output=True, text=True, encoding='utf-8').stdout
+  out = subprocess.run(['git', *args], check=False, cwd=ROOT, capture_output=True, text=True, encoding='utf-8').stdout
   return [ROOT / line.strip() for line in out.splitlines() if line.strip()]
 
 
@@ -146,7 +224,9 @@ def hook() -> int:
     return 0
   if not problems:
     return 0
-  print('写法检查（docs/writing.md）没通过：写规整后的说法，不抄用户原话、不记讨论经过。改掉下面这些：', file=sys.stderr)
+  print(
+    '写法检查（docs/writing.md）没通过：写规整后的说法，不抄用户原话、不记讨论经过。改掉下面这些：', file=sys.stderr
+  )
   for msg in problems:
     print(msg, file=sys.stderr)
   return 2

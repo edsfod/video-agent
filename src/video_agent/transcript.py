@@ -126,7 +126,7 @@ def embedded(video, streams, output_dir):
 
 
 def given(path):
-  """A subtitle file the user chose for the video, whatever its name (user request, 2026-10-28)."""
+  """A subtitle file chosen for the video, whatever its name."""
   path = Path(path).expanduser()
   if not path.is_file():
     raise MediaError(f'subtitle file does not exist: {path}')

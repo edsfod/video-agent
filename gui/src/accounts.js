@@ -1,7 +1,7 @@
-// Site accounts for downloads (user request, 2026-10-29: not only Bilibili, in an order of one's own, hiding the ones
-// not used). yt-dlp cannot read the cookies of a running Edge or Chrome (locked database, app-bound encryption since
-// Chromium 127), so each site is opened once in a window of our own; its cookies live in a persistent partition of its
-// own (encrypted with DPAPI in the packaged app, see `electronFuses` in package.json) and are exported to a Netscape
+// Site accounts for downloads (ordered and hideable per site; docs/design/processing.md). yt-dlp cannot read the
+// cookies of a running Edge or Chrome (locked database, app-bound encryption since Chromium 127), so each site is
+// opened once in a window of our own; its cookies live in a persistent partition of its own (encrypted with DPAPI in
+// the packaged app, see `electronFuses` in package.json) and are exported to a Netscape
 // cookies file only for the length of a download from that site.
 //
 // What each site needs, from yt-dlp's source (2026.10.26): Bilibili lists subtitles, AI ones included, only to a
@@ -90,7 +90,7 @@ async function status(key) {
 const list = () => Promise.all(Object.keys(SITES).map(status));
 
 // Opens the site's login page and resolves with `status()` once the login cookie appears or the window is closed. A
-// window of its own, not a child of the main one, so it minimizes alone (user report, 2026-10-29).
+// window of its own, not a child of the main one, so it minimizes alone.
 function login(key) {
   const site = SITES[key];
   return new Promise((resolve) => {

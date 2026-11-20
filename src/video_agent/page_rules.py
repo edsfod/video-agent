@@ -33,7 +33,7 @@ def differ(a, b, width, height, shift=0, columns=None):
 # A page built up step by step (a list, a diagram, a chat that grows) keeps everything already shown: when `b` changed
 # fewer than this share of the pixels that carry content in `a`, `b` is `a` with more added. Background is the most
 # common grey level of `a`; a page with content in less than BLANK of its pixels (a title alone, an empty window) counts
-# as built up by whatever follows (user report, 2026-10-28: steps of one slide were kept as pages of their own).
+# as built up by whatever follows, so steps of one slide merge into one page.
 KEPT_INK = 0.03
 BLANK = 0.01
 
@@ -100,8 +100,8 @@ def tune_long(count_for, hours):
 
 
 # Subtitles burnt into the picture change every few seconds and end each still period, so a chart shown for ten
-# seconds comes as several short periods of the same page (user report, 2026-10-29). Periods this close together that
-# show the same page count as one stay.
+# seconds comes as several short periods of the same page. Periods this close together that show the same page count as
+# one stay.
 JOINED_GAP_S = 3.0
 
 

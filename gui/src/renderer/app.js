@@ -26,8 +26,8 @@ async function init() {
   state.tasks = await window.va.tasks();
   $('download-then-process').checked = state.settings.processAfterDownload !== false; // on unless turned off
   renderTasks();
-  // Nothing is opened at start (user request, 2026-10-29: the first collection was). The list waits for the
-  // collections, which hide their videos from 视频; drawn before, it showed every video for a moment.
+  // Nothing is opened at start. The list waits for the collections, which hide their videos from 视频; drawn before, it
+  // showed every video for a moment.
   renderVideo();
   loadTemplates();
   renderAbout();

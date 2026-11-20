@@ -16,8 +16,8 @@ export const currentCollection = () => state.collections.find((item) => item.nam
 // The collection whose page is open, for the buttons on that page: they can be clicked only while it is shown.
 export const pageCollection = () => /** @type {import('../cli-types').Collection} */ (currentCollection());
 
-// A list that could not be read keeps the collections shown before (user report, 2026-10-29: one failed read while
-// many tasks ended emptied 合集 and put every episode under 视频); it says so and is read again a little later.
+// A list that could not be read keeps the collections shown before instead of emptying 合集 and putting every episode
+// under 视频; it says so and is read again a little later.
 // One read at a time: every video refreshed at start and every task that ends asks for one, and dozens running at once
 // finished in any order, an older answer last. Asks that come while one runs share a single read after it.
 let collectionRetry = null;
@@ -62,8 +62,8 @@ async function readCollections() {
 }
 
 // Each collection, and under it its videos when it is open: on its page, playing one of its videos, or opened with ▸.
-// The sidebar lists collections only; their videos are opened from the collection's page, where there is room
-// (user request, 2026-10-28). A collection holding the video shown is marked as well.
+// The sidebar lists collections only; their videos are opened from the collection's page, where there is room. A
+// collection holding the video shown is marked as well.
 export function renderCollectionList() {
   const failed = state.collectionsError
     ? [element('p', { className: 'muted small-text collection-error', textContent: `合集列表这次没读到，几秒后再读：${(state.collectionsError.split('\n').pop() || '').slice(0, 160)}` })]

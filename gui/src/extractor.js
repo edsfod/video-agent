@@ -1,7 +1,6 @@
-// AutoSlides Extractor, downloaded on the user's request into the app's data folder (user decision, 2026-10-29): the
-// portable Windows build from its author's GitHub releases, so the installer stays as it is and the author's
-// releases stay the source of its files. Where it is, every CLI this app starts finds it (childEnv sets
-// AUTOSLIDES_EXTRACTOR), and process uses it for the screen pages.
+// AutoSlides Extractor, downloaded on demand into the app's data folder: the portable Windows build from its author's
+// GitHub releases, so the installer stays small and the author's releases stay the source of its files. Where it is,
+// every CLI this app starts finds it (childEnv sets AUTOSLIDES_EXTRACTOR), and process uses it for the screen pages.
 
 const { app, net } = require('electron');
 const { execFile } = require('node:child_process');

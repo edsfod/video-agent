@@ -46,8 +46,8 @@ IMAGES = ('*.png', '*.jpg', '*.jpeg')
 
 def autoslides_folder(video):
   """The slides AutoSlides made for a video it downloaded, by AutoSlides' own naming: `screen_<name>.mp4` beside
-  `slides_<name>/` (user decision, 2026-10-28: a named convention of that tool, beside a manual import for any
-  folder). None when there is no such folder with images."""
+  `slides_<name>/` (a named convention of that tool, beside a manual import for any folder). None when there is no such
+  folder with images."""
   video = Path(video)
   if not video.stem.startswith('screen_'):
     return None

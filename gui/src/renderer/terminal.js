@@ -10,7 +10,7 @@ export function renderTerminal(video) {
     for (const item of state.env.shells) select.append(element('option', { value: item.id, textContent: item.label }));
     select.value = state.settings.shell || state.env.shells[0]?.id || '';
   }
-  // A shell starts only when asked for (user request, 2026-10-29), not on opening the tab.
+  // A shell starts only when asked for, not on opening the tab.
   $('new-terminal').textContent = state.term ? '新建终端' : '启动终端';
   if (!state.term) {
     $('terminal').replaceChildren(element('p', { className: 'terminal-note', textContent: '点「启动终端」，在这个视频的处理结果文件夹里打开一个终端。' }));

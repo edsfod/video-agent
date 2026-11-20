@@ -4,10 +4,9 @@
 // requests for 8.7 MB, 77 s against 28 s for the whole 157 MB. Changed runs closer than MERGE_GAP are fetched as one
 // range, the unchanged bytes between them included (6 requests for 12.4 MB on that update).
 //
-// Then the ranges are fetched at the same time rather than one after another: 0.7.0 to 0.8.0 still took 8.4 s for
-// 12.8 MB in 6 requests, 1.5 MB/s against 5.7 MB/s for a whole download (user report, 2026-10-28); the same six
-// ranges from GitHub took 7.0 and 7.9 s one after another, 5.3 and 3.8 s all at once. electron-updater's own pass
-// then reads them from memory, so its copying from the old installer and its sha512 check are unchanged.
+// Then the ranges are fetched at the same time rather than one after another, avoiding per-request round-trip delay
+// that made serial differential downloads slower than a whole download. electron-updater's own pass then reads them
+// from memory, so its copying from the old installer and its sha512 check are unchanged.
 
 const { EventEmitter } = require('node:events');
 const { Readable } = require('node:stream');

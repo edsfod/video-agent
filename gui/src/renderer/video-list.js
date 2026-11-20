@@ -19,7 +19,7 @@ export async function addVideos(paths, { show = true } = {}) {
 }
 
 // Videos the user adds from disk are processed at once when 下载或添加后自动处理 is on, so a subtitle file beside one
-// (same name) is read in without a click (user request, 2026-10-28). A local video's audio is not uploaded by default:
+// (same name) is read in without a click. A local video's audio is not uploaded by default:
 // for those without subtitles the window asks first (BCut, the pictures only, or later).
 export async function addLocalVideos(paths) {
   if (!paths?.length) return;
@@ -72,7 +72,7 @@ function badge(video) {
 // The window keeps a path as it was added; the CLI, and so a collection, holds it resolved (a short 8.3 name such as
 // RUNNER~1 in %TEMP% comes back long). A video matches a path by either.
 export const isVideo = (path, video) => [video?.path, video?.info?.video].some((own) => sameVideo(own, path));
-// A video in a collection is listed under the collection in the sidebar, not here (user decision, 2026-10-28).
+// A video in a collection is listed under the collection in the sidebar, not here.
 export const inCollection = (video) => state.collections.some((item) => item.videos.some((member) => isVideo(member.video, video)));
 
 export function renderList() {
@@ -146,7 +146,7 @@ export function showHome() {
 
 $('add-videos').onclick = async () => addLocalVideos(await window.va.pickVideos());
 
-// Deleting videos (user request, 2026-11-16: one click, several at once): their processing folders with transcript,
+// Deleting videos (one or several at once): their processing folders with transcript,
 // pictures and every summary, their place in collections, and the file itself only when this program downloaded it
 // (the CLI's `delete` decides; `show` says which). A video with a task queued or running is left alone.
 export async function deleteVideos(paths) {

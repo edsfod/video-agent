@@ -1,4 +1,4 @@
-"""The cleaned transcript: the original with recurring mishearings corrected (user decision, 2026-10-28).
+"""The cleaned transcript: the original with recurring mishearings corrected.
 
 `transcript.srt` and `transcript.txt` stay as they were acquired. `corrections.json` in the video's folder lists
 wrong -> right pairs, the video's own and those of each collection it belongs to (shared terms), and

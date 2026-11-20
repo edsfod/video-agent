@@ -26,9 +26,9 @@ def _ascii_slug(value):
 
 
 def asset_folder(workspace, video):
-  """The video's processing folder in the workspace. One made under the old name is renamed the first time it is
-  asked for (user request, 2026-10-28), and the collection files that link into it follow; if the rename fails, as
-  while another program has the folder open, the old name is used this time."""
+  """The video's processing folder in the workspace. One made under the old ASCII-only name is renamed the first time
+  it is asked for, and the collection files that link into it follow; if the rename fails, as while another program has
+  the folder open, the old name is used this time."""
   identity = hashlib.sha256(str(video).casefold().encode('utf-8')).hexdigest()[:10]
   workspace = Path(workspace)
   target = workspace / f'{slug(video.stem)}-{identity}'
@@ -96,7 +96,7 @@ def _copy_candidates(candidates, target, prefix):
   return result
 
 
-# Runaway limits, not targets (docs/product-rules.md): the frames follow the video, and reaching a limit is reported.
+# Runaway limits, not targets (docs/requirements.md): the frames follow the video, and reaching a limit is reported.
 MAX_FRAMES = 500
 MAX_PAGES = 500
 
@@ -144,8 +144,7 @@ def _context(manifest, rows):
     lines.extend(['', f'- Transcript status: {told["error"]}'])
   lines.extend(['', '## Transcript', ''])
   # Each run of lines starts with the screen page then on screen (or, without pages, the frame), so whoever writes the
-  # summary links the picture of the point it describes without matching times itself (user, 2026-10-28; yanhe-agent's
-  # `query` did the same).
+  # summary links the picture of the point it describes without matching times itself.
   kind, pictures = shown_pictures(manifest)
   stills = kind == 'screen page' and (manifest.get('layout') or {}).get('kind') == 'camera'
   if stills:
@@ -471,10 +470,10 @@ def _process_locked(
     except media.MediaError:
       picture = None
 
-    # AutoSlides Extractor, when installed, finds the screen pages (user decision, 2026-10-29): tuned on many lecture
-    # recordings, it keeps slides turned within seconds that our page rules dropped as passing states. The steps of one
-    # slide that it keeps are merged here; pages it keeps too many are left to whoever writes the summary to drop.
-    # Without it, or when it fails, our own page search runs. Not by default on a screen filmed by a camera: on the
+    # AutoSlides Extractor, when installed, finds the screen pages: tuned on many lecture recordings, it keeps slides
+    # turned within seconds that our page rules dropped as passing states. The steps of one slide that it keeps are
+    # merged here; pages it keeps too many are left to whoever writes the summary to drop. Without it, or when it
+    # fails, our own page search runs. Not by default on a screen filmed by a camera: on the
     # projection in 线性代数 it kept one slide in 100 minutes, the camera's noise and the speaker never letting a page
     # count as stable.
     use_extractor = extract_slides or (
@@ -506,7 +505,7 @@ def _process_locked(
 
     pages, pages_found, shown_s = [], 0, None
     # In a video without a screen region, such as stock footage with a chart or a screenshot now and then, the
-    # pictures held still are what is shown; moving footage never stays still long enough (user report, 2026-10-29).
+    # pictures held still are what is shown; moving footage never stays still long enough.
     if (region and not slide_result) or found.kind == 'camera':
       status(f'{video.name}: looking for screen pages' if region else f'{video.name}: looking for still pictures')
       page_candidates, shown_s = media.screen_pages(video, temporary / 'pages', region or 'null', duration_s=length)

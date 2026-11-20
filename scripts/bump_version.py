@@ -5,7 +5,7 @@ the version; tests/test_cli.py::test_versions_match checks they agree. Each file
 expected, or nothing is written. The release notes, docs/releases/v<version>.md, are written by hand; the script says
 when they are missing.
 
-A pre-release (user request, 2026-10-29: 0.9.2-beta before 0.9.2) is written the semantic-versioning way everywhere
+A pre-release (e.g. 0.9.2-beta) is written the semantic-versioning way everywhere
 but in Python's packaging, which spells it its own way (PEP 440: 0.9.2b0), so pyproject.toml, uv.lock and the wheel's
 file name carry that; the tag and the release folder keep the first. README.md keeps the links of the last full
 release during a pre-release, so people reading it install that one.

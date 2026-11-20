@@ -86,10 +86,9 @@ def _thin(items, count):
 
 def plan(asset, manifest, budget, work_dir, source=None):
   """What goes into `budget` images: every screen page and every frame, each alone or on contact sheets, with the
-  first of LAYOUTS that fits (user decision, 2026-10-30: frames thinned to fit the room left after the pages left 66 of
-  a video's 115 pictures never sent, so never judged). Only when even 3x3 sheets do not fit are pictures left out,
-  evenly: frames down to one sheet, then pages. Returns ('page' | 'sheet' | 'frame' | 'frame-sheet', file, [(second,
-  relative)]) per image, (pages, frames) per row, and the number of pictures left out. `source(relative)` gives the
+  first of LAYOUTS that fits so frames are not left unsent and unjudged. Only when even 3x3 sheets do not fit are
+  pictures left out, evenly: frames down to one sheet, then pages. Returns ('page' | 'sheet' | 'frame' | 'frame-sheet',
+  file, [(second, relative)]) per image, (pages, frames) per row, and the number of pictures left out. `source(relative)` gives the
   file to use for a picture (default: the picture itself), such as a copy with a label printed on it."""
   source = source or (lambda relative: asset / relative)
   shown = pages(manifest)

@@ -42,10 +42,9 @@ function otherRouteLabels() {
   );
 }
 
-// The model and thinking level each route runs with, chosen on the summary page and kept per route (user requests,
-// 2026-10-29: not only the configured default, for agents too, from a full list read without spending tokens, and
-// the thinking level). Empty means the route's own default. The lists come from models.js through the main process,
-// read once per route while the window is open; a model not in the list is typed in under 自定义….
+// The model and thinking level each route runs with, chosen on the summary page and kept per route. Empty means the
+// route's own default. The lists come from models.js through the main process, read once per route while the window is
+// open; a model not in the list is typed in under 自定义….
 const CUSTOM_MODEL = '\u0000custom';
 export const modelFor = (route) => (state.settings.routeModels || {})[route] || '';
 export const effortFor = (route) => (state.settings.routeEfforts || {})[route] || '';
@@ -392,7 +391,7 @@ $('export-zip').onclick = async () => {
   window.va.reveal(file);
 };
 
-// For chat AIs that take files one by one up to a limit (user request, 2026-10-28): the prompt and numbered pictures.
+// For chat AIs that take files one by one up to a limit: the prompt and numbered pictures.
 $('export-folder').onclick = async () => {
   const video = pageVideo();
   const limit = Math.max(2, Number($('export-limit').value) || 50);
@@ -407,7 +406,7 @@ $('export-folder').onclick = async () => {
   window.va.reveal(folder);
 };
 
-// The DeepSeek route's rounds at most (user request, 2026-10-30), kept for the next task.
+// The DeepSeek route's rounds at most, kept for the next task.
 $('rounds-limit').onchange = async () => {
   const limit = Math.max(1, Math.round(Number($('rounds-limit').value)) || 6);
   $('rounds-limit').value = limit;

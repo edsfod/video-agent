@@ -13,12 +13,12 @@ const { send } = shared;
 const deepseek = require('./deepseek');
 const { cliCommand, runToEnd } = require('./programs');
 
-// A runaway limit, said when reached: a chat AI whose 复查 keeps finding something stops here (docs/product-rules.md); the user
-// sets it on the summary page (user request, 2026-10-30).
+// A runaway limit, said when reached: a chat AI whose 复查 keeps finding something stops here (docs/requirements.md);
+// configurable on the summary page.
 const MAX_ROUNDS = 6;
-// A conversation goes on to a new one past this many characters said in it since its first message (user request,
-// 2026-10-30), about 4 rounds on a talk, as every message makes DeepSeek read the whole conversation again: 89,000 tokens
-// grew to 160,000 in six rounds. pack --new-chat carries what the next round needs.
+// A conversation goes on to a new one past this many characters said in it since its first message, about 4 rounds on
+// a talk, as every message makes DeepSeek read the whole conversation again (89,000 tokens grew to 160,000 in six
+// rounds). pack --new-chat carries what the next round needs.
 const NEW_CHAT_AFTER_CHARS = 100000;
 const SOURCE = 'DeepSeek 网页';
 /** The conversations of the running tasks, by task id. @type {Map<string, ReturnType<typeof deepseek.conversation>>} */

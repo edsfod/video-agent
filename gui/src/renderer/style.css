@@ -86,8 +86,8 @@ input[type='text'], input[type='number'], input[type='search'], input[type='pass
   outline: none;
 }
 input:focus, select:focus, textarea:focus { border-color: var(--text-muted); }
-/* Drop-downs drawn like the text fields, with a thin chevron instead of the system's arrow (user report, 2026-10-29:
-   the summary page's model list looked out of place). The chevron is grey, legible on both themes. */
+/* Drop-downs drawn like the text fields, with a thin chevron instead of the system's arrow. The chevron is grey,
+   legible on both themes. */
 select {
   appearance: none;
   padding-right: 30px;

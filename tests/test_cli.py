@@ -645,7 +645,7 @@ def test_an_existing_collection_can_follow_its_list_later(fake_yt_dlp, tmp_path,
   # The first update has no archive yet, so yt-dlp meets abc again; it stays where it was, xyz comes after it.
   names = [Path(video).name for video in collection.load(workspace, '旧')['videos']]
   assert names == ['Clip [abc].mp4', 'Clip xyz [xyz].mp4']
-  # abc was in the folder already: the window does not process it again after the download (user report, 2026-10-28).
+  # abc was in the folder already: the window does not process it again after the download.
   out = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
   assert [(Path(item['path']).name, item['new']) for item in out if 'path' in item] == [
     ('Clip [abc].mp4', False),

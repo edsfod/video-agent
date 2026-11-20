@@ -83,8 +83,7 @@ export function renderAccounts() {
   renderDownloadHint();
 }
 
-// One site's import: from a browser yt-dlp can read, or from a cookies.txt an extension exported (user request,
-// 2026-10-29: show how, or read a chosen browser in one click).
+// One site's import: from a browser yt-dlp can read, or from a cookies.txt an extension exported.
 let cookieSite = null;
 async function openCookieDialog(key) {
   cookieSite = key;

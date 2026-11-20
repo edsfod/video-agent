@@ -1,5 +1,5 @@
 """Summary templates: the rules and template a summary follows. Several exist side by side and each summary can use
-another (user request, 2026-10-29); the chosen one is the `template` setting.
+another; the chosen one is the `template` setting.
 
 The built-in ones ship with the program. The user's are Markdown files in %APPDATA%\\video-agent\\templates: one with a
 built-in's name is the user's edited copy of it, whose first line records which version of the built-in it was copied
@@ -7,7 +7,7 @@ from, so an update that changes the built-in can say so; any other name is a tem
 touch what the user wrote: only a copy never edited since it was made, which holds nothing of the user's, gives way to
 a changed built-in.
 
-One built-in since 2026-11-16 (user decision): 标准 took in 命题分析, which a user's copy keeps as a template of their own.
+One built-in (标准) ships with the program; an existing user copy of 命题分析 stays as a template of their own.
 """
 
 import hashlib

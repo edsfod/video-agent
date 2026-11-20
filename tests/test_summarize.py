@@ -272,7 +272,7 @@ def test_pack_zips_the_prompt_with_frames_at_their_folder_paths(processed, capsy
   assert '我的要求：写短一点' in prompt
   assert '「视频」那一行的开头照抄：视频：sample clip [test] · [打开视频]' in prompt
   assert '我们看看这张图表' in prompt and '# 总结的规则和模板' in prompt
-  # The 字幕改正 section comes after the template with its form, like the template's own sections (user, 2026-10-28).
+  # The 字幕改正 section comes after the template with its form, like the template's own sections.
   assert prompt.index('# 总结的规则和模板') < prompt.index('## 字幕改正\n\n- 错的写法 → 正确写法')
   # The points a chat AI missed come once more after the evidence, and the transcript marks the page on screen.
   assert prompt.rstrip().endswith('整篇放进一个 ````markdown 代码块。') and re.search(
@@ -487,7 +487,7 @@ def test_the_code_block_a_chat_ai_puts_the_summary_in_is_taken_off():
   from video_agent.importer import clean
 
   inner = '# 标题\n\n```python\nprint(1)\n```\n'
-  assert clean(f'````markdown\n{inner}````') == inner  # four backticks, as the material asks (user, 2026-10-28)
+  assert clean(f'````markdown\n{inner}````') == inner  # four backticks, as the material asks
   assert clean('```md\n# 标题\n```') == '# 标题\n'
   assert clean(inner) == inner  # a summary that starts and ends otherwise is left as it is
 
@@ -756,7 +756,7 @@ def test_the_checks_name_what_a_chat_ais_summary_leaves_out(processed, monkeypat
   assert '「要点」' in missing and '「元信息」' in missing and '「需确认」' in missing
   assert '画面调整' in pictures and '00:09:00' in late and '00:00:03–00:00:05' in gap
   # Sections left out on purpose, said in the 复查, are not asked for again; a stretch of speech is named only once,
-  # and left out again it stays out, with no reason asked for (user decision, 2026-11-16).
+  # and left out again it stays out, with no reason asked for.
   review = (
     '\n\n## 画面调整\n\n无\n\n## 复查\n\n- 补上：无\n- 删掉的节：元信息、要点、主线与单元、需留意、需确认（太短）\n'
   )

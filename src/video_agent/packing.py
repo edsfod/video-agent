@@ -41,10 +41,8 @@ CORRECTIONS_SECTION = f"""## 字幕改正（网页 AI 写在总结最后）
 ```"""
 
 
-# After the long evidence, a chat AI has the rules far behind it; DeepSeek's web chat wrote a retelling with mixed-up
-# times and pictures from other points, though the rules said otherwise (user, 2026-10-28). The template's own 自查
-# comes once more at the end, with what only a chat AI has to do, so no rule is written a second time (user,
-# 2026-11-17: one prompt that covers the old one, instead of patches restated in several places).
+# After the long evidence, a chat AI has the rules far behind it. The template's own 自查 comes once more at the end,
+# with what only a chat AI has to do, so no rule is written a second time.
 def reminder(template_text):
   checks = templates.checklist(template_text)
   return '\n\n'.join(
@@ -65,8 +63,8 @@ def reminder(template_text):
 
 
 # From the second round on (summary_review.py): the chat AI goes through the transcript again against its draft, then
-# through the template's 自查, and says what it added, corrected and took out. What goes in is what is worth noting
-# (user decision, 2026-11-16, replacing "every point said" of 2026-10-30, which made summaries long-winded).
+# through the template's 自查, and says what it added, corrected and took out. What goes in is what is worth noting,
+# not every point said.
 def review_section(template_text):
   checks = '按规则里的「自查」逐条对一遍（附在最后）' if templates.checklist(template_text) else '按规则逐条对一遍'
   return f"""请对照前面的字幕复查上一稿，再输出改好的整篇：
@@ -91,8 +89,8 @@ def review_section(template_text):
 ```"""
 
 
-# A chat AI cannot look at the video (user request, 2026-10-29: delete the frames that are no use, add the ones that
-# are missing, over several rounds as an Agent would): it says which pictures it does not need and where one is missing.
+# A chat AI cannot look at the video: it says which pictures it does not need and where one is missing, so rounds can
+# converge like an Agent looking at the video.
 PICTURES_SECTION = f"""## {picture_review.HEADING}（网页 AI 写在总结最后）
 
 你看不到视频，只看得到附上的画面，附上的也不一定齐。所以写完后要做两件事，结果写在总结最后这一节，每行一条：
@@ -143,8 +141,8 @@ LABEL_NOTE = (
   '每张图（总图里的每一页）左下角印着编号和时间，如「#12 00:03:14」。认图以图上印的编号为准，不要按上传的先后顺序去'
   '对；写总结时链接那个编号在下表里对应的路径。'
 )
-# Pictures go on contact sheets only to fit a file limit; the summary links each picture itself (user decision,
-# 2026-10-30), and a split screen inside one cell is not two pictures.
+# Pictures go on contact sheets only to fit a file limit; the summary links each picture itself, and a split screen
+# inside one cell is not two pictures.
 SHEET_NOTE = (
   '总图只是为了凑进文件数：总图里一格是一张图，每格左下角都有它自己的编号和时间，按编号和时间分格。一格里分成几块的'
   '（讲者和屏幕并排的分屏、画中画）仍是同一张图：没有自己编号和时间的那一块不是另一张图，不要拆成两张来描述或链接。'
@@ -152,9 +150,8 @@ SHEET_NOTE = (
 )
 
 
-# A next round in a new conversation (user request, 2026-10-30): the chat AI has nothing of the one before, so the
-# message holds what it needs and no more: the rules, the transcript, the pictures of the current set, the round's
-# request and the draft.
+# A next round in a new conversation: the chat AI has nothing of the one before, so the message holds what it needs and
+# no more: the rules, the transcript, the pictures of the current set, the round's request and the draft.
 NEW_CHAT_NOTE = (
   '这是同一个视频总结的复查。之前的对话太长，换了一个新对话，那边的内容你看不到。下面先是总结的规则和全部材料，最后是这'
   '一轮的要求和上一稿。不要从头另写：照最后的要求改好上一稿，再输出整篇。'

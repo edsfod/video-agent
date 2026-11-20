@@ -5,7 +5,7 @@ const path = require('node:path');
 const fs = require('node:fs');
 const { DEFAULT_LIMITS } = require('./tasks');
 
-// 外观 in the settings (user request, 2026-10-28): follow Windows, or always light or dark.
+// 外观 in the settings: follow Windows, or always light or dark.
 const THEMES = ['system', 'light', 'dark'];
 const settingsFile = () => path.join(app.getPath('userData'), 'settings.json');
 // Cookies exported for one download at a time; removed when the download ends and at start (after a crash).
@@ -24,20 +24,20 @@ function defaults() {
     updateMirror: '',
     limits: DEFAULT_LIMITS, // tasks of each kind that may run at once (see tasks.js)
     processAfterDownload: true, // downloaded files are processed, so their subtitles are imported at once
-    // Compressing replaces the file (user decision, 2026-10-28): on for this program's downloads, off for videos added
-    // from disk until the user agrees to have them replaced.
+    // Compressing replaces the file: on for this program's downloads, off for videos added from disk until the user
+    // agrees to have them replaced.
     compressDownloads: true,
     compressLocal: false,
-    // A video without subtitles is transcribed with BCut, which uploads its audio to Bilibili: on unless the user turns
-    // it off, also for videos processed after a download (user decision, 2026-10-28). The CLI still needs the flag.
+    // A video without subtitles is transcribed with BCut, which uploads its audio to Bilibili: on unless turned off,
+    // also for videos processed after a download. The CLI still needs the flag.
     bcut: true,
-    // AutoSlides Extractor finds the screen pages where it is installed (user decision, 2026-10-29).
+    // AutoSlides Extractor finds the screen pages where it is installed.
     extractor: true,
     // Other agents shown as summary routes, [{ key, command }]: a key of AGENTS or 'custom', and its command line, where
     // {prompt} stands for the task if it takes no standard input. null shows the presets found on this computer.
     agents: null,
     webFiles: 50, // files a chat AI takes at once, for 导出文件夹 (DeepSeek's web chat: 50)
-    webRounds: 6, // rounds of the DeepSeek route at most, set on the summary page (user request, 2026-10-30)
+    webRounds: 6, // rounds of the DeepSeek route at most, set on the summary page
   };
 }
 

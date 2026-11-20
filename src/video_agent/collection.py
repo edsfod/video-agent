@@ -1,14 +1,13 @@
 """Collections: an ordered set of related videos, such as a course, a series, a playlist or a workshop, with files of
-their own (docs/design/collections.md). Generalised from yanhe-agent's course handling (user decision,
-2026-10-28): nothing here assumes lectures.
+their own (docs/design/collections.md). Nothing here assumes lectures.
 
 A collection lives in `<workspace>/合集/<name>/`: `collection.json` (the videos in order, shared terms, skipped videos
 and why), `合集总结.md` (overview) and `学习提纲.md` (study guide with self-test questions). Each video keeps its own
 folder and `总结.md`; the collection's files link to them.
 
-A collection may follow a source, such as a Bilibili season or a playlist that is still growing (user request,
-2026-10-28): `collection.json` keeps its link and download folder, and `downloaded.txt` beside it is yt-dlp's download
-archive, the ids already fetched, so an update downloads only the new videos and adds them at the end.
+A collection may follow a source, such as a Bilibili season or a playlist that is still growing: `collection.json`
+keeps its link and download folder, and `downloaded.txt` beside it is yt-dlp's download archive, the ids already
+fetched, so an update downloads only the new videos and adds them at the end.
 """
 
 import json

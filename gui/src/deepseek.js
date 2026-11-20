@@ -1,7 +1,7 @@
-// DeepSeek's web chat (chat.deepseek.com) in a window of its own, used as a person would use it: the user signs in
-// there, and ask() attaches the files, types the text, sends it and reads the answer (user decision, 2026-10-29: the
-// official page, not a reverse-engineered API). Nothing here knows about videos, so it serves any round of text and
-// files; another chat site would be a module with the same ask().
+// DeepSeek's web chat (chat.deepseek.com) in a window of its own, used through the official page rather than a
+// reverse-engineered API: the user signs in there, and ask() attaches the files, types the text, sends it and reads
+// the answer (docs/design/routes.md). Nothing here knows about videos, so it serves any round of text and files;
+// another chat site would be a module with the same ask().
 //
 // What the page offers, as found on 2026-10-29: a textarea; toggle buttons (.ds-toggle-button, selected with
 // --selected) for DeepThink and Search; a hidden input[type=file] that takes many files; a round send button
@@ -10,7 +10,7 @@
 // code block is a <pre> whose text is the Markdown as written; each attachment, a .ds-animated-size-item in the composer
 // with the file's name as its picture's alt text and a line saying the upload failed when it did. A picture is a card
 // ([role=button]) that, once failed, tries again when clicked, without the file being chosen anew: the page keeps it,
-// and if it has reached the server asks only after it (user report, 2026-10-30; in the page's script as retryFile).
+// and if it has reached the server asks only after it (in the page's script as retryFile).
 // Until the attached pictures are read, the answer's place says 正在分析图片 (Analyzing image) with no .ds-markdown yet.
 // The page only draws while Chromium counts the window as seen, which main.js and backgroundThrottling see to.
 //
@@ -20,8 +20,8 @@
 // rate_limit_reached, shown for a moment if at all, and /api/v0/file/upload_file answers biz_msg "rate limit reached",
 // which the attachment shows as Server busy (seen 2026-10-30).
 //
-// Each conversation has a window of its own (user request, 2026-10-30: DeepSeek summaries at the same time); they share
-// the signed-in session, and a window whose conversation ended well serves the next one.
+// Each conversation has a window of its own so DeepSeek summaries can run side by side; they share the signed-in
+// session, and a window whose conversation ended well serves the next one.
 
 const { BrowserWindow } = require('electron');
 const path = require('node:path');
@@ -35,9 +35,8 @@ const ANSWER_TIMEOUT_MS = 30 * 60 * 1000; // a long DeepThink answer took about 
 /** Windows of conversations that ended, signed in, for the next one. @type {BrowserWindow[]} */
 const idle = [];
 let signedIn = 0; // when a window last found the page signed in, for the windows still showing the sign-in page
-// The limit on sending is the account's, not a conversation's (user report, 2026-10-30: read from the server, two
-// conversations stopped within seconds of each other, at their 6th and 2nd message, and a new one could upload nothing),
-// so the windows share these.
+// The limit on sending is the account's, not a conversation's (docs/reference/deepseek-web.md), so the windows share
+// these.
 let nextSend = 0; // no window sends before this
 let resumeAt = 0; // nor before this, after a refusal
 let refusals = 0; // in a row, each waited on longer
@@ -67,19 +66,15 @@ function open() {
 const COMPOSER = `(() => { let box = document.querySelector('textarea'); for (let i = 0; i < 6 && box?.parentElement; i++) box = box.parentElement; return box; })()`;
 const SEND = `[...(${COMPOSER})?.querySelectorAll('.ds-button--primary.ds-button--circle') || []].pop()`;
 
-// DeepSeek's servers are sometimes busy (user report, 2026-10-29): an upload fails or never ends, or the answer is only
-// a busy notice. A failed upload is tried again from its card (user report, 2026-10-30: all 49 again failed three times
-// over), up to TRIES times, after which the whole message is tried again: it never goes without a file, as the import
-// takes what was sent and not linked for pictures looked at and not needed. Still Server busy by then is waited out as a
-// refusal is, for the same user report: it says nothing is wrong with the file. Uploads that never end,
-// busy notices and answers that never start (user report, 2026-10-30: 正在分析图片 for 8 minutes, the message not on the
-// server) are tried again whole, up to TRIES times, the page loaded again first, which keeps the conversation and
-// empties the box.
+// DeepSeek's servers are sometimes busy: an upload fails or never ends, or the answer is only a busy notice. A failed
+// upload is tried again from its card up to TRIES times, after which the whole message is tried again: it never goes
+// without a file, as the import takes what was sent and not linked for pictures looked at and not needed. Still Server
+// busy by then is waited out as a refusal is, since it says nothing is wrong with the file. Uploads that never end,
+// busy notices and answers that never start (stuck on 正在分析图片 with no message on the server) are tried again whole,
+// up to TRIES times, the page loaded again first, which keeps the conversation and empties the box.
 //
 // A refusal for sending too often is not such a failure: the task waits it out, however long, then goes on with the
-// message it was on (user decision, 2026-10-30), and a gap between messages, across the windows, keeps it from coming.
-// 21 messages in 15 minutes from four conversations at once were refused and still were 14 minutes later; 15 in 20
-// minutes were not (2026-10-30). What the limit is, DeepSeek does not say.
+// message it was on, and a gap between messages, across the windows, keeps it from coming (docs/reference/deepseek-web.md).
 const TRIES = 3;
 const BUSY = /服务器繁忙|稍后再试|server is busy|try again later|并发请求过多|too many concurrent requests/i;
 const UPLOAD_FAILED = /上传失败|重新上传|upload failed|failed to upload|服务器繁忙|server (?:is )?busy/i;
@@ -117,7 +112,7 @@ function conversation() {
   };
 
   // Blocks of earlier answers the page draws after the marking before sending, as it does while a conversation loads,
-  // must not pass for the new one (user report, 2026-10-30: an answer read in a round that never reached the server).
+  // must not pass for the new one if the new message never reached the server.
   const MARK = `document.querySelectorAll('.ds-markdown').forEach((block) => (block.dataset.vaSeen = ''))`;
   const requests = new Map();
   /** @param {any} _ @param {string} method @param {any} event */
@@ -175,8 +170,8 @@ function conversation() {
   /** The reason, if what went out is not what was meant to. @param {string} text @param {string[]} files @param {boolean} newChat */
   function wrongMessage(text, files, newChat) {
     const { parent_message_id: parent, prompt, ref_file_ids: attached } = wire.sent || {};
-    // User report, 2026-10-30: a new task's first message went into the conversation of the task that failed before it,
-    // as one .txt file, with neither the prompt nor the pictures.
+    // Verify the outgoing request matches the intended new chat, prompt and attached files; a stale page state can
+    // otherwise send into a previous conversation or drop the prompt/pictures.
     if (newChat && parent != null) return '这条消息接到了别的对话后面';
     if (typeof prompt === 'string' && prompt.length < text.length / 2) return '提示词没有发全';
     if (Array.isArray(attached) && attached.length < files.length) return `只带上了 ${attached.length} 张图，应该是 ${files.length} 张`;
@@ -267,9 +262,8 @@ function conversation() {
    * @param {(line: string) => void} onStatus @param {() => string} wrong what is wrong with the message that went out
    */
   async function sendAndRead(onStatus, wrong) {
-    // The answers on the page are marked, and the new one is the last block without the mark: the page does not keep
-    // every earlier answer (user report, 2026-10-30: the first round's blocks were gone by the third, so counting them
-    // missed the third answer).
+    // The answers on the page are marked, and the new one is the last block without the mark: the page drops older
+    // answer blocks in later rounds, so counting blocks misses new answers.
     await page(MARK);
     const answered = `(() => { const blocks = document.querySelectorAll('.ds-markdown'); return !!blocks.length && !('vaSeen' in blocks[blocks.length - 1].dataset); })()`;
     const idleIcon = await page(`${SEND}.querySelector('svg path')?.getAttribute('d') || ''`);
@@ -295,9 +289,7 @@ function conversation() {
       if (icon !== idleIcon) writing = true;
       else if ((writing || Date.now() - start > 60000) && started) break;
     }
-    // The last lines reach the page a moment after the button is back (user report, 2026-10-30: the 画面 lines at the
-    // end of four answers were missing as read, though DeepSeek had them), so the answer is read until it stays the
-    // same.
+    // The last lines reach the page a moment after the button is back, so the answer is read until two reads agree.
     const answer = `(() => {
       const blocks = [...document.querySelectorAll('.ds-markdown')];
       const last = blocks[blocks.length - 1];
@@ -328,7 +320,7 @@ function conversation() {
     for (let attempt = 1; ; ) {
       await turn(onStatus);
       await signIn(onStatus);
-      // DeepThink and Search on (user decision, 2026-10-29): search serves the 补充 a summary may add.
+      // DeepThink and Search on: search serves the 拓展 a summary may add.
       await page(`(() => { for (const b of document.querySelectorAll('.ds-toggle-button')) if (!b.classList.contains('ds-toggle-button--selected')) b.click(); })()`);
       wire = { refused: false, answering: false, sent: null };
       let read;
@@ -364,8 +356,8 @@ function conversation() {
   return {
     ask,
     stop: () => (stopped = true),
-    // The window stays open, signed in, for the next conversation; after a failure it closes, as what the page holds of
-    // the message that failed went into the next task's conversation (user report, 2026-10-30).
+    // The window stays open, signed in, for the next conversation; after a failure it closes so leftover page state
+    // cannot leak into the next task's conversation.
     /** @param {boolean} [failed] */
     close: (failed = false) => {
       if (win.isDestroyed()) return;

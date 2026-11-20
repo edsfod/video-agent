@@ -1,8 +1,8 @@
-"""Deleting videos from the workspace (user request, 2026-11-16: one click, several at once): each video's processing
+"""Deleting videos from the workspace: each video's processing
 folder with its transcript, pictures and every summary version, and its place in collections; the video file itself,
 with the subtitle and info files yt-dlp saved beside it, only when this program downloaded it (into the workspace's
 下载 folder or a followed collection's download folder). A video the user added from their own disk stays where it is
-(docs/product-rules.md).
+(docs/requirements.md).
 """
 
 import json

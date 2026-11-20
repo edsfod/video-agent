@@ -18,9 +18,8 @@ const { createTray, createWindow, showWindow } = require('./window');
 global.vaAccounts = { writeCookies: (key, file) => accounts.writeCookies(key, file) };
 
 // Windows tells Chromium which windows other windows cover, and a covered, minimised or off-screen page then draws
-// nothing, not even DeepSeek's answer as it streams in, which deepseek.js reads from the page (user report,
-// 2026-10-30: answers read back incomplete while the DeepSeek window was behind the main one). With this off, and
-// throttling off in that window, it draws as if in front.
+// nothing, so DeepSeek's streamed answer never reaches the DOM that deepseek.js reads. With this off, and throttling
+// off in that window, it draws as if in front.
 app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion');
 
 // --user-data=<dir> keeps test runs away from the user's settings.
