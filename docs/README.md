@@ -1,7 +1,7 @@
 # 文档地图
 
 > 给谁看：要了解、修改这个项目的人和 AI。给用户看的介绍和安装说明在仓库根目录的 [README.md](../README.md)。
-> 现状（2026-11-20）：文档正在按这张表重构，标「待写」的还没写，对应内容暂时在 `archive/2026-11-20/` 里。
+> 重构前的文档在 `archive/2026-11-20/`，冻结，只当查漏的材料。
 
 ## 各篇回答什么
 
@@ -18,7 +18,7 @@
 | [design/distribution.md](design/distribution.md) | 安装包、自带的 FFmpeg、许可和隐私说明、更新签名 | |
 | [design/article-summary.md](design/article-summary.md) | 总结文章（计划中） | |
 | [reference/deepseek-web.md](reference/deepseek-web.md)、[reference/antigravity.md](reference/antigravity.md) | 外部系统的实测事实：DeepSeek 网页版、Antigravity | |
-| [cli.md](cli.md)、[commands.md](commands.md) | 给用户：命令行怎么用、每个命令和选项 | 待译成中文 |
+| [cli.md](cli.md)、[commands.md](commands.md) | 给用户：命令行怎么用、每个命令和选项 | |
 | [development.md](development.md) | 测试、构建、发布、已知问题 | |
 | [conventions.md](conventions.md) | 文档、代码、提交怎么做 | |
 | [writing.md](writing.md) | 仓库里的文字怎么写，为什么 AI 爱写成过程记录、怎么防 | |
