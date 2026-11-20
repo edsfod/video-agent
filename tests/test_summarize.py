@@ -539,6 +539,19 @@ def test_the_picture_section_is_read_in_the_forms_chat_ais_write():
   assert picture_review.take('# 标题\n\n正文\n') == ('# 标题\n\n正文\n', [], [])
 
 
+def test_slides_are_pictures_to_a_round_like_frames():
+  # A round once dropped every slide its draft linked, as links were looked for under frames/ only (2026-11-20).
+  from video_agent import picture_review, summary_review
+
+  paths = ['frames/run/frame-001-00-00-00.jpg', 'slide-extraction/run/slide-119.jpg', 'slides/slide-002.png']
+  text = '\n'.join(f'- 一点 [幻灯片](<{path}>)' for path in paths)
+  assert [match[1] for match in summary_review.LINK.finditer(text)] == paths
+  _, unused, _ = picture_review.take(
+    '正文\n\n## 画面调整\n\n- 不用：' + '、'.join(f'`{path}`' for path in paths) + '\n'
+  )
+  assert unused == paths
+
+
 def test_a_chat_ai_drops_pictures_and_asks_for_others_over_rounds(processed, capsys):
   from video_agent import cli, picture_review, pictures
 

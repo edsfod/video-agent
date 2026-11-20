@@ -87,7 +87,7 @@ def review_section(template_text):
 - 删去：<时间> <删去了什么>（<为什么不值得写>）
 - 删掉的节：<节名>（<为什么没有内容>）
 - 要点不收：<段落标题>（<为什么没有读者必须带走的东西>）
-- 画面：<链接里的 frames/… 路径> <图上有、字幕里没有的内容；没有就写「无」>
+- 画面：<链接里的图片路径> <图上有、字幕里没有的内容；没有就写「无」>
 ```"""
 
 
@@ -217,7 +217,7 @@ def material(video, workspace, *, request='', max_images=40, work_dir=None, max_
     entries = [(relative, labels.path(relative)) for _, relative in shown + found]
     notes.append(
       f'我附上了这个视频的 {len(shown)} 张屏幕页（幻灯片、代码、文档，每页一张）和 {len(found)} 张整幅画面，'
-      '文件名里带时间点。下面材料引用它们时写的是 frames/… 的相对路径：写总结时照材料里的相对路径链接，不要只写'
+      '文件名里带时间点。下面材料引用它们时写的是视频文件夹里的相对路径（frames/…、slide-extraction/…）：写总结时照材料里的相对路径链接，不要只写'
       '文件名。没有附上的画面不要链接。'
       + LABEL_NOTE
       + '\n\n'

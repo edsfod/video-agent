@@ -48,7 +48,7 @@ GAP_S = 120
 # A proposition this far outside its part's range is in the wrong part (times are written to the second, and a point
 # may be said a little before the part it belongs to begins).
 OUTSIDE_S = 60
-LINK = re.compile(r'[ \t]?\[[^\]\n]*\]\(<?(frames/[^)>\n]+)>?\)')
+LINK = re.compile(r'[ \t]?\[[^\]\n]*\]\(<?(' + picture_review.FOLDERS + r'[^)>\n]+)>?\)')
 NOTHING = re.compile(r'^(?:无|没有)?(?=$|[\s（(，,。:：；;—-])')  # 「无」, alone or with a note on why
 TEMPLATE_HEADING = re.compile(r'^##\s+(.+?)\s*$', re.MULTILINE)
 NAME = 'summary-review.json'

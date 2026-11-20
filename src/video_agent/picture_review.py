@@ -19,7 +19,8 @@ UNUSED = re.compile(r'^\s*[-*]?\s*不用\s*[:：]\s*(.+)$')
 WANTED = re.compile(
   rf'^\s*[-*]?\s*补截\s*[:：]\s*`?({CLOCK})`?(?:\s*[-–—~～至到]+\s*`?({CLOCK})`?)?\s*[:：，,]?\s*(.*)$'
 )
-PATH = re.compile(r'frames/[^\s`()（）<>，,；;]+?\.(?:jpe?g|png)', re.IGNORECASE)
+FOLDERS = r'(?:frames|slide-extraction|slides)/'  # where a video's pictures are: frames, screen pages, slides
+PATH = re.compile(FOLDERS + r'[^\s`()（）<>，,；;]+?\.(?:jpe?g|png)', re.IGNORECASE)
 NAME = 'picture-review.json'
 CANDIDATES = 4  # different pictures taken for one span
 SPAN_S = 10.0  # a request for one moment looks at what is shown from then on for this long
