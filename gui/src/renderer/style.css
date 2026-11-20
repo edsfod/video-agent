@@ -322,7 +322,7 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.35); }
 .entry-shown { background: var(--bg-hover); transition: background 0.3s; }
 /* The pictures of a point in 要点, under it; a click opens the picture as any picture link does. */
 .point-pictures { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
-.point-picture {
+.markdown a.point-picture {
   display: inline-flex;
   align-items: center;
   padding: 2px 8px;
@@ -332,7 +332,7 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.35); }
   font-size: 12px;
   text-decoration: none;
 }
-.point-picture:hover { border-color: var(--border-input); background: var(--bg-hover); }
+.markdown a.point-picture:hover { border-color: var(--border-input); background: var(--bg-hover); }
 .settings { width: 560px; padding: 20px 24px; display: flex; flex-direction: column; gap: 10px; }
 .skill-text { overflow: auto; flex: 1; min-height: 0; }
 #import-text { width: 100%; box-sizing: border-box; font-family: var(--mono); font-size: 12px; resize: vertical; }
