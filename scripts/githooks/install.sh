@@ -3,8 +3,8 @@
 root=$(git rev-parse --show-toplevel)
 hooks="$(git rev-parse --git-common-dir)/hooks"
 mkdir -p "$hooks"
-for name in pre-commit commit-msg; do
+for name in pre-commit commit-msg pre-push; do
   printf '#!/bin/sh\nexec "%s/scripts/githooks/%s" "$@"\n' "$root" "$name" > "$hooks/$name"
   chmod +x "$hooks/$name" "$root/scripts/githooks/$name"
 done
-echo "已装：$hooks/pre-commit、$hooks/commit-msg"
+echo "已装：$hooks/pre-commit、$hooks/commit-msg、$hooks/pre-push"

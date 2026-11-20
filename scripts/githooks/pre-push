@@ -1,0 +1,63 @@
+#!/bin/sh
+# 推送前在本机跑这次改动涉及的检查，通过了就直接推到 main，不等 GitHub 的测试（docs/development.md）：
+# 命令行的 ruff、格式、mypy、pytest 和入口；GUI 的类型检查和不开窗口的单元测试；改了打包相关的文件时再打包一次命令行工具。
+# 开窗口的端到端测试，和安装、PATH、更新安装的测试只在 GitHub 上跑。失败时以非 0 退出，挡下这次推送。
+cd "$(git rev-parse --show-toplevel)" || exit 1
+fail() { echo "pre-push：$1 失败，不推送" >&2; exit 1; }
+refs=$(cat)
+
+# 推送的提交都已在远端某个分支上时，已经检查过，不再重跑。
+zero=0000000000000000000000000000000000000000
+new=no
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [ -n "$local_sha" ] && [ "$local_sha" != "$zero" ] || continue
+  [ -n "$(git rev-list "$local_sha" --not --remotes 2>/dev/null | head -1)" ] && new=yes
+done <<EOF_REFS
+$refs
+EOF_REFS
+if [ "$new" = no ]; then
+  echo "pre-push：没有新提交（都已在远端分支上），跳过本机检查" >&2
+  exit 0
+fi
+
+# 和 GitHub 一样按改动挑检查（.github/scripts/changed-jobs.sh）：只改文档什么都不跑。
+cli=false gui=false installer=false
+while read -r local_ref local_sha remote_ref remote_sha; do
+  case "$remote_ref" in refs/heads/*) ;; *) continue ;; esac   # 标签不另外检查
+  [ "$local_sha" = "$zero" ] && continue                       # 删分支
+  base=$(git merge-base "$local_sha" origin/main 2>/dev/null)
+  picked=$(bash .github/scripts/changed-jobs.sh "$base" 2>/dev/null) || picked='cli=true gui=true installer=true'
+  case "$picked" in *cli=true*) cli=true ;; esac
+  case "$picked" in *gui=true*) gui=true ;; esac
+  case "$picked" in *installer=true*) installer=true ;; esac
+done <<EOF_REFS
+$refs
+EOF_REFS
+echo "pre-push：按改动要跑的检查 cli=$cli gui=$gui installer=$installer" >&2
+logs=$(mktemp -d)
+start=$(date +%s)
+if [ "$cli" = true ]; then
+  ( uv run ruff check src tests && uv run ruff format --check src tests && uv run mypy && uv run pytest -q && uvx --from . video-agent --help ) \
+    >"$logs/cli.log" 2>&1 &
+  cli_pid=$!
+fi
+if [ "$gui" = true ]; then
+  ( cd gui && npm run typecheck --silent && node --test --test-concurrency=1 $(ls test/*.test.js | grep -v e2e) ) >"$logs/gui.log" 2>&1 &
+  gui_pid=$!
+fi
+if [ -n "${cli_pid:-}" ] && ! wait "$cli_pid"; then tail -30 "$logs/cli.log" >&2; fail "命令行检查（ruff、pytest；日志在 $logs/cli.log）"; fi
+if [ -n "${gui_pid:-}" ] && ! wait "$gui_pid"; then grep -E "^✖|error TS|Error|expected|actual" "$logs/gui.log" | head -30 >&2; fail "GUI 测试（日志在 $logs/gui.log）"; fi
+[ -n "${cli_pid:-}${gui_pid:-}" ] && echo "pre-push：测试通过，用了 $(( $(date +%s) - start )) 秒" >&2
+packaging=no
+if [ "$installer" = true ] && git diff --name-only "$(git merge-base HEAD origin/main)" HEAD | grep -q -E '^(packaging/|gui/package\.json|\.github/(workflows/test\.yml|actions/))'; then
+  packaging=yes
+fi
+if [ "$packaging" = yes ]; then
+  if [ ! -f build/ffmpeg/bin/ffmpeg.exe ]; then
+    run=$(gh run list -R edsfod/video-agent --workflow test --status success --limit 1 --json databaseId --jq '.[0].databaseId')
+    gh run download -R edsfod/video-agent "$run" -n ffmpeg-lgpl -D build/ffmpeg >/dev/null || fail "下载 CI 的 LGPL FFmpeg"
+  fi
+  echo "pre-push：改了打包相关的文件，本机打包命令行工具并跑冒烟测试（约 2 分钟）" >&2
+  uv run --with pyinstaller --with pillow python packaging/build_cli.py >/dev/null 2>&1 || fail "打包冒烟测试（uv run --with pyinstaller --with pillow python packaging/build_cli.py 看详情）"
+fi
+echo "pre-push：本地检查通过，可以推到 main；GitHub 上的测试随后跑，不用等。" >&2
