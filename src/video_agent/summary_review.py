@@ -1,24 +1,19 @@
-"""Rounds of a chat AI's summary until it holds everything the video says (user request, 2026-10-30: answers that did
-not follow the template ended the rounds after one or two, errors and all, and were thin). Every answer imported from a
-chat AI is checked for what a program can see: the template's sections, the 画面调整 section, the stretches of speech the
-detailed part leaves out, times past the end. A first draft always goes to one round of 复查, in which the chat AI
+"""Rounds of a chat AI's summary until it holds what is worth noting (docs/design/routes.md). Every answer imported from
+a chat AI is checked for what a program can see: the template's sections, the 画面调整 section, the stretches of speech
+the detailed part leaves out, times past the end. A first draft always goes to one round of 复查, in which the chat AI
 goes through the transcript again against its draft and says in a 复查 section what it added and corrected; the rounds
 go on while a 复查 adds or corrects anything, a check finds something or pictures are wanted (`pack --follow-up`).
 How detailed a summary is depends on whether every point, reason, example, number, definition, condition and conclusion
-said is in it, not on its length (user decision): only the chat AI, reading the transcript, can judge that, so its
-复查 says what it found. Likewise for pictures (user decision, 2026-10-30: title cards repeating what was said, the
-speaker and stock footage linked although the rules said not to): the 复查 says for each linked picture what it shows
-that the transcript does not; a link for which it says nothing is taken out, and a picture linked without a word on it
-is named in the next round. Whether a round changed anything is read from the drafts themselves, not from its 复查
-(user report, 2026-10-30: six rounds did not end; the fourth 复查 was the third's word for word, and the sixth listed
-two corrections in a draft equal to the fifth). The state between rounds is in summary-review.json in the video's
-folder.
+said is in it, not on its length: only the chat AI, reading the transcript, can judge that, so its 复查 says what it
+found. Likewise for pictures: the 复查 says for each linked picture what it shows that the transcript does not; a link
+for which it says nothing is taken out, and a picture linked without a word on it is named in the next round. Whether
+a round changed anything is read from the drafts themselves, not from its 复查 alone, so repeated or no-op 复查 lines
+do not loop. The state between rounds is in summary-review.json in the video's folder.
 
-What is worth writing is the summary's judgement, not every minute (user decision, 2026-11-16: requiring every stretch
-made summaries long-winded): a stretch of speech no part covers is named only when it is long (GAP_S), and only once;
-left out again, it stays out. What the checks do insist on is that 要点 leaves nothing important out: a part of the
-detailed notes with no line in 要点 is named, unless the 复查 says why it has none; and a proposition whose time lies
-outside its part's range is named (the first NJU lecture put 01:21:20 in a part of 01:24:19–01:39:59).
+What is worth writing is the summary's judgement, not every minute: a stretch of speech no part covers is named only
+when it is long (GAP_S), and only once; left out again, it stays out. What the checks do insist on is that 要点 leaves
+nothing important out: a part of the detailed notes with no line in 要点 is named, unless the 复查 says why it has none;
+and a proposition whose time lies outside its part's range is named.
 """
 
 import difflib
@@ -48,7 +43,7 @@ GAP_S = 120
 # A proposition this far outside its part's range is in the wrong part (times are written to the second, and a point
 # may be said a little before the part it belongs to begins).
 OUTSIDE_S = 60
-LINK = re.compile(r'[ \t]?\[[^\]\n]*\]\(<?(' + picture_review.FOLDERS + r'[^)>\n]+)>?\)')
+LINK = re.compile(r'[ \t]?\[(?:\\.|[^\]\n])*\]\(<?(' + picture_review.FOLDERS + r'[^)>\n]+)>?\)')
 NOTHING = re.compile(r'^(?:无|没有)?(?=$|[\s（(，,。:：；;—-])')  # 「无」, alone or with a note on why
 TEMPLATE_HEADING = re.compile(r'^##\s+(.+?)\s*$', re.MULTILINE)
 NAME = 'summary-review.json'

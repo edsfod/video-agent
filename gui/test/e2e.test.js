@@ -103,8 +103,8 @@ function fakeDeepSeekApi() {
 
 // The packaged build (VA_E2E_EXE, in CI's installer job) runs only the tests that reach what packaging changes: the
 // bundled CLI and FFmpeg, the plugin and skill files under resources, the licence and privacy files, the terminal's
-// native module, the tray icon and cookie encryption. The rest, declared with devTest, run on the unpackaged app alone (user request, 2026-10-29: the
-// whole suite ran twice).
+// native module, the tray icon and cookie encryption. The rest, declared with devTest, run on the unpackaged app alone
+// so the whole suite does not run twice.
 const devTest = (name, fn) => test(name, { skip: !!process.env.VA_E2E_EXE && 'runs on the unpackaged app' }, fn);
 
 let app;
@@ -226,14 +226,14 @@ const FAKE_DEEPSEEK = `<!doctype html><meta charset="utf-8"><title>DeepSeek</tit
       document.getElementById('chat').append(answer);
       icon.setAttribute('d', 'M8 1');
       // The last line reaches the page after the button is back, as on the real page.
-      if (!busy) setTimeout(() => (code.textContent += next ? '- 删掉的节：元信息、要点、主线与单元、时间线、详细内容、需留意、需确认（测试视频只有 8 秒）\\n' : '- 补截：00:00:01–00:00:06 彩条\\n'), 1000);
+      if (!busy) setTimeout(() => (code.textContent += next ? '- 删掉的节：元信息、要点、主线与单元、详细内容、需留意、需确认（测试视频只有 8 秒）\\n' : '- 补截：00:00:01–00:00:06 彩条\\n'), 1000);
     }, 2500);
   };
 </script>`;
 
 // Every confirm() is accepted unless a test asks for the other answer (refuse). They are answered inside the page:
 // Electron shows confirm() and alert() as native message boxes, which Windows brings onto the screen even for a window
-// placed off it (user report, 2026-10-29: two showed on the desktop during a test run).
+// placed off it.
 const answerDialogs = () =>
   page.evaluate(() => {
     window.vaRefuse = false;
@@ -594,8 +594,7 @@ devTest('a collection lists its videos and copies the material for its overview'
   await page.waitForSelector('#video:not([hidden])');
   assert.equal(await page.isVisible('#collection-list .collection-item.active'), true, 'its collection is marked');
   assert.match(await page.textContent('#video-collection'), /测试合集 · 第 1 集/);
-  // A list that cannot be read keeps what was shown and is read again (user report, 2026-10-29: one failed read put
-  // every episode under 视频).
+  // A list that cannot be read keeps what was shown and is read again instead of dumping episodes under 视频.
   const stored = path.join(WORKSPACE, '合集', '测试合集', 'collection.json');
   const good = fs.readFileSync(stored, 'utf8');
   fs.writeFileSync(stored, '{ broken');
@@ -610,7 +609,7 @@ devTest('a collection lists its videos and copies the material for its overview'
   await page.waitForSelector('#video-list .video-item');
   await page.click('#video-list .video-item');
   await page.waitForSelector('#video:not([hidden])');
-  // Clicking the open video or collection again goes back to the start page (user request, 2026-10-29).
+  // Clicking the open video or collection again goes back to the start page.
   await page.click('#video-list .video-item.active');
   await page.waitForSelector('#empty:not([hidden])');
   await page.click('#collection-list .collection-item');

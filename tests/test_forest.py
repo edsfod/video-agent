@@ -1,6 +1,6 @@
 """主线与单元 laid out by the program from the relations in 详细内容 (forest.py)."""
 
-from video_agent import forest, templates
+from video_agent import forest, summary_review, templates
 
 BODY = """## 详细内容
 
@@ -58,7 +58,9 @@ def test_what_the_program_cannot_lay_out_is_told_to_the_writer():
   text = BODY.replace('；P7 总结者归纳', '') + '- **P13** `观点` ← P99 用了不存在的编号。\n'
   _, problems = forest.build(text)
   assert any('P99' in problem for problem in problems)
-  assert any(problem.startswith('P7 接到了主结论 P11，「接上」里却没写') for problem in problems)
+  assert any(
+    problem.startswith('P7 接到了主结论 P11，「接上」里却没写') and '时间和转述' in problem for problem in problems
+  )
 
 
 def test_no_main_line_without_a_join_and_no_section_without_relations():
@@ -115,6 +117,44 @@ def test_points_link_their_numbers_and_bring_the_pictures_of_their_items():
   assert forest.place(text, rules)[0] == text
   # A template that leaves 主线与单元 to the writer leaves 要点 alone too.
   assert forest.place(written, '## 主线与单元\n\n照我说的写\n') == (written, [])
+
+
+def test_points_clean_stray_dots_after_drop_links_and_keep_pictures_after_join():
+  rules = templates.built_in(templates.STANDARD)
+  body = (
+    BODY.replace(
+      '一个观测。[画面：图](frames/run/frame-001-00-01-00.jpg)',
+      r'一个观测。[画面：\[A\] 图](frames/run/frame-001.jpg) [画面：图2](frames/run/frame-002.jpg)',
+    ).rstrip()
+    + '\n  - 总结图 [画面：总览](frames/run/frame-011.jpg)\n'
+  )
+  items, _ = forest.parse(body)
+  assert items['1'].pictures == [r'[画面：\[A\] 图](frames/run/frame-001.jpg)', '[画面：图2](frames/run/frame-002.jpg)']
+  assert items['11'].pictures == ['[画面：总览](frames/run/frame-011.jpg)']
+  first = (
+    '# 标题\n\n## 要点\n\n'
+    '- `00:01:00`–`00:02:00` 观测（**P1**）\n'
+    '- `00:18:00`–`00:20:00` 总结（**P11**）\n'
+    '- `00:01:00`–`00:02:00` 已有图（**P1**） [画面：图2](frames/run/frame-002.jpg)\n\n' + body
+  )
+  round1, _ = forest.place(first, rules)
+  assert (
+    r'- `00:01:00`–`00:02:00` 观测（[**P1**](#P1)） · [画面：\[A\] 图](frames/run/frame-001.jpg) · '
+    '[画面：图2](frames/run/frame-002.jpg)\n'
+  ) in round1
+  assert '- `00:18:00`–`00:20:00` 总结（[**P11**](#P11)） · [画面：总览](frames/run/frame-011.jpg)\n' in round1
+  # A picture already on the point line is not appended a second time.
+  assert (
+    r'- `00:01:00`–`00:02:00` 已有图（[**P1**](#P1)） [画面：图2](frames/run/frame-002.jpg) · '
+    r'[画面：\[A\] 图](frames/run/frame-001.jpg)' + '\n'
+  ) in round1
+  # When a review round drops pictures before forest.place runs, no stray ' ·' stays on the point line.
+  dropped, _ = summary_review.drop_links(
+    round1, {'pictures': {'frames/run/frame-001.jpg': '', 'frames/run/frame-011.jpg': ''}}
+  )
+  round2, _ = forest.place(dropped, rules)
+  assert '- `00:01:00`–`00:02:00` 观测（[**P1**](#P1)） · [画面：图2](frames/run/frame-002.jpg)\n' in round2
+  assert '- `00:18:00`–`00:20:00` 总结（[**P11**](#P11)）\n' in round2
 
 
 def test_an_agents_draft_is_saved_with_the_section_laid_out_and_told_what_the_program_could_not_lay_out(

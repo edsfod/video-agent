@@ -1,4 +1,4 @@
-"""主线与单元, built from 详细内容 (user decision, 2026-11-20; docs/design/summary.md).
+"""主线与单元, built from 详细内容 (docs/design/summary.md).
 
 The model makes each judgment once, in 详细内容: what each proposition says (its line is the claim in one sentence, the
 particulars in lines under it), how propositions relate (`← P1, P2` support, `反驳 P4`, `步骤 P39` a step of an event),
@@ -8,7 +8,7 @@ part of 详细内容 its root is in; the main line is the item with `接上：` 
 once, items related to nothing stay out, and each number links to its entry in 详细内容.
 
 要点 is written by the model, one line per point with the numbers it stands on; the program links those numbers to 详细内容
-and brings each line the pictures linked on its items there (user decision, 2026-11-20), so a picture is linked once.
+and brings each line the pictures linked on its items there, so a picture is linked once.
 """
 
 import re
@@ -21,11 +21,13 @@ ITEM = re.compile(r'^(\s*)[-*]\s*\*\*P(\d+)\*\*(.*)$')
 TOKEN = re.compile(r'\s*(`[^`\n]*`|（[^）\n]*）|\([^)\n]*\)|(←|反驳|步骤)\s*((?:P\d+[\s,，、和]*)+))')
 TIME = re.compile(rf'^`{CLOCK}`$')
 JOIN = re.compile(r'^\s+[-*]\s*接上\s*[:：]\s*(.+)$')
-LINK = r'\[[^\]\n]*\]\(<?(?:frames|slide-extraction|slides)/[^)\n]*\)'
+LINK = r'\[(?:\\.|[^\]\n])*\]\(<?(?:frames|slide-extraction|slides)/[^)\n]*\)'
+LINK_PATH = re.compile(r'(?<!\\)\]\(<?([^)>\n]*)')
 PICTURE = re.compile(rf'\s*{LINK}')
 POINTS = '要点'
 POINT = re.compile(r'^([ \t]*[-*][ \t]+)(.*)$', re.MULTILINE)
-ADDED = re.compile(rf'(?: · {LINK})+\s*$')  # the pictures the program put at the end of a point
+# Pictures the program put at the end of a point, including a bare ' ·' left if drop_links took a picture out first.
+ADDED = re.compile(rf'(?:\s*·(?:\s*{LINK})?)+\s*$')
 NUMBER = re.compile(r'\[?\*\*P(\d+)\*\*\]?(?:\(#P\d+\))?|(?<![A-Za-z0-9#])P(\d+)(?![0-9])')
 UP = {'support': 0, 'attack': 1, 'step': 1}  # which end of a relation is above: 0 the item written first, 1 the other
 OWN = re.compile(r'^###\s+`?拓展`?\s.*?(?=^#{2,3}\s|\Z)', re.MULTILINE | re.DOTALL)  # a unit of the writer's own
@@ -82,12 +84,12 @@ def parse(text):
       continue
     join = JOIN.match(line)
     if join and current:
-      owner = None
       for entry in re.split(r'[；;]', join[1]):
         number = re.search(r'P(\d+)', entry)
         if number:
           current.joins.append((number[1], entry[number.end() :].strip(' ：:，,')))
-    elif owner and line.strip():
+      continue
+    if owner and line.strip():
       if len(line) - len(line.lstrip()) > depth:
         owner.pictures += re.findall(LINK, line)
       else:
@@ -116,13 +118,14 @@ def enrich_points(text, items, relations):
       lambda match: f'[{match[0]}](#P{match[1]})' if match[1] in items else match[0],
       body,
     )
-    pictures, paths = [], set()
+    pictures = []
+    paths = {LINK_PATH.search(match[0])[1] for match in re.finditer(LINK, body)}
     for n in dict.fromkeys(named):
       links = items[n].pictures or [
         link for lower in sorted(set(under.get(n, [])), key=order.get) for link in items[lower].pictures
       ]
       for link in links:
-        path = re.search(r'\]\(<?([^)>\n]*)', link)[1]
+        path = LINK_PATH.search(link)[1]
         if path not in paths:
           paths.add(path)
           pictures.append(link)
@@ -246,7 +249,7 @@ def build(text):
         said = sources.get(other)
         if said is None:
           problems.append(
-            f'P{other} 接到了主结论 P{main.number}，「接上」里却没写这层关系的出处：讲者把它接到主结论的原话（时间和原话），'
+            f'P{other} 接到了主结论 P{main.number}，「接上」里却没写这层关系的出处：讲者把它接到主结论的时间和转述（不加引号），'
             '或「总结者归纳」。'
           )
         note = f'（来自单元：P{unit_root[key]}；{said or "出处没写"}）'
