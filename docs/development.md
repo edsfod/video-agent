@@ -10,7 +10,9 @@
   - 每个测试结束都关掉打开的对话框、恢复替换掉的文件对话框，一个失败不连累后面的。
   - 端到端测试平时从源码跑；对着解包后的安装包只重跑打包会影响到的那部分和更新测试，其余用 `devTest` 声明。
   - `gui/test/agents.test.js` 只在设了 `VA_E2E_AGENTS` 时调用真的 Agent。
+  - `gui/test/update-install.test.js` 用拒绝单请求多字节范围的本地测试服务器模拟 github.com 的行为，验证差量下载。
 - 测试等状态，不等时间。
+- 界面改动除跑测试外，也在本地打开开发窗口实查（用户 2026-10-28 定）。
 
 ## 在哪里跑
 
@@ -27,7 +29,7 @@
 ## 发布
 
 1. 用户说发布后：`uv run scripts/bump_version.py <版本>`，手写 `docs/releases/v<版本>.md`，打标签推送。
-2. 标签触发 `.github/workflows/release.yml`：构建、测试打包后的程序、用 Ed25519 签名 `latest.yml`、建草稿并附上 FFmpeg 源码。
+2. 标签触发 `.github/workflows/release.yml`：构建、测试打包后的程序、用 Ed25519 签名 `latest.yml`、建草稿并附上 FFmpeg 源码。发布流程在标签上独立构建、不复用分支 CI 的安装包产物，既能和 CI 并行、也保留标签自己的构建记录。
 3. 检查，全过就发布草稿，不等审阅：
    - 签名的 `latest.yml` 校验通过，里面的大小和安装包一致（`gui/src/update-signature.js` 的 `verify`）；
    - FFmpeg、dav1d、SVT-AV1 源码包的摘要和 `packaging/ffmpeg/build.sh` 里固定的值一致；
@@ -37,7 +39,7 @@
 
 ## 截图
 
-README 的截图在 `docs/images/`，由 `npm run screenshots` 生成，素材是 NASA 的公共领域视频 GSFC_20181108_FERMI_m13042_Luck4K 和它的官方字幕（images.nasa.gov），按 NASA 的媒体使用要求附 AI 输出的免责说明。重做：从 images.nasa.gov 下载 `~medium.mp4` 和 `.srt` 到同名的中性文件夹，`process`，用中文要求 `summarize`，`frame` 补截一张，再跑脚本。
+README 的截图在 `docs/images/`，由 `gui/` 下的 `npm run screenshots -- <工作区> <视频>`（`gui/scripts/screenshots.js`）生成，每张左右拼合浅色和深色主题。当前素材是南京大学《生成式软件工程》第 1 讲「欢迎来到未来」（蒋炎岩，B 站公开课）和它的导入总结，复制在不含本机个人路径的中性文件夹里生成，README 末尾附讲者署名和 AI 输出免责说明。
 
 ## 已知问题
 

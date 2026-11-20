@@ -1,6 +1,6 @@
 # Release log
 
-What was checked by hand before the first release, and how each release was checked and published. The release notes are `releases/v<version>.md`; the procedure is in [Updates](decisions/updates.md).
+What was checked by hand before the first release, and how each release was checked and published. The release notes are `releases/v<version>.md`; the procedure is in [development.md](development.md).
 
 ## Checked by hand (2026-10-26 and 2026-10-27)
 
