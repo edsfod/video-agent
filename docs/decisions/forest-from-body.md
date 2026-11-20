@@ -44,8 +44,11 @@ The two identities of a unit (its own tree; what serves the main line, written i
 
 Unit titles chosen by the model, and units grouping unrelated trees by topic. For a video that does not argue, the rule "units are the topics" goes with it: its forest is empty and the parts of 详细内容 carry the topics.
 
+## First rerun (2026-11-20, Antigravity, Gemini 3.8 Flash)
+
+Both lectures followed the format: relations on the proposition lines (lecture 1: 36 support, 1 objection, 1 step; lecture 2: 23, 1, 2), a `接上：` line under the main conclusion, nothing the program could not lay out, and lecture 2's `拓展` unit kept. Proposition lines got shorter (median 56 characters in lecture 1, 78 in lecture 2, against 70–92 before; 2 and 16 over 80). The Excel QR-code tree (P42 → P43) is in lecture 1's forest. What is left is judgment: lecture 1 gave all eight links as the speaker's, with words that are mostly the summarizer's paraphrase of the point rather than the speaker linking it (01:08:36 「CS 专业人员清楚边界，人只驻守高风险校验接口」 against the transcript's 「因为我是一个 cs professional，所以我知道边界在哪里」; 01:39:08 quotes 「你的稀缺性是方向、验证与责任」 where the speaker asks the 保研 question); lecture 2's quotes are close to the transcript.
+
 ## Next
 
-- Rerun both lectures with these rules and compare.
 - A review for judgment errors with a slice of the transcript (discussed 2026-11-20, not decided): the parts' time ranges and the items' times give the range a question needs; a command such as `video-agent excerpt VIDEO 01:05:15-01:14:40` would print that stretch of `summary-context.md`; an Agent would be pointed at it, and a chat AI given it in a new conversation, its answer merged back by number.
 - 时间线 could be derived the same way (one line per part); not done.
