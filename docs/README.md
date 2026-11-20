@@ -1,7 +1,7 @@
 # 文档地图
 
 > 给谁看：要了解、修改这个项目的人和 AI。给用户看的介绍和安装说明在仓库根目录的 [README.md](../README.md)。
-> 现状（2026-11-20）：文档正在按这张表重构，标「待写」的还没写，对应内容暂时在 `ARCHITECTURE.md` 和 `archive/2026-11-20/` 里。
+> 现状（2026-11-20）：文档正在按这张表重构，标「待写」的还没写，对应内容暂时在 `archive/2026-11-20/` 里。
 
 ## 各篇回答什么
 
@@ -9,7 +9,7 @@
 |---|---|---|
 | [requirements.md](requirements.md) | 要解决什么、怎样算做成、范围和约束 | |
 | [summary-requirements.md](summary-requirements.md) | 总结提示词要让模型做到的每一件事，各写在提示词的哪里 | 待改：去掉重写前的「旧位置」 |
-| design/architecture.md | 由哪些部分组成、数据怎么流、磁盘上的文件、部分之间的边界 | 待写（现在是 `ARCHITECTURE.md`） |
+| [design/architecture.md](design/architecture.md) | 由哪些部分组成、数据怎么流、磁盘上的文件、部分之间的边界 | |
 | design/processing.md | 字幕、画面布局和屏幕页、课件、代表画面、补截、压缩 | 待写 |
 | design/summary.md | 总结的规则和模板、主线与单元、版本、画面集、检查和多轮复查 | 待写 |
 | design/routes.md | 几种写总结的方式：Agent、Antigravity、模型 API、网页 AI 和 DeepSeek 网页版 | 待写 |
