@@ -19,7 +19,7 @@
 ## 二、模板
 
 - 自带一个「标准」（用户 2026-11-16 定）。用户的模板是 `%APPDATA%\video-agent\templates\` 下的 Markdown 文件。
-- 和自带模板同名的，是用户改过的副本，处处代替自带的。副本第一行记着它来自哪一版自带模板：自带模板更新后，`template` 提示、`template --info` 报 `outdated`，并把新版写进 `templates\.defaults\` 供对比；`--accept` 记下已经合并。更新从不改用户的文件；从没改过的副本没有用户的东西，自动换成新版。用户改过的旧自带模板 `命题分析` 副本保留为用户自己的模板；0.9.3 之前的单文件 `%APPDATA%\video-agent\summary.md` 自动迁移。
+- 和自带模板同名的，是用户改过的副本，处处代替自带的。副本第一行记着它来自哪一版自带模板：自带模板更新后，`template` 提示、`template --info` 报 `outdated`，并把新版写进 `templates\.defaults\` 供对比；`--accept` 记下已经合并。更新从不改用户的文件；从没改过的副本没有用户的东西，自动换成新版。
 - 选模板：`template --use NAME`；`summarize`、`pack` 可以用 `--template NAME` 只指定这一次。桌面程序的任务记下加入时的模板交给命令行，并让 Agent 照 `video-agent template "NAME"` 写。
 - `SKILL.md` 只读：每次更新都会替换插件文件，改了会丢；个人偏好写进模板。
 - 桌面程序里：总结页的模板下拉框（合集总结和学习提纲也用它）；设置 → 总结模板（编辑、打开新版对比、已合并、恢复自带的、删除、从任一模板新建、查看 skill）。

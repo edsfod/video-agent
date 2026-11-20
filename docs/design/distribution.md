@@ -5,7 +5,7 @@
 
 ## 一、三种装法
 
-- **安装包**自带一切（用户 2026-10-27 定）：`packaging/build_cli.py` 用 PyInstaller 冻结命令行（Python、yt-dlp 和自己编译的 FFmpeg），electron-builder 打成未签名的 NSIS 安装包，插件文件放在 `resources/plugin`；node-pty 用它的 N-API 预编译版（`npmRebuild: false`）。冻结版没有 `python -m`，自带的 yt-dlp 通过隐藏子命令 `video-agent _yt-dlp` 运行。桌面程序先找设置里指定的命令行，再找自带的，再找 `PATH` 上的 `video-agent`；它启动的任务和终端把自带的文件夹放在 `PATH` 最前。
+- **安装包**自带一切（用户 2026-10-27 定）：`packaging/build_cli.py` 用 PyInstaller 冻结命令行（Python、yt-dlp 和自己编译的 FFmpeg），electron-builder 打成未签名的 NSIS 安装包，插件文件放在 `resources/plugin`；node-pty 用它的 N-API 预编译版（`npmRebuild: false`）。桌面程序先找设置里指定的命令行，再找自带的，再找 `PATH` 上的 `video-agent`；它启动的任务和终端把自带的文件夹放在 `PATH` 最前。
 - **命令行用 uv 安装**，不需要 git：README、skill 和桌面程序最后的退路 `uvx` 都用 GitHub 发布页附的 wheel，不用 `git+` 链接。FFmpeg 来自 PyPI 的 `imageio-ffmpeg`，yt-dlp 来自 PyPI；`PATH` 上已有的优先。`imageio-ffmpeg` 没有 ffprobe，`media.probe` 从 ffmpeg 的输出里读需要的信息（流、编码、语言、时长），测试保证两种读法结果一样。`download` 传 `--ffmpeg-location`，让 yt-dlp 用同一个 ffmpeg 合并音视频。
 - **Agent 插件**：`claude`、`codex plugin marketplace add edsfod/video-agent` 从 GitHub 安装要 git，所以桌面程序有从本机副本安装的按钮。新版本第一次启动时，已装插件的 Claude Code 或 Codex 会照安装按钮的步骤刷新插件。
 
