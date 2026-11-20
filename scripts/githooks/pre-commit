@@ -1,0 +1,4 @@
+#!/bin/sh
+# 写法检查：这次要提交的文档、规则文件、代码注释（docs/writing.md）。由 scripts/githooks/install.sh 装到 .git/hooks/。
+root=$(git rev-parse --show-toplevel)
+exec "$root/.venv/Scripts/python.exe" -I "$root/scripts/lint_writing.py" --staged

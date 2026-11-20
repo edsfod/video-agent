@@ -42,7 +42,7 @@ TIME = re.compile(rf'`({CLOCK})`')
 PART = re.compile(rf'^(#{{2,4}})\s+(.*?)`({CLOCK})`\s*[-–—~～至到]+\s*`({CLOCK})`.*$', re.MULTILINE)
 NUMBER = re.compile(r'\*\*P(\d+)\*\*|(?<![A-Za-z0-9])P(\d+)(?![0-9])')
 PROPOSITION = re.compile(rf'^\s*[-*]\s*\*\*P\d+\*\*[^`\n]*(?:`[^`\n]*`[^`\n]*)*?`({CLOCK})`', re.MULTILINE)
-# A stretch of speech in no part is named when at least this long (Claude judgment: about a slide's worth of talk);
+# A stretch of speech in no part is named when at least this long (about a slide's worth of talk);
 # shorter ones are the summary's to leave out.
 GAP_S = 120
 # A proposition this far outside its part's range is in the wrong part (times are written to the second, and a point

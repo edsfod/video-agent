@@ -1,5 +1,5 @@
 """What the CLI prints with `--json` and what it keeps in `manifest.json` and `collection.json`: the contract between the
-CLI and the programs that read it, the desktop app first (docs/decisions/front-end-types.md).
+CLI and the programs that read it, the desktop app first (docs/design/architecture.md).
 
 The types are checked three ways: mypy checks the functions that build them; the tests check every JSON value the CLI
 prints against its type (`check`, switched on in tests/conftest.py); and `scripts/cli_types.py` writes them as

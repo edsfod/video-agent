@@ -4,7 +4,7 @@
 # such as mpdecimate). Video Agent runs them as
 # separate programs. Run it in an MSYS2 UCRT64 shell with the packages listed in .github/workflows/ffmpeg.yml; it
 # writes build/ffmpeg/. The LGPL requires the corresponding source, so the exact tarballs land in build/ffmpeg/source
-# and go onto every release beside the installer (see ARCHITECTURE.md, "Bundled FFmpeg").
+# and go onto every release beside the installer (see docs/design/distribution.md).
 set -euo pipefail
 
 FFMPEG_VERSION=9.0.2

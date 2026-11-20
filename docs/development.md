@@ -16,6 +16,7 @@
 
 - 本机：`.git/hooks/pre-push` 按这次推送改了什么挑检查（规则和 GitHub 一样，见 `.github/scripts/changed-jobs.sh`）：只改文档什么都不跑；改了命令行跑 ruff、mypy、pytest 和入口；改了窗口代码跑 GUI 的类型检查和单元测试；改了打包相关的文件，再打包一次命令行工具并跑它的冒烟测试。开窗口的端到端测试不在本机跑（用户 2026-10-30 定：太慢，GitHub 上也会跑）。推送的提交都已在远端时跳过。
 - GitHub（`.github/workflows/test.yml`，只在 Windows 上）：按改动挑任务。cli 任务跑命令行的检查；gui 任务跑端到端测试（约 2.5 分钟）；installer 任务（构建、PATH 选项、静默安装、更新安装，约 5 分钟）只在依赖、打包、安装器、图标、更新器改了时跑。只改版本号的提交（`.github/scripts/version_only.py`）只跑版本号检查。同一分支上被新推送取代的运行会取消；每个任务都有时限。
+- 提交时的钩子：`sh scripts/githooks/install.sh` 装上 pre-commit（写法检查）和 commit-msg（AI 署名、写法检查），见 [writing.md](writing.md)。`pre-push` 目前只在维护者机器的 `.git/hooks/` 里，不在仓库中。
 - 本机跑端到端测试：在 `gui/` 下 `node --test --test-concurrency=1 test/e2e.test.js`，用临时的 APPDATA 和 `--user-data`。
 
 ## 构建

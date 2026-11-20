@@ -1,5 +1,5 @@
 """Writes THIRD-PARTY-NOTICES.txt for the desktop installer: each third-party component frozen into the CLI or shipped
-beside it, with its version, licence and licence text (ARCHITECTURE.md, "Bundled FFmpeg"). build_cli.py calls it in
+beside it, with its version, licence and licence text (docs/design/distribution.md). build_cli.py calls it in
 the build environment, whose installed packages are the ones PyInstaller freezes. It also writes PRIVACY.txt, the
 installer's licence page."""
 

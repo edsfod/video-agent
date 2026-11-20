@@ -1,5 +1,5 @@
 """Collections: an ordered set of related videos, such as a course, a series, a playlist or a workshop, with files of
-their own (ARCHITECTURE.md, "Collections"). Generalised from yanhe-agent's course handling (user decision,
+their own (docs/design/collections.md). Generalised from yanhe-agent's course handling (user decision,
 2026-10-28): nothing here assumes lectures.
 
 A collection lives in `<workspace>/合集/<name>/`: `collection.json` (the videos in order, shared terms, skipped videos

@@ -51,6 +51,8 @@ AI 在仓库里留下的文字，常常是过程的记录，而不是加工过�
 ## 五、从机制上防住
 
 1. 规则自动加载：`.claude/rules/hard-requirements.md` 里有这一条，每次会话都在上下文里。
-2. 清掉现存样本：旧的决策记录已归档（`docs/archive/2026-11-20/`）；代码注释里的原话和过程记录随各部分的设计文档重写一并清掉（待做）。
-3. 检查脚本和钩子：扫文档、规则文件、代码注释和提交信息，找出归给用户的引语、带钟点的过程记录；接进 git 的 pre-commit、commit-msg 和 Claude Code 的写入钩子（待做）。
+2. 清掉现存样本：旧的决策记录已归档（`docs/archive/2026-11-20/`），代码注释里的原话、过程标记和指向旧文档的引用已清（2026-11-20）。发布检查记录（`release-log.md`）和发布说明只追加，不在检查范围内。
+3. 检查脚本 `scripts/lint_writing.py`：扫文档、规则文件、代码注释和提交信息，找出归给用户的引语、「Claude 判断」这类过程标记、带钟点的过程记录。接成钩子：
+   - Claude Code（`.claude/settings.json`）：每次 Write、Edit 之后查刚写的文件，每次 Bash 之后查工作区里改过的文件，有问题就把要改的地方反馈给 AI；
+   - git（`scripts/githooks/`，用 `sh scripts/githooks/install.sh` 装进 `.git/hooks/`，全局钩子会转过来）：pre-commit 查要提交的文件，commit-msg 查提交信息里的用户引语和 AI 署名；有问题就拒绝提交。
 4. 会话里的自查：写完持久文字，按第四节过一遍。

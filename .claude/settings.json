@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR/.venv/Scripts/python.exe\" -I \"$CLAUDE_PROJECT_DIR/scripts/lint_writing.py\" --hook",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}

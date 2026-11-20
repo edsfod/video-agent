@@ -42,7 +42,7 @@ HOT_CELLS = 12
 CORNER_AREA = 0.25
 # A screen filmed by the camera (a projection, a monitor): a block of cells bright on average over the video and
 # changing in few seconds, rectangular and of a fair size. On a camera recording of 线性代数 the projection was the
-# brightest still block, the speaker moving below it (2026-10-29). Claude judgment on the values.
+# brightest still block, the speaker moving below it (2026-10-29).
 BRIGHT = 150
 STILL_SHARE = 0.2
 PROJECTED_AREA = (0.08, 0.8)

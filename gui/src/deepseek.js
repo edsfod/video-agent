@@ -91,7 +91,7 @@ const READING_IMAGES = /正在分析图片|Analyzing image/i;
 const UPLOAD_TIMEOUT_MS = 5 * 60 * 1000;
 const BUSY_PAUSE_MS = Number(process.env.VA_DEEPSEEK_RETRY_MS) || 30000; // tests wait less
 const UPLOAD_PAUSE_MS = BUSY_PAUSE_MS / 6;
-const SEND_GAP_MS = Number(process.env.VA_DEEPSEEK_GAP_MS) || 60 * 1000; // Claude judgment, between the two rates above
+const SEND_GAP_MS = Number(process.env.VA_DEEPSEEK_GAP_MS) || 60 * 1000; // between the two rates above
 const LIMIT_PAUSE_MS = Number(process.env.VA_DEEPSEEK_LIMIT_MS) || 5 * 60 * 1000; // doubled each time, up to the next
 const LIMIT_PAUSE_MOST_MS = 6 * LIMIT_PAUSE_MS;
 // Pictures were read and the thinking begun within seconds of sending, 49 pictures included; the one that hung did

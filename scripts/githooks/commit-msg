@@ -1,0 +1,9 @@
+#!/bin/sh
+# 提交信息：不带 AI 署名（Co-Authored-By 提到 Claude 或 Anthropic，或 "Generated with Claude Code" 一类的行；
+# git 会去掉的 # 注释行不算），不抄用户原话（docs/writing.md）。由 scripts/githooks/install.sh 装到 .git/hooks/。
+if grep -v '^#' "$1" | grep -i -E '^co-authored-by:.*(claude|anthropic)|generated (with|by) .*claude' >/dev/null; then
+  echo "commit-msg：提交信息里有 AI 署名（Co-Authored-By: Claude 之类），去掉后再提交" >&2
+  exit 1
+fi
+root=$(git rev-parse --show-toplevel)
+exec "$root/.venv/Scripts/python.exe" -I "$root/scripts/lint_writing.py" --message "$1"

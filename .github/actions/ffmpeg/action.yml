@@ -1,7 +1,7 @@
 name: LGPL FFmpeg
 description: >-
   Puts the LGPL FFmpeg the installer ships in build/ffmpeg: from the cache, or built by packaging/ffmpeg/build.sh in
-  MSYS2 UCRT64 and saved to the cache as soon as the build succeeds (ARCHITECTURE.md, "Bundled FFmpeg"). The cache is
+  MSYS2 UCRT64 and saved to the cache as soon as the build succeeds (docs/design/distribution.md). The cache is
   keyed on the build script, which pins the source versions and their checksums. Expects the repository checked out.
 
 runs:

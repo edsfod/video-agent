@@ -1,4 +1,4 @@
-// The Antigravity route (user request, 2026-11-16: 「新增一条 Antigravity 路线，自动调用，使用 gemini-3.8-flash-high」): the
+// The Antigravity route (user decision, 2026-11-16; docs/design/routes.md): the
 // task an Agent gets (read the skill, save through `summarize --import`) goes to the agent of the Antigravity desktop app
 // that is running, as a new conversation there, which the user can watch in the app.
 //
