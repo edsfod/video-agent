@@ -19,7 +19,7 @@
 
 - 安装包里的 FFmpeg 按 LGPL 自己编译（用户 2026-10-28 定）：原来带的 imageio-ffmpeg 版本是 GPLv3（含 x264、x265），却没附源码。`packaging/ffmpeg/build.sh` 在 MSYS2 UCRT64 里用 GCC 静态编译 FFmpeg 9.0.2，带 dav1d 1.5.4（AV1 解码）、SVT-AV1 4.2.0（压缩用）和 MSYS2 的 zlib；不开 `--enable-gpl`、自动检测的库、网络、设备、硬件加速；所有原生的解码器、封装、滤镜都保留。三个源码包都按 SHA-256 固定。`ffmpeg -L` 不是 LGPL、或缺了用到的滤镜和编码器时，脚本失败。
 - 为此换掉了两处只有 GPL 才有的用法：找屏幕页从 `mpdecimate` 换成 `freezedetect`；给 AutoSlides Extractor 的裁剪视频从 x264 换成 FFmpeg 自己的 MPEG-4 编码器（`-q:v 2`）。
-- CI（`.github/actions/ffmpeg`，`test.yml` 的 installer 任务和 `release.yml` 用）：从缓存恢复，或编译后立刻存进缓存，以编译脚本为键。cli、gui 任务也从缓存取同一份，所以命令行测试跑在安装包带的 FFmpeg 上；测试视频都用滤镜源和 mpeg4 生成，任何一种编译都能生成。
+- CI（`.github/actions/ffmpeg`，`test.yml` 和 `release.yml` 共用）：以 `packaging/ffmpeg/build.sh` 去掉注释和空行后的 SHA-256 为键（`packaging/ffmpeg/fetch.sh --hash`）。先从 Actions 缓存恢复；缓存未命中（7 天过期、打新标签或新分支）时，从 GitHub 发布页下载对应哈希的预编译包（`ffmpeg-lgpl-<hash>.tar.gz`）并校验压缩包 SHA-256、三个源码包 SHA-256、许可证文件、LGPL 声明及所需的滤镜、解码器和编码器（用户 2026-11-20 定）；只有 `build.sh` 的版本或编译命令真正改动时才在 MSYS2 里重新编译。cli、gui 任务也用同一份，所以测试跑在安装包带的 FFmpeg 上。
 - 冻结时去掉 imageio-ffmpeg，把 `build/ffmpeg/bin` 放进命令行的 `ffmpeg/`；`media.tool` 先找 `PATH`，再找这份，pip 和 uv 安装的再找 imageio-ffmpeg 的。冻结后在 `PATH` 只剩 `System32` 的情况下处理并打包一段生成的视频，缺滤镜就在构建时失败，不留给用户。
 - 每次发布附上 FFmpeg、dav1d、SVT-AV1 的源码包和 `FFmpeg-BUILD.txt`（版本、校验和、配置命令）。
 

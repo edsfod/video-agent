@@ -1,18 +1,29 @@
 name: LGPL FFmpeg
 description: >-
-  Puts the LGPL FFmpeg the installer ships in build/ffmpeg: from the cache, or built by packaging/ffmpeg/build.sh in
-  MSYS2 UCRT64 and saved to the cache as soon as the build succeeds (docs/design/distribution.md). The cache is
-  keyed on the build script, which pins the source versions and their checksums. Expects the repository checked out.
+  Puts the LGPL FFmpeg the installer ships in build/ffmpeg: from the cache, from the verified prebuilt archive on
+  GitHub Releases (packaging/ffmpeg/fetch.sh), or built by packaging/ffmpeg/build.sh in MSYS2 UCRT64 when build.sh's
+  non-comment commands change (docs/design/distribution.md). Expects the repository checked out.
 
 runs:
   using: composite
   steps:
+    - id: key
+      shell: bash
+      run: echo "hash=$(bash packaging/ffmpeg/fetch.sh --hash)" >> "$GITHUB_OUTPUT"
     - id: cache
       uses: actions/cache/restore@v6
       with:
         path: build/ffmpeg
-        key: ffmpeg-lgpl-${{ hashFiles('packaging/ffmpeg/build.sh') }}
-    - if: steps.cache.outputs.cache-hit != 'true'
+        key: ffmpeg-lgpl-${{ steps.key.outputs.hash }}
+    - id: fetch
+      shell: bash
+      run: |
+        if bash packaging/ffmpeg/fetch.sh; then
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "ready=false" >> "$GITHUB_OUTPUT"
+        fi
+    - if: steps.fetch.outputs.ready != 'true'
       uses: msys2/setup-msys2@v2
       with:
         msystem: UCRT64
@@ -22,11 +33,11 @@ runs:
           mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-nasm mingw-w64-ucrt-x86_64-pkgconf
           mingw-w64-ucrt-x86_64-meson mingw-w64-ucrt-x86_64-ninja mingw-w64-ucrt-x86_64-zlib
           mingw-w64-ucrt-x86_64-cmake
-    - if: steps.cache.outputs.cache-hit != 'true'
+    - if: steps.fetch.outputs.ready != 'true'
       shell: msys2 {0}
       run: bash packaging/ffmpeg/build.sh
     - if: steps.cache.outputs.cache-hit != 'true'
       uses: actions/cache/save@v6
       with:
         path: build/ffmpeg
-        key: ffmpeg-lgpl-${{ hashFiles('packaging/ffmpeg/build.sh') }}
+        key: ffmpeg-lgpl-${{ steps.key.outputs.hash }}

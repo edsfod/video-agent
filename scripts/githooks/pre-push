@@ -53,10 +53,7 @@ if [ "$installer" = true ] && git diff --name-only "$(git merge-base HEAD origin
   packaging=yes
 fi
 if [ "$packaging" = yes ]; then
-  if [ ! -f build/ffmpeg/bin/ffmpeg.exe ]; then
-    run=$(gh run list -R edsfod/video-agent --workflow test --status success --limit 1 --json databaseId --jq '.[0].databaseId')
-    gh run download -R edsfod/video-agent "$run" -n ffmpeg-lgpl -D build/ffmpeg >/dev/null || fail "下载 CI 的 LGPL FFmpeg"
-  fi
+  bash packaging/ffmpeg/fetch.sh >/dev/null || fail "准备并校验 LGPL FFmpeg（bash packaging/ffmpeg/fetch.sh 看详情）"
   echo "pre-push：改了打包相关的文件，本机打包命令行工具并跑冒烟测试（约 2 分钟）" >&2
   uv run --with pyinstaller --with pillow python packaging/build_cli.py >/dev/null 2>&1 || fail "打包冒烟测试（uv run --with pyinstaller --with pillow python packaging/build_cli.py 看详情）"
 fi
