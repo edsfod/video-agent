@@ -116,7 +116,6 @@ def import_summary(
   if len(text.strip()) < 40:
     raise SummaryError('The summary to import is empty or too short')
   text = repair_links(text, asset)
-  text, _ = forest.place(text, templates.text(template))  # the logic view, laid out from 详细内容 (forest.py)
   text, empty = summary_review.drop_links(text, review)
   if empty:
     status(f'去掉 {len(empty)} 张图的链接：复查说图上没有字幕以外的内容')
@@ -126,6 +125,7 @@ def import_summary(
   text = re.sub(r'^视频：.*?时长：[0-9:]+', lambda _: line, text, count=1, flags=re.MULTILINE)
   with files.video_lock(asset, 'import the summary'):
     text = _capture_frames(text, video, asset, length, status)
+    text, _ = forest.place(text, templates.text(template))  # the logic view and 要点 links, from 详细内容 (forest.py)
     # A chat AI's round grows a set of pictures from the current one: without those it does not need, with every
     # picture its draft links (pictures.py).
     node = pictures.current(asset)

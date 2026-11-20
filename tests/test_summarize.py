@@ -415,7 +415,7 @@ def test_several_templates_one_chosen_and_one_named_per_summary(processed, capsy
 
   templates.edit('标准')
   own = templates.folder() / '标准.md'
-  own.write_text(own.read_text(encoding='utf-8').replace('## 时间线', '## 我的时间线'), encoding='utf-8')
+  own.write_text(own.read_text(encoding='utf-8').replace('## 要点', '## 我的要点'), encoding='utf-8')
   assert cli.main(['template', '标准', '--copy', '我的']) == 0
   assert json.loads(capsys.readouterr().out)['builtin'] is False
   with pytest.raises(templates.TemplateError):
@@ -429,9 +429,9 @@ def test_several_templates_one_chosen_and_one_named_per_summary(processed, capsy
 
   video, workspace = processed
   assert cli.main(['pack', str(video), '-o', str(workspace)]) == 0
-  assert '我的时间线' in capsys.readouterr().out
+  assert '我的要点' in capsys.readouterr().out
   assert cli.main(['pack', str(video), '-o', str(workspace), '--template', '标准']) == 0
-  assert '我的时间线' not in capsys.readouterr().out
+  assert '我的要点' not in capsys.readouterr().out
   with pytest.raises(SystemExit):
     cli.main(['pack', str(video), '-o', str(workspace), '--template', '没有这个'])
   assert 'template --list' in capsys.readouterr().err
@@ -603,7 +603,7 @@ def test_a_chat_ai_drops_pictures_and_asks_for_others_over_rounds(processed, cap
   # A 复查 that still adds something goes round again; one that changes nothing in the draft, with nothing wanted and
   # the checks passed, ends the rounds.
   body = '# 标题\n\n视频：x · 时长：0:08\n\n## 概要\n\n用上了候选，讲了彩条和测试图案各自的用途。\n\n## 详细内容\n\n- 彩条\n\n'
-  done = '## 画面调整\n\n无\n\n## 复查\n\n- 删掉的节：元信息、要点、主线与单元、时间线、需留意、需确认（测试视频只有 8 秒）\n'
+  done = '## 画面调整\n\n无\n\n## 复查\n\n- 删掉的节：元信息、要点、主线与单元、需留意、需确认（测试视频只有 8 秒）\n'
   answer.write_text(body + done + '- 补上：`00:00:03` 测试图案\n', encoding='utf-8')
   assert cli.main(['summarize', str(video), '-o', str(workspace), '--import', str(answer), '--make-current']) == 0
   told = capsys.readouterr().err
@@ -753,11 +753,13 @@ def test_the_checks_name_what_a_chat_ais_summary_leaves_out(processed, monkeypat
   state = summary_review.load(asset)
   assert state['first'] and state['again']
   missing, pictures, late, gap = state['problems']
-  assert '「要点」' in missing and '「时间线」' in missing and '「需确认」' in missing
+  assert '「要点」' in missing and '「元信息」' in missing and '「需确认」' in missing
   assert '画面调整' in pictures and '00:09:00' in late and '00:00:03–00:00:05' in gap
   # Sections left out on purpose, said in the 复查, are not asked for again; a stretch of speech is named only once,
   # and left out again it stays out, with no reason asked for (user decision, 2026-11-16).
-  review = '\n\n## 画面调整\n\n无\n\n## 复查\n\n- 补上：无\n- 删掉的节：元信息、要点、主线与单元、时间线、需留意、需确认（太短）\n'
+  review = (
+    '\n\n## 画面调整\n\n无\n\n## 复查\n\n- 补上：无\n- 删掉的节：元信息、要点、主线与单元、需留意、需确认（太短）\n'
+  )
   import_summary(video, workspace, text.replace('`00:09:00` 结束', '结束') + review, rounds=True)
   state = summary_review.load(asset)
   assert state['problems'] == [] and not state['again'] and state['asked'] == [[3.0, 5.0]]
@@ -887,7 +889,9 @@ def test_an_agents_draft_is_checked_and_may_be_fixed_once_over_its_own_text(proc
   err = capsys.readouterr().err
   listed = versions.listing(asset / '总结.md')
   assert (
-    listed['current'] and not listed['versions'] and '图案（**P2**）' in (asset / '总结.md').read_text(encoding='utf-8')
+    listed['current']
+    and not listed['versions']
+    and '图案（[**P2**](#P2)）' in (asset / '总结.md').read_text(encoding='utf-8')
   )
   # One chance only: what is left (here the sections it left out) is said, and the text stands as it is.
   assert '上面的问题还在' in err and not draft.exists()

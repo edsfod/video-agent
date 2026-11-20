@@ -72,17 +72,48 @@ def test_the_section_is_put_in_place_of_the_writers_and_keeps_units_of_the_write
   assert forest.wanted(rules)
   written = (
     '# 标题\n\n## 要点\n\n- 一点（**P2**）\n\n## 主线与单元\n\n### 模型自己排的\n\n- **P2** 简述\n\n'
-    '### `拓展` 总结者的想法\n\n- 一个完整的想法\n\n## 时间线\n\n| 时间 | 内容 |\n\n' + BODY
+    '### `拓展` 总结者的想法\n\n- 一个完整的想法\n\n' + BODY
   )
   text, _ = forest.place(written, rules)
   assert '模型自己排的' not in text and '### `拓展` 总结者的想法\n\n- 一个完整的想法' in text
-  assert text.index('## 要点') < text.index('### 主线') < text.index('### `拓展`') < text.index('## 时间线')
+  assert text.index('## 要点') < text.index('### 主线') < text.index('### `拓展`') < text.index('## 详细内容')
   # Left out by the writer, the section goes where the template has it.
   text, _ = forest.place(
-    written.replace(written[written.index('## 主线与单元') : written.index('## 时间线')], ''), rules
+    written.replace(written[written.index('## 主线与单元') : written.index('## 详细内容')], ''), rules
   )
-  assert text.index('## 要点') < text.index('## 主线与单元') < text.index('## 时间线')
+  assert text.index('## 要点') < text.index('## 主线与单元') < text.index('## 详细内容')
   # A template of the user's own that has the writer write the section is left alone.
+  assert forest.place(written, '## 主线与单元\n\n照我说的写\n') == (written, [])
+
+
+def test_points_link_their_numbers_and_bring_the_pictures_of_their_items():
+  rules = templates.built_in(templates.STANDARD)
+  body = BODY.replace('出了问题。\n', '出了问题。\n  - 报错的画面 [截图：报错](frames/run/frame-002.jpg)\n').replace(
+    '改好了。\n', '改好了。[截图：改好](<frames/run/frame 003.jpg>)\n'
+  )
+  items, _ = forest.parse(body)
+  assert items['5'].pictures == ['[截图：报错](frames/run/frame-002.jpg)'] and items['5'].claim == '出了问题。'
+  assert items['1'].pictures == ['[画面：图](frames/run/frame-001-00-01-00.jpg)'] and items['11'].pictures == []
+  written = (
+    '# 标题\n\n## 要点\n\n'
+    '- `00:01:00`–`00:02:00` 观测和道理（**P2**、**P1**）\n'
+    '- `00:11:00`–`00:15:00` 演示（**P4**）和 P7\n'
+    '- `00:16:00`–`00:17:00` 没有画面（**P8**、**P99**）\n\n' + body
+  )
+  text, _ = forest.place(written, rules)
+  # An item's own pictures, or with none those of the items right under it as premises or steps, each picture once.
+  assert (
+    '- `00:01:00`–`00:02:00` 观测和道理（[**P2**](#P2)、[**P1**](#P1)） · '
+    '[画面：图](frames/run/frame-001-00-01-00.jpg)\n'
+  ) in text
+  assert (
+    '- `00:11:00`–`00:15:00` 演示（[**P4**](#P4)）和 P7 · [截图：报错](frames/run/frame-002.jpg) · '
+    '[截图：改好](<frames/run/frame 003.jpg>)\n'
+  ) in text
+  # An attack is not what a point stands on; a number not in 详细内容 stays as written.
+  assert '- `00:16:00`–`00:17:00` 没有画面（[**P8**](#P8)、**P99**）\n' in text
+  assert forest.place(text, rules)[0] == text
+  # A template that leaves 主线与单元 to the writer leaves 要点 alone too.
   assert forest.place(written, '## 主线与单元\n\n照我说的写\n') == (written, [])
 
 

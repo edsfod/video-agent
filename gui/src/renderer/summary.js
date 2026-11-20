@@ -177,6 +177,7 @@ export async function renderSummary(video) {
   if (state.version) {
     article.prepend(element('p', { className: 'version-banner', textContent: '正在看另一个版本；点「设为当前」才会换掉现在的总结。' }));
   }
+  gatherPointPictures(article);
   for (const link of article.querySelectorAll('a[href]')) {
     const href = link.getAttribute('href');
     link.onclick = (event) => {
@@ -188,6 +189,25 @@ export async function renderSummary(video) {
       if (/\.(jpe?g|png)$/i.test(file)) showImage(file, target);
       else window.va.open(file);
     };
+  }
+}
+
+// The pictures forest.py puts at the end of a point in 要点, joined by ' · ', shown under the point as small chips.
+function gatherPointPictures(article) {
+  const heading = [...article.querySelectorAll('h2')].find((item) => item.textContent.trim() === '要点');
+  const list = heading?.nextElementSibling;
+  if (list?.tagName !== 'UL') return;
+  for (const point of list.children) {
+    const pictures = [...point.querySelectorAll('a[href]')].filter((link) =>
+      /\.(jpe?g|png)>?$/i.test(link.getAttribute('href') || ''),
+    );
+    if (!pictures.length) continue;
+    for (const link of pictures) {
+      const before = link.previousSibling;
+      if (before?.nodeType === Node.TEXT_NODE) before.textContent = (before.textContent || '').replace(/\s*·\s*$/, '');
+      link.className = 'point-picture';
+    }
+    point.append(element('div', { className: 'point-pictures' }, pictures));
   }
 }
 

@@ -6,6 +6,9 @@ and which items the main conclusion takes from the units, with where each link c
 The program lays out the logic view from that: every group of related items is a tree, a unit, under the heading of the
 part of 详细内容 its root is in; the main line is the item with `接上：` and what links to it. Each item is expanded
 once, items related to nothing stay out, and each number links to its entry in 详细内容.
+
+要点 is written by the model, one line per point with the numbers it stands on; the program links those numbers to 详细内容
+and brings each line the pictures linked on its items there (user decision, 2026-11-20), so a picture is linked once.
 """
 
 import re
@@ -18,7 +21,12 @@ ITEM = re.compile(r'^(\s*)[-*]\s*\*\*P(\d+)\*\*(.*)$')
 TOKEN = re.compile(r'\s*(`[^`\n]*`|（[^）\n]*）|\([^)\n]*\)|(←|反驳|步骤)\s*((?:P\d+[\s,，、和]*)+))')
 TIME = re.compile(rf'^`{CLOCK}`$')
 JOIN = re.compile(r'^\s+[-*]\s*接上\s*[:：]\s*(.+)$')
-PICTURE = re.compile(r'\s*\[[^\]\n]*\]\(<?(?:frames|slide-extraction|slides)/[^)\n]*\)')
+LINK = r'\[[^\]\n]*\]\(<?(?:frames|slide-extraction|slides)/[^)\n]*\)'
+PICTURE = re.compile(rf'\s*{LINK}')
+POINTS = '要点'
+POINT = re.compile(r'^([ \t]*[-*][ \t]+)(.*)$', re.MULTILINE)
+ADDED = re.compile(rf'(?: · {LINK})+\s*$')  # the pictures the program put at the end of a point
+NUMBER = re.compile(r'\[?\*\*P(\d+)\*\*\]?(?:\(#P\d+\))?|(?<![A-Za-z0-9#])P(\d+)(?![0-9])')
 UP = {'support': 0, 'attack': 1, 'step': 1}  # which end of a relation is above: 0 the item written first, 1 the other
 OWN = re.compile(r'^###\s+`?拓展`?\s.*?(?=^#{2,3}\s|\Z)', re.MULTILINE | re.DOTALL)  # a unit of the writer's own
 
@@ -37,20 +45,27 @@ class Item:
   def __init__(self, number, part):
     self.number, self.part, self.tag, self.claim = number, part, '', ''
     self.joins = []  # (number, where the link comes from), on a main conclusion
+    self.pictures = []  # the picture links on its line and the lines under it, as written
 
 
 def parse(text):
   """(items by number in the order written, relations as (upper, lower, kind)) from 详细内容."""
   items, relations, part, current = {}, [], None, None
+  owner, depth = None, 0  # the item the lines under it belong to, for its pictures, and the indent of its line
   for line in _section(text, '详细内容').splitlines():
     heading = PART.match(line)
     if heading:
-      part, current = heading[1].strip(), None
+      part, current, owner = heading[1].strip(), None, None
       continue
     found = ITEM.match(line)
-    if found and found[2] not in items:
-      current = Item(found[2], part)
+    if found and found[2] in items:
+      owner = None
+      continue
+    if found:
+      current = owner = Item(found[2], part)
+      depth = len(found[1])
       items[current.number] = current
+      current.pictures = re.findall(LINK, found[3])
       rest = found[3]
       while token := TOKEN.match(rest):
         if token[2]:
@@ -67,11 +82,53 @@ def parse(text):
       continue
     join = JOIN.match(line)
     if join and current:
+      owner = None
       for entry in re.split(r'[；;]', join[1]):
         number = re.search(r'P(\d+)', entry)
         if number:
           current.joins.append((number[1], entry[number.end() :].strip(' ：:，,')))
+    elif owner and line.strip():
+      if len(line) - len(line.lstrip()) > depth:
+        owner.pictures += re.findall(LINK, line)
+      else:
+        owner = None
   return items, relations
+
+
+def enrich_points(text, items, relations):
+  """要点 with each number of an item in 详细内容 linked to it, and the pictures linked there at the end of the line: an
+  item's own, or, with none, those of the items right under it as its premises or steps. Pictures added before are
+  taken off first, so saving again changes nothing."""
+  found = re.search(rf'^##\s*{POINTS}\s*\n(.*?)(?=^##\s|\Z)', text, re.MULTILINE | re.DOTALL)
+  if not found:
+    return text
+  order = {n: i for i, n in enumerate(items)}
+  under = {}
+  for upper, lower, kind in relations:
+    if kind in ('support', 'step') and lower in items:
+      under.setdefault(upper, []).append(lower)
+
+  def point(line):
+    head, body = line[1], ADDED.sub('', line[2]).rstrip()
+    named = [n for match in NUMBER.finditer(body) if (n := match[1] or match[2]) in items]
+    body = re.sub(
+      r'(?<!\[)\*\*P(\d+)\*\*(?!\]\()',
+      lambda match: f'[{match[0]}](#P{match[1]})' if match[1] in items else match[0],
+      body,
+    )
+    pictures, paths = [], set()
+    for n in dict.fromkeys(named):
+      links = items[n].pictures or [
+        link for lower in sorted(set(under.get(n, [])), key=order.get) for link in items[lower].pictures
+      ]
+      for link in links:
+        path = re.search(r'\]\(<?([^)>\n]*)', link)[1]
+        if path not in paths:
+          paths.add(path)
+          pictures.append(link)
+    return head + body + (' · ' + ' · '.join(pictures) if pictures else '')
+
+  return text[: found.start(1)] + POINT.sub(point, found[1]) + text[found.end(1) :]
 
 
 def build(text):
@@ -217,10 +274,11 @@ def build(text):
 
 
 def place(text, template_text):
-  """The summary with 主线与单元 written by the program where the template has it, and what was found wrong; the text
-  unchanged when the template leaves the section to the writer."""
+  """The summary with 主线与单元 written by the program where the template has it and 要点 linked to 详细内容, and what
+  was found wrong; the text unchanged when the template leaves the section to the writer."""
   if not wanted(template_text):
     return text, []
+  text = enrich_points(text, *parse(text))
   section, problems = build(text)
   own = [block.rstrip() + '\n' for block in OWN.findall(_section(text, HEADING))]
   if own:
