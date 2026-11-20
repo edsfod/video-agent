@@ -129,7 +129,7 @@
 
 ## 四、边界
 
-- **桌面程序和命令行**：桌面程序把命令行当子进程运行（`cli:json` 解析 `--json` 输出，`cli:text` 取文字；API key 从标准输入传）。JSON 的内容由 `src/video_agent/contract.py` 定义：mypy 检查生成它的代码，测试拿命令行输出的每个值对照它，桌面程序的副本 `gui/src/cli-types.d.ts` 由它生成。`tools --json` 给出 `json_version`，设置里指定的命令行版本不同时窗口会提示。
+- **桌面程序和命令行**：桌面程序把命令行当子进程运行（`cli:json` 解析 `--json` 输出，`cli:text` 取文字；API key 从标准输入传）。JSON 的内容由 `src/video_agent/contract.py` 定义：mypy 检查生成它的代码，测试拿命令行输出的每个值对照它，桌面程序的副本 `gui/src/cli-types.d.ts` 由它生成。`tools --json` 给出 `json_version`，只在去掉字段或字段改变含义时加一，桌面程序和自己的 `CLI_JSON_VERSION` 比较，设置里指定的命令行版本不同时在合集上方提示。`collection.json` 带 `schema_version`，没有的算版本 1，更新的版本拒绝读并说明，免得读错。mypy 只检查标了类型的函数，所以生成 JSON 的函数都标了类型。
 - **页面和主进程**：页面在沙箱里运行，开着上下文隔离和严格的 CSP，只能通过 `window.va`（`preload.js`）找主进程。Markdown 用 marked 渲染、DOMPurify 净化；`fs:read` 只读工作区里的文件；`shell:open` 能打开任何路径，因为总结里的链接可能指向任何地方（用户定）。
 - **并发**：任务是共享文件的独立进程。命令行写一个视频的文件夹时加锁，文件原子写入；桌面程序的队列让每个视频同时只有一个处理或总结任务，并按种类限制数量。见 [app.md](app.md)。
 - **外部工具**：yt-dlp、FFmpeg 和 AutoSlides Extractor 作为程序运行，不复制代码；`PATH` 上的优先。
