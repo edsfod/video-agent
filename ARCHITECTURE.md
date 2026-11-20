@@ -40,9 +40,10 @@ Agents and shells           other agents follow it        commands
 | `summarize.py` | `summarize` for one video with a model API. |
 | `packing.py` | `pack`: the prompt for chat AIs, alone, in a zip, or in a folder of numbered pictures. |
 | `importer.py` | `summarize --import`: a text written elsewhere saved as a summary or collection text, with its links and corrections repaired. |
+| `forest.py` | 主线与单元 laid out from the relations in 详细内容 when the template leaves the section to the program: trees grouped by part, the main line from `接上：`, each item once ([forest-from-body.md](docs/decisions/forest-from-body.md)). |
 | `picture_review.py` | The 画面调整 section of a chat AI's summary: pictures it does not need, and the candidates taken where it misses one. |
 | `pictures.py` | The tree of a video's picture sets: which pictures every summary route is given, grown by a chat AI's rounds or by hand; each summary version names the set it was written with. |
-| `summary_review.py` | A chat AI's rounds: the checks on each answer (template sections, long speech not covered, parts with nothing in 要点, propositions outside their part, times past the end, linked pictures without a word in the 复查), its 复查 section, links taken out that show nothing beyond the transcript, whether another round is needed, which draft a later round may write over, and where an unfinished run goes on. |
+| `summary_review.py` | A chat AI's rounds: the checks on each answer (template sections, long speech not covered, parts with nothing in 要点, propositions outside their part, what 主线与单元 could not be laid out from, times past the end, linked pictures without a word in the 复查), its 复查 section, links taken out that show nothing beyond the transcript, whether another round is needed, which draft a later round may write over, and where an unfinished run goes on. |
 | `collection_summary.py` | A collection's overview and study guide, from its videos' summaries. |
 | `templates.py`, `prompts/` | Summary templates: the built-in ones and the user's. |
 | `versions.py` | Earlier versions of a summary, and which version each was written from. |

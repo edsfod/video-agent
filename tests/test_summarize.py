@@ -397,7 +397,7 @@ def test_the_checks_are_written_once_in_the_template_and_repeated_from_it():
 
   rules = templates.built_in(templates.STANDARD)
   checks = templates.checklist(rules)
-  assert checks.startswith('1. ') and '## ' not in checks and '每个单元自成一棵树' in checks
+  assert checks.startswith('1. ') and '## ' not in checks and '每个单元内部的关系写全了' in checks
   assert checks in packing.reminder(rules) and '「自查」' in packing.review_section(rules)
   own = '# 我的模板\n\n## 视频总结\n\n```markdown\n## 概要\n```\n'
   assert templates.checklist(own) == '' and '对一遍上面的规则' in packing.reminder(own)
@@ -799,12 +799,6 @@ def test_the_checks_ask_that_key_points_leave_nothing_out(processed):
   assert summary_review.misplaced(text) == ['P2 `00:21:30`（一个演示，00:05:00–00:20:00）']
   # No 要点 at all is the missing-section check's to name.
   assert summary_review.unlisted_parts(text.split('## 详细内容')[1]) == []
-  # P3 ← P2 is written in 详细内容, so both belong in the forest.
-  assert summary_review.unforested(text) == []
-  forest = '## 主线与单元\n\n### 方法\n\n- **P4** `观点` 方法\n\n'
-  assert summary_review.unforested(forest + text) == ['P3 ← P2']
-  unit = '### 一个演示\n\n- **P2** `事实` 演示\n  - **P3** `推断` ← P2 道理\n\n'
-  assert summary_review.unforested(forest + unit + text) == []
 
 
 def test_an_unedited_copy_of_the_built_in_template_gives_way_to_a_new_one():

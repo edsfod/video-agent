@@ -181,6 +181,7 @@ export async function renderSummary(video) {
     const href = link.getAttribute('href');
     link.onclick = (event) => {
       event.preventDefault();
+      if (href.startsWith('#')) return showEntry(article, href.slice(1));
       if (/^https?:/.test(href)) return window.va.external(href);
       const target = decodeURIComponent(href.replace(/^<|>$/g, ''));
       const file = /^[a-z]:/i.test(target) ? target.replace(/\//g, '\\') : joinPath(info.folder, target);
@@ -188,6 +189,23 @@ export async function renderSummary(video) {
       else window.va.open(file);
     };
   }
+}
+
+// A number in 主线与单元 links to its entry in 详细内容 (forest.py): the bold number there, after that heading.
+function showEntry(article, number) {
+  const heading = [...article.querySelectorAll('h2')].find((item) => item.textContent.trim() === '详细内容');
+  if (!heading) return;
+  const entry = [...article.querySelectorAll('strong')].find(
+    (item) =>
+      item.textContent === number &&
+      !item.closest('a') &&
+      !!(heading.compareDocumentPosition(item) & Node.DOCUMENT_POSITION_FOLLOWING),
+  );
+  const target = entry?.closest('li') || entry;
+  if (!target) return;
+  target.scrollIntoView({ block: 'center' });
+  target.classList.add('entry-shown');
+  setTimeout(() => target.classList.remove('entry-shown'), 1500);
 }
 
 // Where a text came from (versions.py): written afresh, or from another version, named by its time.

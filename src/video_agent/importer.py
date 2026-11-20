@@ -8,7 +8,7 @@ import re
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-from . import collection, files, media, picture_review, pictures, processor, summary_review, templates, versions
+from . import collection, files, forest, media, picture_review, pictures, processor, summary_review, templates, versions
 from .evidence import SUMMARY_NAME, processed, video_line
 from .model_api import SummaryError
 
@@ -116,6 +116,7 @@ def import_summary(
   if len(text.strip()) < 40:
     raise SummaryError('The summary to import is empty or too short')
   text = repair_links(text, asset)
+  text, _ = forest.place(text, templates.text(template))  # the logic view, laid out from 详细内容 (forest.py)
   text, empty = summary_review.drop_links(text, review)
   if empty:
     status(f'去掉 {len(empty)} 张图的链接：复查说图上没有字幕以外的内容')

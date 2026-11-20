@@ -28,7 +28,7 @@ import re
 from pathlib import Path
 from urllib.parse import unquote
 
-from . import files, picture_review, transcript
+from . import files, forest, picture_review, transcript
 from .evidence import clock
 
 HEADING = '复查'
@@ -41,7 +41,6 @@ RANGE = re.compile(rf'^#{{2,4}}\s.*?`({CLOCK})`\s*[-–—~～至到]+\s*`({CLOC
 TIME = re.compile(rf'`({CLOCK})`')
 PART = re.compile(rf'^(#{{2,4}})\s+(.*?)`({CLOCK})`\s*[-–—~～至到]+\s*`({CLOCK})`.*$', re.MULTILINE)
 NUMBER = re.compile(r'\*\*P(\d+)\*\*|(?<![A-Za-z0-9])P(\d+)(?![0-9])')
-RELATION = re.compile(r'^\s*[-*]\s*\*\*P(\d+)\*\*\s*(?:`[^`\n]*`\s*)*←\s*((?:P\d+[\s,，、]*)+)', re.MULTILINE)
 PROPOSITION = re.compile(rf'^\s*[-*]\s*\*\*P\d+\*\*[^`\n]*(?:`[^`\n]*`[^`\n]*)*?`({CLOCK})`', re.MULTILINE)
 # A stretch of speech in no part is named when at least this long (Claude judgment: about a slide's worth of talk);
 # shorter ones are the summary's to leave out.
@@ -185,22 +184,6 @@ def misplaced(text):
   return found
 
 
-def unforested(text):
-  """Relations written in 详细内容 (`**P<n>** ... ← P<m>`) of which an end is nowhere in 主线与单元, as `P<n> ← P<m>`:
-  the forest takes every item related to another (prompts/summary.md), and a model writing it after 详细内容 once left
-  out a demonstration and what it led to (2026-11-20)."""
-  forest = _section(text, '主线与单元')
-  if not forest.strip():
-    return []
-  shown = {first or second for first, second in NUMBER.findall(forest)}
-  found = []
-  for match in RELATION.finditer(_section(text, '详细内容')):
-    ends = [match[1], *re.findall(r'P(\d+)', match[2])]
-    if any(end not in shown for end in ends):
-      found.append(f'P{match[1]} ← ' + ', '.join(f'P{end}' for end in ends[1:]))
-  return found
-
-
 def check(text, asset, template_text, length, *, pictures, review, asked=(), agent=False):
   """What a program can see missing in a chat AI's summary, as lines to send back to it. `asked`: the stretches of
   speech named in rounds before, not named again. With `agent`, worded for an Agent, which writes no 复查."""
@@ -208,7 +191,8 @@ def check(text, asset, template_text, length, *, pictures, review, asked=(), age
   excuse = '确实没有就不用管' if agent else None
   present = set(TEMPLATE_HEADING.findall(text))
   dropped = ' '.join(review['dropped']) if review else ''
-  missing = [name for name in sections(template_text) if name not in present and name not in dropped]
+  generated = {forest.HEADING} if forest.wanted(template_text) else set()  # written by the program, gone when empty
+  missing = [name for name in sections(template_text) if name not in present | generated and name not in dropped]
   if missing:
     listed = '、'.join(f'「{name}」' for name in missing)
     problems.append(
@@ -239,12 +223,8 @@ def check(text, asset, template_text, length, *, pictures, review, asked=(), age
         f'时间的演示或例子、讲者强调的内容）就按时间顺序补进要点；'
         + (f'{excuse}。' if agent else f'确实没有，在「{HEADING}」里写「要点不收：<段落标题>（为什么）」。')
       )
-  loose = unforested(text)
-  if loose:
-    problems.append(
-      '详细内容里写了这些关系，关系两头的条目却有不在「主线与单元」里的：' + '、'.join(loose) + '。森林收每个和别的条目'
-      '有关系的条目：放进它所在的单元，讲者围绕它展开了一点的就单独成一个单元；关系是凑出来的，就去掉详细内容里的「←」。'
-    )
+  if forest.wanted(template_text):
+    problems += forest.build(text)[1]
   wrong = misplaced(text)
   if wrong:
     problems.append(
