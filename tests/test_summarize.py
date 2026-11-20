@@ -799,6 +799,12 @@ def test_the_checks_ask_that_key_points_leave_nothing_out(processed):
   assert summary_review.misplaced(text) == ['P2 `00:21:30`（一个演示，00:05:00–00:20:00）']
   # No 要点 at all is the missing-section check's to name.
   assert summary_review.unlisted_parts(text.split('## 详细内容')[1]) == []
+  # P3 ← P2 is written in 详细内容, so both belong in the forest.
+  assert summary_review.unforested(text) == []
+  forest = '## 主线与单元\n\n### 方法\n\n- **P4** `观点` 方法\n\n'
+  assert summary_review.unforested(forest + text) == ['P3 ← P2']
+  unit = '### 一个演示\n\n- **P2** `事实` 演示\n  - **P3** `推断` ← P2 道理\n\n'
+  assert summary_review.unforested(forest + unit + text) == []
 
 
 def test_an_unedited_copy_of_the_built_in_template_gives_way_to_a_new_one():
