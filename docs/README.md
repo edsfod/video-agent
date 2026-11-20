@@ -8,7 +8,7 @@
 | 文档 | 回答什么 | 状态 |
 |---|---|---|
 | [requirements.md](requirements.md) | 要解决什么、怎样算做成、范围和约束 | |
-| [summary-requirements.md](summary-requirements.md) | 总结提示词要让模型做到的每一件事，各写在提示词的哪里 | 待改：去掉重写前的「旧位置」 |
+| [summary-requirements.md](summary-requirements.md) | 总结提示词要让模型做到的每一件事，各写在提示词的哪里 | |
 | [design/architecture.md](design/architecture.md) | 由哪些部分组成、数据怎么流、磁盘上的文件、部分之间的边界 | |
 | [design/processing.md](design/processing.md) | 下载和网站账号、字幕、画面布局和屏幕页、课件、代表画面、补截、压缩 | |
 | [design/summary.md](design/summary.md) | 总结的规则和模板、主线与单元、版本和谱系、画面集、导入时做什么和查什么 | |
