@@ -38,7 +38,7 @@ A judgment is made once, by the model, in one place; whatever follows from it is
 
 ## Kept from the model-written forest
 
-The two identities of a unit (its own tree; what serves the main line, written in the main line with the unit named); the source of each link (`讲者接上` with time and words, not the speaker saying the point itself, else `总结者归纳`); a main conclusion of the summarizer's own in 「总结者归纳」 with its premises; events as roots with their steps; every item in one place; items related to nothing left out; an item that only illustrates another under it; quotations and filled-in premises supporting the main conclusion expanded in the main line; links to the main line belonging to it wherever said; units of the summarizer's own (`拓展`).
+The two identities of a unit (its own tree; what serves the main line, written in the main line with the unit named); the source of each link (`讲者接上` with its time, not the speaker saying the point itself, else `总结者归纳`; words paraphrased since the same day); a main conclusion of the summarizer's own in 「总结者归纳」 with its premises; events as roots with their steps; every item in one place; items related to nothing left out; an item that only illustrates another under it; quotations and filled-in premises supporting the main conclusion expanded in the main line; links to the main line belonging to it wherever said; units of the summarizer's own (`拓展`).
 
 ## Given up
 
@@ -48,8 +48,11 @@ Unit titles chosen by the model, and units grouping unrelated trees by topic. Fo
 
 Both lectures followed the format: relations on the proposition lines (lecture 1: 36 support, 1 objection, 1 step; lecture 2: 23, 1, 2), a `接上：` line under the main conclusion, nothing the program could not lay out, and lecture 2's `拓展` unit kept. Proposition lines got shorter (median 56 characters in lecture 1, 78 in lecture 2, against 70–92 before; 2 and 16 over 80). The Excel QR-code tree (P42 → P43) is in lecture 1's forest. What is left is judgment: lecture 1 gave all eight links as the speaker's, with words that are mostly the summarizer's paraphrase of the point rather than the speaker linking it (01:08:36 「CS 专业人员清楚边界，人只驻守高风险校验接口」 against the transcript's 「因为我是一个 cs professional，所以我知道边界在哪里」; 01:39:08 quotes 「你的稀缺性是方向、验证与责任」 where the speaker asks the 保研 question); lecture 2's quotes are close to the transcript.
 
+## Paraphrase, not the speaker's words (2026-11-20, user: 「规则写得很明确：要讲者的原话——规则错了」)
+
+After the rerun, Claude called the paraphrased links an execution error against a clear rule and proposed having the program fill in the words from the transcript. The user called the rule itself wrong. The transcript is speech run through recognition: a link the speaker makes runs over several broken lines with misheard words (lecture 1, 01:08:34–01:08:49: six lines, Qwen 3.8 heard as 「千万3点八」), so a quotation is either long and garbled or spliced with 「……」 (lecture 2), and a paraphrase in quotation marks, which the rule invited, passes the summarizer's words off as the speaker's, against the rule on sources. Now a link of the speaker's gives the time and a paraphrase of how the speaker made it, without quotation marks (`` P18 讲者 `01:38:47`：讲者用前面的演示说明…… ``), and the same for any relation the speaker states (二·来源). The proposal to fill in the words was dropped. Whether the speaker linked the point or only said it stays a judgment, for a review.
+
 ## Next
 
-- The speaker's words in `接上：` (proposed 2026-11-20, not decided): the model gives only the time or span where the speaker links a point, and the program writes the words from the cleaned transcript, so they cannot be paraphrased; a time with no speech is told as a problem. Whether the words link the point or only say it stays a judgment, for the review below.
 - A review for judgment errors with a slice of the transcript (discussed 2026-11-20, not decided): the parts' time ranges and the items' times give the range a question needs; a command such as `video-agent excerpt VIDEO 01:05:15-01:14:40` would print that stretch of `summary-context.md`; an Agent would be pointed at it, and a chat AI given it in a new conversation, its answer merged back by number.
 - 时间线 could be derived the same way (one line per part); not done.
