@@ -18,6 +18,7 @@ const ROOT = fs.mkdtempSync(path.join(os.tmpdir(), 'va-update-'));
 // The packaged app's cache, or the separate one dev-app-update.yml names for the unpackaged app.
 const CACHE = path.join(process.env.LOCALAPPDATA, process.env.VA_E2E_EXE ? 'video-agent-gui-updater' : 'video-agent-gui-updater-dev');
 const cacheExisted = fs.existsSync(CACHE);
+const pendingExisted = fs.existsSync(path.join(CACHE, 'pending')); // a download of the dev app's own, left alone
 const { privateKey, publicKey } = crypto.generateKeyPairSync('ed25519');
 const PUBLIC = publicKey.export({ type: 'spki', format: 'der' }).toString('base64');
 const PRIVATE = privateKey.export({ type: 'pkcs8', format: 'pem' });
@@ -104,7 +105,8 @@ test.after(async () => {
   await app?.close();
   server.close();
   // The download lands in electron-updater's cache; leave the folder as it was.
-  fs.rmSync(cacheExisted ? path.join(CACHE, 'pending') : CACHE, { recursive: true, force: true });
+  if (!cacheExisted) fs.rmSync(CACHE, { recursive: true, force: true });
+  else if (!pendingExisted) fs.rmSync(path.join(CACHE, 'pending'), { recursive: true, force: true });
 });
 
 const status = () => page.textContent('#update-status');
