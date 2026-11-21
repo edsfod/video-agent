@@ -76,14 +76,15 @@ function splitCommand(text) {
 // as the user. The user may edit the command in the settings.
 // `installed`: where the program sits inside its desktop app, for one not on PATH: DeepSeek Harness's installer puts
 // `dsh` there and adds nothing to PATH.
-// `model`: the option that names a model for one run; DeepSeek Harness has none and takes a patch file instead
-// (dshModel). `skills`: the folder it finds skills in without a plugin: pi reads the Agent Skills folder
+// `model`: the option that names a model for one run (each agent's --help, checked 2026-10-29); DeepSeek Harness has
+// none and takes a patch file instead (dshModel). `skills`: the folder it finds skills in without a plugin (each
+// agent's documentation, checked 2026-10-29): pi reads the Agent Skills folder
 // ~/.agents/skills; Hermes Agent <HERMES_HOME>/skills, one category folder deep (its own skills sit in categories);
 // DeepSeek Harness <dshHome>/skills (its skill-source table).
-// Antigravity's CLI `agy` (Google.AntigravityCLI): `-p` runs one prompt and exits; in that mode an action that would
-// ask is refused, so --dangerously-skip-permissions lets it run the CLI and write the draft, as the other presets do;
-// skills from ~/.gemini/antigravity-cli/skills. The effort is part of its model ids (gemini-3.8-flash-high), so it
-// takes no effort option here.
+// Antigravity's CLI `agy` (winget Google.AntigravityCLI, checked on 1.5.9): `-p` runs one prompt and exits; in that
+// mode an action that would ask is refused, so --dangerously-skip-permissions lets it run the CLI and write the draft,
+// as the other presets do; skills from ~/.gemini/antigravity-cli/skills (its documentation). The effort is part of its
+// model ids (gemini-3.8-flash-high), so it takes no effort option here.
 const AGENTS = {
   agy: {
     name: 'Antigravity CLI',

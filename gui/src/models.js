@@ -1,5 +1,5 @@
 // The models and thinking levels each summary route offers on the summary page (read without spending tokens). Each
-// comes from what the agent keeps or prints itself:
+// comes from what the agent keeps or prints itself, as checked on 2026-10-29:
 //   Claude Code: no command lists models; its --help names the aliases and --effort low|medium|high|xhigh|max.
 //   Codex: ~/.codex/models_cache.json, the catalog the app downloads, with each model's reasoning levels
 //     (-c model_reasoning_effort=…).

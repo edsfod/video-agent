@@ -1,5 +1,5 @@
 // AutoSlides Extractor, downloaded on demand into the app's data folder: the portable Windows build from its author's
-// GitHub releases, so the installer stays small and the author's releases stay the source of its files. Where it is,
+// GitHub releases, so the installer is unchanged and the author's releases stay the source of its files. Where it is,
 // every CLI this app starts finds it (childEnv sets AUTOSLIDES_EXTRACTOR), and process uses it for the screen pages.
 
 const { app, net } = require('electron');

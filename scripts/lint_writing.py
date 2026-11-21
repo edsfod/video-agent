@@ -56,7 +56,7 @@ RULES_ANY = [
   (
     '已归档的旧文档路径',
     re.compile(
-      r'(?<!archive/2026-11-20/)(?:\bdocs/(?:product-rules\.md|working-rules\.md|decisions/)|(?<![A-Za-z0-9_/-])ARCHITECTURE\.md|\(decisions/)'
+      r'\bdocs/(?:product-rules\.md|working-rules\.md|decisions/)|(?<![A-Za-z0-9_-])ARCHITECTURE\.md|(?:\(|\.\./)decisions/'
     ),
   ),
 ]
@@ -75,6 +75,9 @@ RULES_CODE = [
   ),
 ]
 LINE_COMMENT = re.compile(r'(#|//)')
+# A block comment starts at the start of a line or after a space, so `dist/*.whl` or the regex /\/*$/ opens none.
+BLOCK_START = re.compile(r'(?:^|\s)(/\*|<!--)')
+BLOCK_SUFFIXES = {'.js', '.ts', '.css', '.nsh', '.html'}  # the languages that have block comments
 
 
 def _skipped(path: Path) -> bool:
@@ -88,10 +91,18 @@ def doc_files() -> list[Path]:
   return out
 
 
+def _script(path: Path) -> bool:
+  """没有扩展名、第一行是 #! 的脚本（如 scripts/githooks/ 下的钩子），按 shell 注释查。"""
+  if path.suffix or not path.is_file():
+    return False
+  with path.open('rb') as f:
+    return f.read(2) == b'#!'
+
+
 def code_files() -> list[Path]:
   out: list[Path] = []
   for d in CODE_DIRS:
-    out += [p for p in d.rglob('*') if p.suffix in CODE_SUFFIXES and not _skipped(p)]
+    out += [p for p in d.rglob('*') if (p.suffix in CODE_SUFFIXES or _script(p)) and not _skipped(p)]
   return out
 
 
@@ -123,8 +134,8 @@ def _python_comment_lines(text: str) -> list[tuple[int, str]]:
   return [(no, lines[no - 1]) for no in sorted(chosen) if 1 <= no <= len(lines)]
 
 
-def _other_comment_lines(text: str) -> list[tuple[int, str]]:
-  """非 Python 代码里的单行注释和 /* ... */、<!-- ... --> 块注释行。"""
+def _other_comment_lines(text: str, blocks: bool = True) -> list[tuple[int, str]]:
+  """非 Python 代码里的单行注释和 /* ... */、<!-- ... --> 块注释行；`blocks` 为假时（shell、YAML 这类没有块注释的）只认单行注释。"""
   out: list[tuple[int, str]] = []
   in_block: str | None = None
   for no, line in enumerate(text.splitlines(), 1):
@@ -133,14 +144,12 @@ def _other_comment_lines(text: str) -> list[tuple[int, str]]:
       if in_block in line:
         in_block = None
       continue
-    if '/*' in line:
+    start = BLOCK_START.search(line) if blocks else None
+    if start:
       out.append((no, line))
-      if '*/' not in line[line.index('/*') + 2 :]:
-        in_block = '*/'
-    elif '<!--' in line:
-      out.append((no, line))
-      if '-->' not in line[line.index('<!--') + 4 :]:
-        in_block = '-->'
+      end = '*/' if start[1] == '/*' else '-->'
+      if end not in line[start.end() :]:
+        in_block = end
     elif LINE_COMMENT.search(line):
       out.append((no, line))
   return out
@@ -154,7 +163,10 @@ def check(path: Path, is_doc: bool) -> list[str]:
     targets = list(enumerate(text.splitlines(), 1))
   else:
     rules = RULES_ANY + RULES_CODE
-    targets = _python_comment_lines(text) if path.suffix == '.py' else _other_comment_lines(text)
+    if path.suffix == '.py':
+      targets = _python_comment_lines(text)
+    else:
+      targets = _other_comment_lines(text, blocks=path.suffix in BLOCK_SUFFIXES)
   for no, line in targets:
     for name, pattern in rules:
       if pattern.search(line):
@@ -173,7 +185,7 @@ def in_scope(path: Path) -> bool | None:
     and not any(ex in path.parents for ex in DOC_EXCLUDE)
   ):
     return True
-  if path.suffix in CODE_SUFFIXES and any(d in path.parents for d in CODE_DIRS):
+  if (path.suffix in CODE_SUFFIXES or _script(path)) and any(d in path.parents for d in CODE_DIRS):
     return False
   return None
 
