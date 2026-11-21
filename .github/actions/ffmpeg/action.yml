@@ -2,7 +2,8 @@ name: LGPL FFmpeg
 description: >-
   Puts the LGPL FFmpeg the installer ships in build/ffmpeg: from the cache, from the verified prebuilt archive on
   GitHub Releases (packaging/ffmpeg/fetch.sh), or built by packaging/ffmpeg/build.sh in MSYS2 UCRT64 when build.sh's
-  non-comment commands change (docs/design/distribution.md). Expects the repository checked out.
+  non-comment commands change (docs/design/distribution.md). Expects the repository checked out. The cache key's "2"
+  marks trees that carry build/ffmpeg/BUILD-HASH, which fetch.sh needs to take a tree.
 
 runs:
   using: composite
@@ -14,7 +15,7 @@ runs:
       uses: actions/cache/restore@v6
       with:
         path: build/ffmpeg
-        key: ffmpeg-lgpl-${{ steps.key.outputs.hash }}
+        key: ffmpeg-lgpl-2-${{ steps.key.outputs.hash }}
     - id: fetch
       shell: bash
       run: |
@@ -32,12 +33,39 @@ runs:
           make diffutils
           mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-nasm mingw-w64-ucrt-x86_64-pkgconf
           mingw-w64-ucrt-x86_64-meson mingw-w64-ucrt-x86_64-ninja mingw-w64-ucrt-x86_64-zlib
-          mingw-w64-ucrt-x86_64-cmake
+          mingw-w64-ucrt-x86_64-cmake mingw-w64-ucrt-x86_64-ccache
+    # ccache's folder from the latest build that saved one: with the same compiler, only what changed is compiled again.
+    - if: steps.fetch.outputs.ready != 'true'
+      uses: actions/cache/restore@v6
+      with:
+        path: build/ccache
+        key: ffmpeg-ccache-${{ github.run_id }}-${{ github.run_attempt }}
+        restore-keys: ffmpeg-ccache-
     - if: steps.fetch.outputs.ready != 'true'
       shell: msys2 {0}
-      run: bash packaging/ffmpeg/build.sh
+      env:
+        CCACHE_DIR: ${{ github.workspace }}/build/ccache
+        # MSYS2 is installed afresh on every run, so the compiler is compared by content, not by file time.
+        CCACHE_COMPILERCHECK: content
+        CCACHE_MAXSIZE: 2G
+      run: |
+        ccache --zero-stats
+        status=0
+        bash packaging/ffmpeg/build.sh || status=$?
+        ccache --show-stats
+        exit $status
+    - if: steps.fetch.outputs.ready != 'true'
+      shell: bash
+      run: bash packaging/ffmpeg/fetch.sh --mark
+    # Saved even when the build failed, so that the next attempt starts from what did compile. Of jobs building at the
+    # same time, the first to finish saves it; the others only log that the key is taken.
+    - if: ${{ !cancelled() && steps.fetch.outputs.ready != 'true' }}
+      uses: actions/cache/save@v6
+      with:
+        path: build/ccache
+        key: ffmpeg-ccache-${{ github.run_id }}-${{ github.run_attempt }}
     - if: steps.cache.outputs.cache-hit != 'true'
       uses: actions/cache/save@v6
       with:
         path: build/ffmpeg
-        key: ffmpeg-lgpl-${{ steps.key.outputs.hash }}
+        key: ffmpeg-lgpl-2-${{ steps.key.outputs.hash }}

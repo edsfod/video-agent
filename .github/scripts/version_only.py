@@ -1,5 +1,5 @@
 """Prints yes when the commits since BASE change nothing but the version where scripts/bump_version.py writes it, and
-release notes; else no. Used by changed-jobs.sh: python3 .github/scripts/version_only.py BASE.
+release notes; else no. Used by changed-jobs.sh: python3 .github/scripts/version_only.py BASE [HEAD].
 
 Every changed line outside docs/releases/ must name the old or the new version, in either spelling (semantic, or
 Python's), or be README.md's wheel link (which keeps the last full release's during a pre-release), and every changed
@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts'))
-import bump_version  # noqa: E402
+import bump_version
 
 
 def git(*args):
@@ -23,16 +23,16 @@ def version(ref):
   return re.search(r"__version__ = '([^']+)'", git('show', f'{ref}:src/video_agent/__init__.py')).group(1)
 
 
-def version_only(base):
-  old, new = version(base), version('HEAD')
-  files = [name for name in git('diff', '--name-only', base, 'HEAD').splitlines() if name]
+def version_only(base, head='HEAD'):
+  old, new = version(base), version(head)
+  files = [name for name in git('diff', '--name-only', base, head).splitlines() if name]
   if old == new or not all(name in bump_version.CHANGES or name.startswith('docs/releases/') for name in files):
     return False
   spelled = {old, new, bump_version.python(old), bump_version.python(new)}
   code = [name for name in files if not name.startswith('docs/releases/')]
   lines = [
     line
-    for line in git('diff', '-U0', base, 'HEAD', '--', *code).splitlines()
+    for line in git('diff', '-U0', base, head, '--', *code).splitlines()
     if line.startswith(('+', '-')) and not line.startswith(('+++', '---'))
   ]
   wheel = re.compile(r'releases/download/v[^/\s]+/video_agent-[^-\s]+-py3-none-any\.whl')
@@ -40,4 +40,4 @@ def version_only(base):
 
 
 if __name__ == '__main__':
-  print('yes' if version_only(sys.argv[1]) else 'no')
+  print('yes' if version_only(*sys.argv[1:3]) else 'no')

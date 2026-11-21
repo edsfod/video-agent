@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Which test.yml jobs a push needs, from the files it changed. Prints cli=, gui= and installer= (true/false) to
-# $GITHUB_OUTPUT, or to stdout when run by hand: bash .github/scripts/changed-jobs.sh [base].
+# $GITHUB_OUTPUT, or to stdout when run by hand: bash .github/scripts/changed-jobs.sh [base [head]]; head defaults to
+# HEAD (the pre-push hook passes the commit it pushes).
 #
 # The jobs follow how the parts depend on each other: the window drives the real CLI (it must not duplicate its
 # logic), and the installer bundles the CLI, the window and the skill. The CLI's code runs cli and gui, the window's
@@ -15,10 +16,11 @@
 #
 # A push to main is a fast-forward to a commit that already passed on its branch, so main repeats nothing, except to
 # fill the caches that later branches read (a branch reads only main's caches and its own): the npm and Electron
-# downloads when gui/package-lock.json changed, the LGPL FFmpeg when its build script changed.
+# downloads when gui/package-lock.json changed, the LGPL FFmpeg when its build script or its cache key changed.
 set -euo pipefail
 
 base=${1:-}
+head=${2:-HEAD}
 if [ -z "$base" ]; then
   case "${EVENT:-}" in
     pull_request) base=${PR_BASE:-} ;;
@@ -59,7 +61,7 @@ else
       *) why='unknown: all'; cli=true gui=true installer=true ;;
     esac
     echo "  $file ($why)"
-  done < <(git diff --name-only "$base" HEAD)
+  done < <(git diff --name-only "$base" "$head")
 fi
 
 # A release commit (scripts/bump_version.py and its notes) changes nothing but the version where it is written; the
@@ -68,7 +70,7 @@ fi
 if [ -n "$base" ] && [ "$gui$installer" != falsefalse ]; then
   # python3 on Linux; on Windows that name may be only the Store's placeholder, so uv's Python then.
   if python3 -c '' 2>/dev/null; then py=(python3); else py=(uv run --no-project --quiet python); fi
-  bumped=$("${py[@]}" .github/scripts/version_only.py "$base" 2>/dev/null || true)
+  bumped=$("${py[@]}" .github/scripts/version_only.py "$base" "$head" 2>/dev/null || true)
   if [ "$bumped" = yes ]; then
     echo "only the version changed: the cli job checks that every file agrees; gui and installer have nothing new to test"
     cli=true gui=false installer=false
@@ -80,10 +82,10 @@ if [ -n "$base" ] && [ "${EVENT:-}" = push ] && [ "${REF:-}" = main ] && [ -n "$
     --jq '[.workflow_runs[] | select(.name == "test" and .head_branch != "main")] | length' 2>/dev/null || echo 0)
   if [ "$tested" -gt 0 ]; then
     echo "${SHA:0:7} already passed on its branch: main only fills caches that changed"
-    changed=$(git diff --name-only "$base" HEAD)
+    changed=$(git diff --name-only "$base" "$head")
     cli=false gui=false installer=false
     if grep -qx 'gui/package-lock.json' <<<"$changed"; then gui=true installer=true; fi
-    if grep -qx 'packaging/ffmpeg/build.sh' <<<"$changed"; then installer=true; fi
+    if grep -qxE 'packaging/ffmpeg/build\.sh|\.github/actions/ffmpeg/action\.yml' <<<"$changed"; then installer=true; fi
   fi
 fi
 

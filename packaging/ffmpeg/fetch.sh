@@ -1,15 +1,20 @@
 #!/usr/bin/env bash
 # Prepares and verifies build/ffmpeg without compiling from scratch when packaging/ffmpeg/build.sh has the pinned
 # build_hash (comments and blank lines stripped; docs/design/distribution.md).
+# build/ffmpeg/BUILD-HASH names the build_hash the tree was built from, so a tree from an older build.sh is not taken.
+# Only whole-line comments are left out of the hash: a comment at the end of a line in build.sh counts as a change.
 # Usage:
 #   bash packaging/ffmpeg/fetch.sh --hash    # prints the comment-stripped sha256 of packaging/ffmpeg/build.sh
 #   bash packaging/ffmpeg/fetch.sh --verify  # checks an existing build/ffmpeg tree against build.sh
-#   bash packaging/ffmpeg/fetch.sh           # verifies build/ffmpeg, or downloads and verifies the prebuilt archive
+#   bash packaging/ffmpeg/fetch.sh --mark    # after running build.sh: checks the new tree and writes BUILD-HASH
+#   bash packaging/ffmpeg/fetch.sh           # verifies build/ffmpeg, or downloads and verifies the prebuilt archive;
+#                                            # exits 2 when build.sh changed and no prebuilt archive is pinned for it
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 BUILD_SH=$ROOT/packaging/ffmpeg/build.sh
 OUT=$ROOT/build/ffmpeg
+MARK=$OUT/BUILD-HASH
 
 PREBUILT_TAG=v0.9.0
 PREBUILT_BUILD_HASH=debbfb3de887c67aca002a5a15b2714ed67774dd7d3dec3bed996fe674a1a877
@@ -23,7 +28,13 @@ read_var() {
   sed -n "s/^$1=//p" "$BUILD_SH" | tr -d '\r' | head -1
 }
 
-verify_tree() {
+# What Video Agent needs from the build, as kind:name, read from the check at the end of build.sh so it is listed once.
+required() {
+  sed -n '/^for kind_name in /,/; do$/p' "$BUILD_SH" | tr -d '\r\\' | sed 's/^for kind_name in //; s/; do$//'
+}
+
+# The tree has the sources build.sh pins, the licences, an LGPL ffmpeg.exe and everything required.
+verify_contents() {
   local ffmpeg_ver ffmpeg_sha dav1d_ver dav1d_sha svt_ver svt_sha bin
   ffmpeg_ver=$(read_var FFMPEG_VERSION)
   ffmpeg_sha=$(read_var FFMPEG_SHA256)
@@ -43,10 +54,20 @@ verify_tree() {
     "$svt_sha" "$OUT/source/SVT-AV1-v$svt_ver.tar.gz" | sha256sum -c - >/dev/null 2>&1 || return 1
 
   "$bin" -hide_banner -L | grep -q 'GNU Lesser General Public' || return 1
-  for kind_name in filters:freezedetect filters:tblend filters:drawbox filters:tile filters:select decoders:libdav1d \
-    decoders:hevc decoders:h264 encoders:mjpeg encoders:aac encoders:mpeg4 encoders:srt encoders:libsvtav1; do
-    "$bin" -hide_banner -"${kind_name%%:*}" | grep -qw "${kind_name#*:}" || return 1
+  local wanted kind_name
+  wanted=$(required)
+  [ -n "$wanted" ] || { echo "build.sh 里找不到所需组件的清单（for kind_name in …）" >&2; return 1; }
+  for kind_name in $wanted; do
+    # The name is the second column of -filters, -decoders and -encoders; a word in a description does not count.
+    "$bin" -hide_banner -"${kind_name%%:*}" | awk -v name="${kind_name#*:}" '$2 == name { found = 1 } END { exit !found }' ||
+      return 1
   done
+}
+
+# As verify_contents, and built from the build.sh there is now.
+verify_tree() {
+  [ -f "$MARK" ] && [ "$(tr -d '\r\n' <"$MARK")" = "$(build_hash)" ] || return 1
+  verify_contents
 }
 
 case "${1:-}" in
@@ -56,6 +77,11 @@ case "${1:-}" in
     ;;
   --verify)
     verify_tree
+    exit 0
+    ;;
+  --mark)
+    verify_contents || { echo "build/ffmpeg 未通过校验，不写 BUILD-HASH" >&2; exit 1; }
+    build_hash >"$MARK"
     exit 0
     ;;
 esac
@@ -68,7 +94,7 @@ fi
 hash=$(build_hash)
 if [ "$hash" != "$PREBUILT_BUILD_HASH" ]; then
   echo "build.sh 的有效内容哈希 ($hash) 与预编译包 ($PREBUILT_BUILD_HASH) 不同，需要重新编译" >&2
-  exit 1
+  exit 2
 fi
 
 name="ffmpeg-lgpl-$hash.tar.gz"
@@ -84,5 +110,6 @@ echo "$PREBUILT_ARCHIVE_SHA256  $tmp/$name" | sha256sum -c -
 rm -rf "$OUT"
 mkdir -p "$OUT"
 tar -xzf "$tmp/$name" -C "$OUT"
+echo "$hash" >"$MARK"
 verify_tree || { echo "预编译包解压后未通过校验" >&2; exit 1; }
 echo "已下载并校验预编译的 build/ffmpeg ($name)"

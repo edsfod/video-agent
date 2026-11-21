@@ -6,12 +6,13 @@ on:
   pull_request:
 
 # A newer push to the same branch replaces a run still going, so a fixed intermediate commit does not report a
-# failure. The FFmpeg build is cached as soon as it succeeds; a cold build cut short only happens when
-# packaging/ffmpeg/build.sh changes twice within its 15 minutes.
+# failure. The cli, gui and installer jobs all take the LGPL FFmpeg the installer ships (.github/actions/ffmpeg): from
+# the cache or the prebuilt archive in seconds; only a real change to packaging/ffmpeg/build.sh compiles it, about 22
+# minutes in each job, until its prebuilt archive is published (docs/development.md).
 #
-# The installer job sets the time of a run (about 4 minutes when FFmpeg comes from the cache). npm packages, and the
-# Electron and electron-builder downloads, are cached on gui/package-lock.json; the installer job takes FFmpeg from the
-# cache itself and makes its test video with that LGPL build instead of installing another FFmpeg.
+# The installer job sets the time of a run (about 5 minutes when FFmpeg comes from the cache or the prebuilt archive).
+# npm packages, and the Electron and electron-builder downloads, are cached on gui/package-lock.json; the installer job
+# makes its test video with the LGPL FFmpeg instead of installing another one.
 #
 # Each job runs only when the push changed something it tests (.github/scripts/changed-jobs.sh): a change to the
 # documentation runs none, the window's code runs gui, the CLI's code runs cli and gui, and packaging or updater

@@ -15,7 +15,7 @@
 
 ## 在哪里跑
 
-- 本机：`pre-push` 钩子（`scripts/githooks/pre-push`）按这次推送改了什么挑检查（规则和 GitHub 一样，见 `.github/scripts/changed-jobs.sh`）：只改文档什么都不跑；改了命令行跑 ruff、mypy、pytest 和入口；改了窗口代码跑 GUI 的类型检查和单元测试；改了打包相关的文件，再打包一次命令行工具并跑它的冒烟测试。开窗口的端到端测试不在本机跑（用户 2026-10-30 定：太慢，GitHub 上也会跑）。推送的提交都已在远端时跳过。
+- 本机：`pre-push` 钩子（`scripts/githooks/pre-push`）按这次推送改了什么挑检查（规则和 GitHub 一样，见 `.github/scripts/changed-jobs.sh`）：只改文档什么都不跑；改了命令行跑 ruff、mypy、pytest 和入口；改了窗口代码跑 GUI 的类型检查和单元测试；改了打包相关的文件，再打包一次命令行工具并跑它的冒烟测试。开窗口的端到端测试不在本机跑（用户 2026-10-30 定：太慢，GitHub 上也会跑），`update` 也是开窗口的；会安装程序、改真实 PATH 或已安装程序的测试（`update-install`、`installer-path`）只在 GitHub 上跑，用临时目录、临时注册表项隔离的（如 `user-path`）可以在本机跑（用户 2026-11-21 定）。推送的提交都已在远端时跳过。
 - GitHub（`.github/workflows/test.yml`，只在 Windows 上）：按改动挑任务。cli 任务跑命令行的检查；gui 任务跑端到端测试（约 2.5 分钟）；installer 任务（构建、PATH 选项、静默安装、更新安装，约 5 分钟）只在依赖、打包、安装器、图标、更新器改了时跑。只改版本号的提交（`.github/scripts/version_only.py`）只跑版本号检查。同一分支上被新推送取代的运行会取消；每个任务都有时限。
 - git 钩子：`sh scripts/githooks/install.sh` 把 `scripts/githooks/` 下的 pre-commit（写法检查）、commit-msg（AI 署名、写法检查）和 pre-push 装进 `.git/hooks/`，见 [writing.md](writing.md)。
 - 本机跑端到端测试：在 `gui/` 下 `node --test --test-concurrency=1 test/e2e.test.js`，用临时的 APPDATA 和 `--user-data`。
@@ -24,6 +24,15 @@
 
 - 命令行：`packaging/build_cli.py` 用 PyInstaller 冻结，带上 yt-dlp 和 `packaging/ffmpeg/build.sh` 编译的 LGPL FFmpeg（源码随每次发布附上）。
 - 安装包：electron-builder 打成未签名的 NSIS 安装包，安装时先显示 `PRIVACY.md`，并把命令行工具加进用户的 `PATH`。
+- LGPL FFmpeg 的预编译包（[design/distribution.md](design/distribution.md) 第三节）：`build.sh` 的版本或编译命令改了以后，CI 每个用到它的任务都要冷编译（约 22 分钟），本机 pre-push 也跳过打包冒烟测试，直到换上新的预编译包：
+  1. 等 installer 任务编完，删掉本机的 `build/ffmpeg`，`gh run download <运行号> -n ffmpeg-lgpl -D build/ffmpeg`，再跑 `bash packaging/ffmpeg/fetch.sh --verify`，要通过。
+  2. `tar -czf ffmpeg-lgpl-<哈希>.tar.gz -C build/ffmpeg .`，哈希是 `bash packaging/ffmpeg/fetch.sh --hash` 的输出；`gh release upload v0.9.0 ffmpeg-lgpl-<哈希>.tar.gz`。
+  3. 把 `packaging/ffmpeg/fetch.sh` 里的 `PREBUILT_BUILD_HASH` 改成这个哈希，`PREBUILT_ARCHIVE_SHA256` 改成压缩包的 SHA-256，提交。
+- 改 `build.sh` 之前先看这几项能不能顺带做，省得为它们单独再冷编译一次（`build.sh` 开头的注释指到这里）：
+  - 编好的 dav1d、SVT-AV1 单独缓存，以它们的版本为键：GCC 变了、ccache 用不上时，只升级 FFmpeg 也能省约 3.5 分钟。
+  - 注释只写整行：`fetch.sh --hash` 只略过整行注释，行尾注释改了也算改动。
+- 本机编：在仓库根目录用 MSYS2 的 UCRT64 终端跑 `bash packaging/ffmpeg/build.sh`，要装的包和 `.github/actions/ffmpeg/action.yml` 里的一样（装了 ccache，再编时只重编改到的部分）。从 Git Bash 里要经 MSYS2 安装目录下的 `msys2_shell.cmd -ucrt64 -defterm -no-start -here -c 'bash packaging/ffmpeg/build.sh'` 启动：直接运行 MSYS2 的 `bash.exe`，环境变量只传过去 `PATH`、`HOME` 等几个，ccache 因为没有 `USERPROFILE` 会退出。
+- 本机手动跑过 `build.sh` 后，再跑 `bash packaging/ffmpeg/fetch.sh --mark`：它校验 `build/ffmpeg` 并写下 `BUILD-HASH`，`fetch.sh` 和 pre-push 才会用这份。
 
 ## 发布
 

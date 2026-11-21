@@ -5,6 +5,8 @@
 # separate programs. Run it in an MSYS2 UCRT64 shell with the packages listed in .github/actions/ffmpeg/action.yml; it
 # writes build/ffmpeg/. The LGPL requires the corresponding source, so the exact tarballs land in build/ffmpeg/source
 # and go onto every release beside the installer (see docs/design/distribution.md).
+# Before changing this file, see docs/development.md (构建): publishing the new prebuilt build, and what to improve
+# in the same cold build. Comments go on lines of their own: fetch.sh hashes the other lines.
 set -euo pipefail
 
 FFMPEG_VERSION=9.0.2
@@ -21,7 +23,8 @@ PREFIX=$WORK/prefix
 rm -rf "$WORK" "$OUT/bin"
 mkdir -p "$OUT/source" "$OUT/bin" "$OUT/licenses" "$WORK"
 
-fetch() { # url sha256
+# fetch URL SHA256: downloads a source tarball once, checks it and unpacks it into the work folder.
+fetch() {
   local file="$OUT/source/$(basename "$1")"
   [ -f "$file" ] || curl -sSfL --retry 3 "$1" -o "$file"
   echo "$2  $file" | sha256sum -c -
@@ -31,20 +34,32 @@ fetch "https://ffmpeg.org/releases/ffmpeg-$FFMPEG_VERSION.tar.xz" "$FFMPEG_SHA25
 fetch "https://downloads.videolan.org/pub/videolan/dav1d/$DAV1D_VERSION/dav1d-$DAV1D_VERSION.tar.xz" "$DAV1D_SHA256"
 fetch "https://gitlab.com/AOMediaCodec/SVT-AV1/-/archive/v$SVTAV1_VERSION/SVT-AV1-v$SVTAV1_VERSION.tar.gz" "$SVTAV1_SHA256"
 
+# With ccache installed, every compiler call goes through it, so a rebuild with the same compiler reuses the objects of
+# the last one and only compiles what changed (the CI keeps the ccache folder in the Actions cache).
+CC=gcc
+LAUNCHER=()
+if command -v ccache >/dev/null; then
+  CC="ccache gcc"
+  LAUNCHER=(-DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache)
+fi
+
 # dav1d as a static library only.
-meson setup "$WORK/dav1d-build" "$WORK/dav1d-$DAV1D_VERSION" --prefix="$PREFIX" --libdir=lib \
+CC="$CC" meson setup "$WORK/dav1d-build" "$WORK/dav1d-$DAV1D_VERSION" --prefix="$PREFIX" --libdir=lib \
   --default-library=static --buildtype=release -Denable_tools=false -Denable_tests=false
 ninja -C "$WORK/dav1d-build" install
 
-# SVT-AV1 as a static library only, without its command-line encoder.
+# SVT-AV1 as a static library only, without its command-line encoder. Without link-time optimization: by default its
+# objects hold only GCC LTO bytecode, so linking ffmpeg and ffprobe compiled SVT-AV1 again each time (over 4 minutes
+# on the CI machines; a second or two without it), and the encoder was no faster with it.
 cmake -S "$WORK/SVT-AV1-v$SVTAV1_VERSION" -B "$WORK/svtav1-build" -G Ninja -DCMAKE_BUILD_TYPE=Release \
-  -DCMAKE_INSTALL_PREFIX="$PREFIX" -DCMAKE_INSTALL_LIBDIR=lib -DBUILD_SHARED_LIBS=OFF -DBUILD_APPS=OFF -DBUILD_TESTING=OFF
+  -DCMAKE_INSTALL_PREFIX="$PREFIX" -DCMAKE_INSTALL_LIBDIR=lib -DBUILD_SHARED_LIBS=OFF -DBUILD_APPS=OFF -DBUILD_TESTING=OFF \
+  -DSVT_AV1_LTO=OFF "${LAUNCHER[@]}"
 ninja -C "$WORK/svtav1-build" install
 
 # FFmpeg: LGPL (no --enable-gpl, no --enable-nonfree), no autodetected system libraries, static. Everything native
 # stays in (decoders, demuxers, muxers, filters); only zlib, dav1d and SVT-AV1 come from outside.
 CONFIGURE=(
-  --prefix="$PREFIX" --disable-debug --disable-doc --disable-ffplay
+  --prefix="$PREFIX" --cc="$CC" --disable-debug --disable-doc --disable-ffplay
   --disable-shared --enable-static --pkg-config-flags=--static --extra-ldflags=-static
   --disable-autodetect --enable-zlib --enable-libdav1d --enable-libsvtav1
   --disable-network --disable-devices --disable-hwaccels
