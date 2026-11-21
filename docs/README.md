@@ -1,7 +1,6 @@
 # 文档地图
 
 > 给谁看：要了解、修改这个项目的人和 AI。给用户看的介绍和安装说明在仓库根目录的 [README.md](../README.md)。
-> 重构前的文档在 `archive/2026-11-20/`，冻结，只当查漏的材料。
 
 ## 各篇回答什么
 
@@ -25,7 +24,6 @@
 | [releases/](releases/) | 每一版的发布说明（公开），只追加 | |
 | [release-log.md](release-log.md) | 每次发布过了哪些检查，只追加 | |
 | `user-notes/` | 用户亲手写的原始材料，不进 git | |
-| `archive/2026-11-20/` | 重构前的文档，冻结 | |
 
 必须遵守的硬要求在 `.claude/rules/hard-requirements.md`，每次会话自动加载。
 
