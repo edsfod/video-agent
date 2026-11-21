@@ -38,7 +38,13 @@ const ENV = {
   NO_PROXY: '127.0.0.1,localhost',
   no_proxy: '127.0.0.1,localhost',
 };
-const SUMMARY = '# 测试视频\n\n## 概要\n\n一段测试视频。[画面](frames/extra/frame-00-00-03.jpg)\n';
+// 要点 with a picture only in 详细内容: saving links the numbers and brings the picture to the point (forest.py).
+const SUMMARY = '# 测试视频\n\n## 概要\n\n一段测试视频（**P1**）。\n\n## 要点\n\n'
+  + '- `00:00:00`–`00:00:05` 讲者展示一张图表（**P1**）\n- `00:00:00`–`00:00:02` 开场（**P2**）\n'
+  + '- `00:00:03`–`00:00:05` 图上是[彩条](frames/extra/frame-00-00-03.jpg)（**P1**）\n\n'
+  + '## 详细内容\n\n### 演示 `00:00:00`–`00:00:08`\n\n'
+  + '- **P1** `事实` `00:00:03` 讲者展示了一张图表。[画面：图表](frames/extra/frame-00-00-03.jpg)\n'
+  + '- **P2** `事实` `00:00:01` 讲者打招呼。\n';
 
 function cli(args) {
   return execFileSync('video-agent', args, { env: ENV, encoding: 'utf8', windowsHide: true });
@@ -371,7 +377,28 @@ test('summary through the model API, with one frame tool round', async () => {
   assert.equal(model.requests[0].tools[0].function.name, 'frame');
   assert.equal(model.requests[1].messages.at(-1).content[1].type, 'image_url');
   await page.waitForSelector('#video-list .video-item .badge:text("已总结")');
-  await page.click('#summary a');
+  // 要点: the picture of P1 as a chip under its point, without the ' · ' it was joined with or an underline; a point
+  // whose items have no picture gets no row of chips.
+  const points = await page.$$eval('#summary h2:text-is("要点") + ul > li', (items) => items.map((item) => ({
+    text: item.textContent,
+    chips: [...item.querySelectorAll(':scope > .point-pictures > a.point-picture')].map((link) => ({
+      href: link.getAttribute('href'),
+      line: getComputedStyle(link).textDecorationLine,
+    })),
+    rows: item.querySelectorAll('.point-pictures').length,
+    inline: item.querySelectorAll(':scope > a[href$=".jpg"]:not(.point-picture)').length,
+  })));
+  assert.equal(points.length, 3);
+  assert.deepEqual(points[0].chips, [{ href: 'frames/extra/frame-00-00-03.jpg', line: 'none' }]);
+  assert.ok(!points[0].text.includes('·'), points[0].text);
+  assert.equal(points[1].rows, 0);
+  // A picture the point links inside its sentence stays there (and is not brought again at the end).
+  assert.equal(points[2].rows, 0);
+  assert.equal(points[2].inline, 1);
+  // The number jumps to its entry in 详细内容, and the chip opens the picture.
+  await page.click('#summary h2:text-is("要点") + ul > li a[href="#P1"]');
+  await page.waitForSelector('#summary li.entry-shown:has-text("讲者展示了一张图表")');
+  await page.click('#summary a.point-picture');
   await page.waitForSelector('#lightbox[open]');
   await page.click('#lightbox');
 });

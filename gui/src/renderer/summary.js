@@ -191,22 +191,34 @@ export async function renderSummary(video) {
   }
 }
 
-// The pictures forest.py puts at the end of a point in 要点, joined by ' · ', shown under the point as small chips.
+// The pictures forest.py puts at the end of a point in 要点, each after ' · ', shown under the point as small chips. Only
+// those move: a picture linked inside the sentence, or in a list under the point, stays where it is.
 function gatherPointPictures(article) {
   const heading = [...article.querySelectorAll('h2')].find((item) => item.textContent.trim() === '要点');
-  const list = heading?.nextElementSibling;
-  if (list?.tagName !== 'UL') return;
+  let list = heading?.nextElementSibling;
+  while (list && !['UL', 'OL', 'H2'].includes(list.tagName)) list = list.nextElementSibling;
+  if (!list || list.tagName === 'H2') return;
+  /** @param {ChildNode | null} node */
+  const skipped = (node) =>
+    !!node && ((node.nodeType === Node.TEXT_NODE && !(node.textContent || '').trim()) ||
+      (node instanceof HTMLElement && ['UL', 'OL'].includes(node.tagName)));
   for (const point of list.children) {
-    const pictures = [...point.querySelectorAll('a[href]')].filter((link) =>
-      /\.(jpe?g|png)>?$/i.test(link.getAttribute('href') || ''),
-    );
-    if (!pictures.length) continue;
-    for (const link of pictures) {
-      const before = link.previousSibling;
-      if (before?.nodeType === Node.TEXT_NODE) before.textContent = (before.textContent || '').replace(/\s*·\s*$/, '');
-      link.className = 'point-picture';
+    const line = point.querySelector(':scope > p') || point; // a loose list puts the line in a paragraph
+    const pictures = [];
+    let node = line.lastChild;
+    for (;;) {
+      while (skipped(node)) node = node?.previousSibling || null;
+      if (!(node instanceof HTMLAnchorElement) || !/\.(jpe?g|png)>?$/i.test(node.getAttribute('href') || '')) break;
+      const before = node.previousSibling;
+      if (before?.nodeType !== Node.TEXT_NODE || !/·\s*$/.test(before.textContent || '')) break;
+      node.className = 'point-picture';
+      pictures.unshift(node);
+      before.textContent = (before.textContent || '').replace(/\s*·\s*$/, '');
+      node = before;
     }
-    point.append(element('div', { className: 'point-pictures' }, pictures));
+    if (!pictures.length) continue;
+    const next = line === point ? point.querySelector(':scope > ul, :scope > ol') : line.nextSibling;
+    point.insertBefore(element('div', { className: 'point-pictures' }, pictures), next);
   }
 }
 

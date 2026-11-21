@@ -35,7 +35,7 @@ SPAN = re.compile(rf'`?({CLOCK})`?\s*[-–—~～至到]+\s*`?({CLOCK})`?')
 RANGE = re.compile(rf'^#{{2,4}}\s.*?`({CLOCK})`\s*[-–—~～至到]+\s*`({CLOCK})`', re.MULTILINE)
 TIME = re.compile(rf'`({CLOCK})`')
 PART = re.compile(rf'^(#{{2,4}})\s+(.*?)`({CLOCK})`\s*[-–—~～至到]+\s*`({CLOCK})`.*$', re.MULTILINE)
-NUMBER = re.compile(r'\*\*P(\d+)\*\*|(?<![A-Za-z0-9])P(\d+)(?![0-9])')
+NUMBER = re.compile(r'\*\*P(\d+)\*\*')  # bold, as items and 要点 write them: P2P is no number
 PROPOSITION = re.compile(rf'^\s*[-*]\s*\*\*P\d+\*\*[^`\n]*(?:`[^`\n]*`[^`\n]*)*?`({CLOCK})`', re.MULTILINE)
 # A stretch of speech in no part is named when at least this long (about a slide's worth of talk);
 # shorter ones are the summary's to leave out.
@@ -43,7 +43,7 @@ GAP_S = 120
 # A proposition this far outside its part's range is in the wrong part (times are written to the second, and a point
 # may be said a little before the part it belongs to begins).
 OUTSIDE_S = 60
-LINK = re.compile(r'[ \t]?\[(?:\\.|[^\]\n])*\]\(<?(' + picture_review.FOLDERS + r'[^)>\n]+)>?\)')
+LINK = re.compile(r'[ \t]?(?<!\\)\[(?:\\.|[^\\\]\n])*\]\(<?(' + picture_review.FOLDERS + r'[^)>\n]+)>?\)')
 NOTHING = re.compile(r'^(?:无|没有)?(?=$|[\s（(，,。:：；;—-])')  # 「无」, alone or with a note on why
 TEMPLATE_HEADING = re.compile(r'^##\s+(.+?)\s*$', re.MULTILINE)
 NAME = 'summary-review.json'
@@ -156,11 +156,11 @@ def unlisted_parts(text, unlisted=()):
   if not points.strip():
     return []
   times = [seconds(value) for value in TIME.findall(points)]
-  numbers = {first or second for first, second in NUMBER.findall(points)}
+  numbers = set(NUMBER.findall(points))
   excused = ' '.join(unlisted)
   missing = []
   for title, start, end, body in _parts(text):
-    own = {first or second for first, second in NUMBER.findall(body)}
+    own = set(NUMBER.findall(body))
     if any(start - 1 <= value <= end + 1 for value in times) or own & numbers or (title and title in excused):
       continue
     missing.append(title or f'{clock(start)}–{clock(end)}')
@@ -175,7 +175,7 @@ def misplaced(text):
       value = seconds(match[1])
       if value < start - OUTSIDE_S or value > end + OUTSIDE_S:
         number = NUMBER.search(match[0])
-        found.append(f'P{number[1] or number[2]} `{match[1]}`（{title or clock(start)}，{clock(start)}–{clock(end)}）')
+        found.append(f'P{number[1]} `{match[1]}`（{title or clock(start)}，{clock(start)}–{clock(end)}）')
   return found
 
 

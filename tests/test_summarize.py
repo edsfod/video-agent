@@ -795,7 +795,7 @@ def test_the_checks_ask_that_key_points_leave_nothing_out(processed):
     '### 讲到的方法 `00:20:00`–`00:30:00`\n\n- **P4** `观点` `00:25:00` 方法。\n'
   )
   assert summary_review.unlisted_parts(text) == ['一个演示', '讲到的方法']
-  assert summary_review.unlisted_parts(text.replace('（**P1**）', '（**P1**）\n- 方法（P4）')) == ['一个演示']
+  assert summary_review.unlisted_parts(text.replace('（**P1**）', '（**P1**）\n- 方法（**P4**）')) == ['一个演示']
   assert summary_review.unlisted_parts(text, ['一个演示（只是铺垫）', '讲到的方法（重复）']) == []
   # P2 is said after its part ends: it belongs to another part, or its time is wrong.
   assert summary_review.misplaced(text) == ['P2 `00:21:30`（一个演示，00:05:00–00:20:00）']

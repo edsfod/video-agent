@@ -12,6 +12,7 @@ and brings each line the pictures linked on its items there, so a picture is lin
 """
 
 import re
+from urllib.parse import unquote
 
 HEADING = '主线与单元'
 MARK = 'video-agent: 这一节由程序根据详细内容生成'  # in a template's section, the program writes the section
@@ -21,14 +22,17 @@ ITEM = re.compile(r'^(\s*)[-*]\s*\*\*P(\d+)\*\*(.*)$')
 TOKEN = re.compile(r'\s*(`[^`\n]*`|（[^）\n]*）|\([^)\n]*\)|(←|反驳|步骤)\s*((?:P\d+[\s,，、和]*)+))')
 TIME = re.compile(rf'^`{CLOCK}`$')
 JOIN = re.compile(r'^\s+[-*]\s*接上\s*[:：]\s*(.+)$')
-LINK = r'\[(?:\\.|[^\]\n])*\]\(<?(?:frames|slide-extraction|slides)/[^)\n]*\)'
+# A backslash only escapes: \[ starts no link, and a line with many backslashes (a formula) cannot make the match
+# backtrack for ever.
+LINK = r'(?<!\\)\[(?:\\.|[^\\\]\n])*\]\(<?(?:frames|slide-extraction|slides)/[^)\n]*\)'
 LINK_PATH = re.compile(r'(?<!\\)\]\(<?([^)>\n]*)')
 PICTURE = re.compile(rf'\s*{LINK}')
 POINTS = '要点'
-POINT = re.compile(r'^([ \t]*[-*][ \t]+)(.*)$', re.MULTILINE)
-# Pictures the program put at the end of a point, including a bare ' ·' left if drop_links took a picture out first.
-ADDED = re.compile(rf'(?:\s*·(?:\s*{LINK})?)+\s*$')
-NUMBER = re.compile(r'\[?\*\*P(\d+)\*\*\]?(?:\(#P\d+\))?|(?<![A-Za-z0-9#])P(\d+)(?![0-9])')
+POINT = re.compile(r'^([ \t]*(?:[-*]|\d+[.)])[ \t]+)(.*)$', re.MULTILINE)  # a bulleted or numbered line
+# Pictures the program put at the end of a point, each after ' · ', including a bare ' ·' left if drop_links took a
+# picture out first; a '·' inside a word, as in a name, is not one.
+ADDED = re.compile(rf'(?:\s+·(?:\s*{LINK})?)+\s*$')
+NUMBER = re.compile(r'\[?\*\*P(\d+)\*\*\]?(?:\(#P\d+\))?')  # bold, as the template writes them: P2P is no number
 UP = {'support': 0, 'attack': 1, 'step': 1}  # which end of a relation is above: 0 the item written first, 1 the other
 OWN = re.compile(r'^###\s+`?拓展`?\s.*?(?=^#{2,3}\s|\Z)', re.MULTILINE | re.DOTALL)  # a unit of the writer's own
 
@@ -53,19 +57,22 @@ class Item:
 def parse(text):
   """(items by number in the order written, relations as (upper, lower, kind)) from 详细内容."""
   items, relations, part, current = {}, [], None, None
-  owner, depth = None, 0  # the item the lines under it belong to, for its pictures, and the indent of its line
+  owners = []  # (indent, item) of the items the next lines may be under, for their pictures; item None: a repeat
   for line in _section(text, '详细内容').splitlines():
     heading = PART.match(line)
     if heading:
-      part, current, owner = heading[1].strip(), None, None
+      part, current, owners = heading[1].strip(), None, []
       continue
     found = ITEM.match(line)
+    if found:
+      while owners and owners[-1][0] >= len(found[1]):
+        owners.pop()
     if found and found[2] in items:
-      owner = None
+      owners.append((len(found[1]), None))
       continue
     if found:
-      current = owner = Item(found[2], part)
-      depth = len(found[1])
+      current = Item(found[2], part)
+      owners.append((len(found[1]), current))
       items[current.number] = current
       current.pictures = re.findall(LINK, found[3])
       rest = found[3]
@@ -89,12 +96,17 @@ def parse(text):
         if number:
           current.joins.append((number[1], entry[number.end() :].strip(' ：:，,')))
       continue
-    if owner and line.strip():
-      if len(line) - len(line.lstrip()) > depth:
-        owner.pictures += re.findall(LINK, line)
-      else:
-        owner = None
+    if line.strip():
+      while owners and owners[-1][0] >= len(line) - len(line.lstrip()):
+        owners.pop()  # a line under a nested item's parent belongs to the parent again
+      if owners and owners[-1][1]:
+        owners[-1][1].pictures += re.findall(LINK, line)
   return items, relations
+
+
+def _path(link):
+  """The file a picture link points to, as the same file however its path is written."""
+  return unquote(LINK_PATH.search(link)[1])
 
 
 def enrich_points(text, items, relations):
@@ -112,20 +124,20 @@ def enrich_points(text, items, relations):
 
   def point(line):
     head, body = line[1], ADDED.sub('', line[2]).rstrip()
-    named = [n for match in NUMBER.finditer(body) if (n := match[1] or match[2]) in items]
+    named = [match[1] for match in NUMBER.finditer(body) if match[1] in items]
     body = re.sub(
       r'(?<!\[)\*\*P(\d+)\*\*(?!\]\()',
       lambda match: f'[{match[0]}](#P{match[1]})' if match[1] in items else match[0],
       body,
     )
     pictures = []
-    paths = {LINK_PATH.search(match[0])[1] for match in re.finditer(LINK, body)}
+    paths = {_path(match[0]) for match in re.finditer(LINK, body)}
     for n in dict.fromkeys(named):
       links = items[n].pictures or [
         link for lower in sorted(set(under.get(n, [])), key=order.get) for link in items[lower].pictures
       ]
       for link in links:
-        path = LINK_PATH.search(link)[1]
+        path = _path(link)
         if path not in paths:
           paths.add(path)
           pictures.append(link)

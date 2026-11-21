@@ -1,5 +1,8 @@
 """主线与单元 laid out by the program from the relations in 详细内容 (forest.py)."""
 
+import re
+import time
+
 from video_agent import forest, summary_review, templates
 
 BODY = """## 详细内容
@@ -157,6 +160,38 @@ def test_points_clean_stray_dots_after_drop_links_and_keep_pictures_after_join()
   assert '- `00:18:00`–`00:20:00` 总结（[**P11**](#P11)）\n' in round2
 
 
+def test_points_take_only_bold_numbers_and_the_pictures_of_a_parent_after_a_nested_item():
+  rules = templates.built_in(templates.STANDARD)
+  body = BODY.replace(
+    '  - **P10** `事实` 书里的一个例子，写在子行也算一条。\n',
+    '  - **P10** `事实` 书里的一个例子，写在子行也算一条。\n  - 书的封面 [画面：封面](<frames/run/frame 09.jpg>)\n',
+  )
+  items, _ = forest.parse(body)
+  # A line back at the parent's depth after a nested item is the parent's again.
+  assert items['9'].pictures == ['[画面：封面](<frames/run/frame 09.jpg>)'] and items['10'].pictures == []
+  written = (
+    '# 标题\n\n## 要点\n\n'
+    '- `00:17:00`–`00:18:00` 讲 P2P 网络和冯·诺依曼（**P9**、**P3**）·\n'
+    '- `00:17:00`–`00:18:00` 同一张图另一种写法（**P9**） [封面](frames/run/frame%2009.jpg)\n\n' + body
+  )
+  text, _ = forest.place(written, rules)
+  # P2P is not P2, a '·' in a word stays, and a picture is one file however its path is written.
+  assert (
+    '- `00:17:00`–`00:18:00` 讲 P2P 网络和冯·诺依曼（[**P9**](#P9)、[**P3**](#P3)）· · '
+    '[画面：封面](<frames/run/frame 09.jpg>)\n'
+  ) in text
+  assert '- `00:17:00`–`00:18:00` 同一张图另一种写法（[**P9**](#P9)） [封面](frames/run/frame%2009.jpg)\n' in text
+  assert forest.place(text, rules)[0] == text
+
+
+def test_picture_links_on_a_line_with_many_backslashes_are_found_at_once():
+  formula = r'- **P1** `事实` `00:01:00` 公式 \[ ' + ' + '.join([r'\alpha_i'] * 40) + r' \] [图](frames/a.jpg)'
+  start = time.perf_counter()
+  assert re.findall(forest.LINK, formula) == ['[图](frames/a.jpg)']
+  assert [m[1] for m in summary_review.LINK.finditer(formula)] == ['frames/a.jpg']
+  assert time.perf_counter() - start < 1
+
+
 def test_an_agents_draft_is_saved_with_the_section_laid_out_and_told_what_the_program_could_not_lay_out(
   sample_video, tmp_path, capsys
 ):
@@ -172,3 +207,14 @@ def test_an_agents_draft_is_saved_with_the_section_laid_out_and_told_what_the_pr
   assert saved.index('## 要点') < saved.index('## 主线与单元\n\n### 主线') < saved.index('## 详细内容')
   told = capsys.readouterr().err
   assert '检查：P7 接到了主结论 P11，「接上」里却没写' in told and '「主线与单元」' not in told
+
+
+def test_a_numbered_list_of_points_is_linked_too_and_a_bare_p_number_points_to_no_part():
+  rules = templates.built_in(templates.STANDARD)
+  written = (
+    '# 标题\n\n## 要点\n\n1. `00:01:00`–`00:02:00` 观测（**P1**）\n2) `00:03:00`–`00:04:00` 讲 P3P 协议\n\n' + BODY
+  )
+  text, _ = forest.place(written, rules)
+  assert '1. `00:01:00`–`00:02:00` 观测（[**P1**](#P1)） · [画面：图](frames/run/frame-001-00-01-00.jpg)\n' in text
+  # P3P is a word, not P3: a point that names only it points to no part.
+  assert '开场' in summary_review.unlisted_parts('## 要点\n\n- 讲 P3P 协议\n\n' + BODY)
