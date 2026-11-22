@@ -59,14 +59,16 @@ ninja -C "$WORK/svtav1-build" install
 # FFmpeg: LGPL (no --enable-gpl, no --enable-nonfree), no autodetected system libraries, static. Everything native
 # stays in (decoders, demuxers, muxers, filters); only zlib, dav1d and SVT-AV1 come from outside.
 CONFIGURE=(
-  --prefix="$PREFIX" --cc="$CC" --disable-debug --disable-doc --disable-ffplay
+  --prefix="$PREFIX" --disable-debug --disable-doc --disable-ffplay
   --disable-shared --enable-static --pkg-config-flags=--static --extra-ldflags=-static
   --disable-autodetect --enable-zlib --enable-libdav1d --enable-libsvtav1
   --disable-network --disable-devices --disable-hwaccels
 )
 cd "$WORK/ffmpeg-$FFMPEG_VERSION"
+# configure runs with plain gcc: its 1100-odd test compiles are tiny, and going through ccache only added a process to
+# each (about a minute in all); make gets ccache instead.
 PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig" ./configure "${CONFIGURE[@]}"
-make -j"$(nproc)"
+make -j"$(nproc)" CC="$CC"
 cp ffmpeg.exe ffprobe.exe "$OUT/bin/"
 strip "$OUT/bin/ffmpeg.exe" "$OUT/bin/ffprobe.exe"
 
