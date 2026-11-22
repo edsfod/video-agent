@@ -24,7 +24,7 @@
 
 - 命令行：`packaging/build_cli.py` 用 PyInstaller 冻结，带上 yt-dlp 和 `packaging/ffmpeg/build.sh` 编译的 LGPL FFmpeg（源码随每次发布附上）。
 - 安装包：electron-builder 打成未签名的 NSIS 安装包，安装时先显示 `PRIVACY.md`，并把命令行工具加进用户的 `PATH`。
-- LGPL FFmpeg 的预编译包（[design/distribution.md](design/distribution.md) 第三节）：`build.sh` 的版本或编译命令改了以后，CI 每个用到它的任务都要重新编译，本机 pre-push 也跳过打包冒烟测试，直到换上新的预编译包：
+- LGPL FFmpeg 的预编译包（[design/distribution.md](design/distribution.md) 第三节）：`build.sh` 的版本或编译命令改了以后，CI 每个用到它的任务都要重新编译（什么缓存都没有时 FFmpeg 这一步约 16 分钟，2026-11-22），本机 pre-push 也跳过打包冒烟测试，直到换上新的预编译包：
   1. 等 installer 任务编完，删掉本机的 `build/ffmpeg`，`gh run download <运行号> -n ffmpeg-lgpl -D build/ffmpeg`，再跑 `bash packaging/ffmpeg/fetch.sh --verify`，要通过。
   2. `tar -czf ffmpeg-lgpl-<哈希>.tar.gz -C build/ffmpeg .`，哈希是 `bash packaging/ffmpeg/fetch.sh --hash` 的输出；`gh release upload v0.9.0 ffmpeg-lgpl-<哈希>.tar.gz`。
   3. 把 `packaging/ffmpeg/fetch.sh` 里的 `PREBUILT_BUILD_HASH` 改成这个哈希，`PREBUILT_ARCHIVE_SHA256` 改成压缩包的 SHA-256，提交。
