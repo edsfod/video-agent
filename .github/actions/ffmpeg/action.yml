@@ -34,6 +34,17 @@ runs:
           mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-nasm mingw-w64-ucrt-x86_64-pkgconf
           mingw-w64-ucrt-x86_64-meson mingw-w64-ucrt-x86_64-ninja mingw-w64-ucrt-x86_64-zlib
           mingw-w64-ucrt-x86_64-cmake mingw-w64-ucrt-x86_64-ccache
+    # dav1d and SVT-AV1 from an earlier build with the same deps_key in build.sh, which then does not build them again.
+    - id: deps-key
+      if: steps.fetch.outputs.ready != 'true'
+      shell: msys2 {0}
+      run: echo "key=$(bash packaging/ffmpeg/build.sh --deps-key)" >> "$(cygpath -u "$GITHUB_OUTPUT")"
+    - id: deps
+      if: steps.fetch.outputs.ready != 'true'
+      uses: actions/cache/restore@v6
+      with:
+        path: build/ffmpeg-deps
+        key: ffmpeg-deps-${{ steps.deps-key.outputs.key }}
     # ccache's folder from the latest build that saved one: with the same compiler, only what changed is compiled again.
     - if: steps.fetch.outputs.ready != 'true'
       uses: actions/cache/restore@v6
@@ -57,6 +68,14 @@ runs:
     - if: steps.fetch.outputs.ready != 'true'
       shell: bash
       run: bash packaging/ffmpeg/fetch.sh --mark
+    # Saved as soon as build.sh has built them, even when FFmpeg then failed.
+    - if: >-
+        ${{ !cancelled() && steps.fetch.outputs.ready != 'true' && steps.deps.outputs.cache-hit != 'true' &&
+        hashFiles('build/ffmpeg-deps/DEPS-KEY') != '' }}
+      uses: actions/cache/save@v6
+      with:
+        path: build/ffmpeg-deps
+        key: ffmpeg-deps-${{ steps.deps-key.outputs.key }}
     # Saved even when the build failed, so that the next attempt starts from what did compile. Of jobs building at the
     # same time, the first to finish saves it; the others only log that the key is taken.
     - if: ${{ !cancelled() && steps.fetch.outputs.ready != 'true' }}

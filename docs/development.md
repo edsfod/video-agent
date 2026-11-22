@@ -24,14 +24,12 @@
 
 - 命令行：`packaging/build_cli.py` 用 PyInstaller 冻结，带上 yt-dlp 和 `packaging/ffmpeg/build.sh` 编译的 LGPL FFmpeg（源码随每次发布附上）。
 - 安装包：electron-builder 打成未签名的 NSIS 安装包，安装时先显示 `PRIVACY.md`，并把命令行工具加进用户的 `PATH`。
-- LGPL FFmpeg 的预编译包（[design/distribution.md](design/distribution.md) 第三节）：`build.sh` 的版本或编译命令改了以后，CI 每个用到它的任务都要冷编译（约 22 分钟），本机 pre-push 也跳过打包冒烟测试，直到换上新的预编译包：
+- LGPL FFmpeg 的预编译包（[design/distribution.md](design/distribution.md) 第三节）：`build.sh` 的版本或编译命令改了以后，CI 每个用到它的任务都要重新编译，本机 pre-push 也跳过打包冒烟测试，直到换上新的预编译包：
   1. 等 installer 任务编完，删掉本机的 `build/ffmpeg`，`gh run download <运行号> -n ffmpeg-lgpl -D build/ffmpeg`，再跑 `bash packaging/ffmpeg/fetch.sh --verify`，要通过。
   2. `tar -czf ffmpeg-lgpl-<哈希>.tar.gz -C build/ffmpeg .`，哈希是 `bash packaging/ffmpeg/fetch.sh --hash` 的输出；`gh release upload v0.9.0 ffmpeg-lgpl-<哈希>.tar.gz`。
   3. 把 `packaging/ffmpeg/fetch.sh` 里的 `PREBUILT_BUILD_HASH` 改成这个哈希，`PREBUILT_ARCHIVE_SHA256` 改成压缩包的 SHA-256，提交。
-- 改 `build.sh` 之前先看这几项能不能顺带做，省得为它们单独再冷编译一次（`build.sh` 开头的注释指到这里）：
-  - 编好的 dav1d、SVT-AV1 单独缓存，以它们的版本为键：GCC 变了、ccache 用不上时，只升级 FFmpeg 也能省约 3.5 分钟。
-  - 注释只写整行：`fetch.sh --hash` 只略过整行注释，行尾注释改了也算改动。
-- 本机编：在仓库根目录用 MSYS2 的 UCRT64 终端跑 `bash packaging/ffmpeg/build.sh`，要装的包和 `.github/actions/ffmpeg/action.yml` 里的一样（装了 ccache，再编时只重编改到的部分）。从 Git Bash 里要经 MSYS2 安装目录下的 `msys2_shell.cmd -ucrt64 -defterm -no-start -here -c 'bash packaging/ffmpeg/build.sh'` 启动：直接运行 MSYS2 的 `bash.exe`，环境变量只传过去 `PATH`、`HOME` 等几个，ccache 因为没有 `USERPROFILE` 会退出。
+- `build.sh` 的注释只写整行：`fetch.sh --hash` 只略过整行注释，行尾注释改了也算改动。
+- 本机编：在仓库根目录用 MSYS2 的 UCRT64 终端跑 `bash packaging/ffmpeg/build.sh`，要装的包和 `.github/actions/ffmpeg/action.yml` 里的一样（装了 ccache，再编时只重编改到的部分）。编好的 dav1d、SVT-AV1 留在 `build/ffmpeg-deps`，解开的 FFmpeg 源码留在 `build/ffmpeg-work`，下次直接用；要全部重来就删掉这两个文件夹。从 Git Bash 里要经 MSYS2 安装目录下的 `msys2_shell.cmd -ucrt64 -defterm -no-start -here -c 'bash packaging/ffmpeg/build.sh'` 启动：直接运行 MSYS2 的 `bash.exe`，环境变量只传过去 `PATH`、`HOME` 等几个，ccache 因为没有 `USERPROFILE` 会退出。
 - 本机手动跑过 `build.sh` 后，再跑 `bash packaging/ffmpeg/fetch.sh --mark`：它校验 `build/ffmpeg` 并写下 `BUILD-HASH`，`fetch.sh` 和 pre-push 才会用这份。
 
 ## 发布
