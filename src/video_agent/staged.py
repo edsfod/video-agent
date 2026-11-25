@@ -415,7 +415,14 @@ class Run:
     root = self.asset / FOLDER
     runs = sorted(p for p in root.glob('2*') if p.is_dir()) if root.is_dir() else []
     open_runs = [p for p in runs if not (p / 'imported').is_file()]
-    self.dir = open_runs[-1] if open_runs and not restart else root / datetime.now().strftime('%Y%m%d-%H%M%S')
+    if open_runs and not restart:
+      self.dir = open_runs[-1]
+    else:
+      stamp, number = datetime.now().strftime('%Y%m%d-%H%M%S'), 1
+      self.dir = root / stamp
+      while self.dir.exists():  # a run started within the same second as the last one
+        number += 1
+        self.dir = root / f'{stamp}-{number}'
     self.dir.mkdir(parents=True, exist_ok=True)
     self.samples = root / 'samples'  # shared by the video's runs
     self.record = json.loads(read(self.dir / 'run.json') or '{}')
