@@ -61,8 +61,10 @@ def _version_name(target, created):
   return name
 
 
-def _meta(source, note, pictures=None, based_on=UNKNOWN):
+def _meta(source, note, pictures=None, based_on=UNKNOWN, usage=None):
   meta = {'created': datetime.now().isoformat(timespec='seconds'), 'source': source or '', 'note': note or ''}
+  if usage:
+    meta['usage'] = usage  # the model's tokens and calls that wrote it, when the program ran the model itself
   if pictures is not None:
     meta['pictures'] = pictures  # the set of pictures it was written with (pictures.py)
   if based_on is not UNKNOWN:
@@ -92,14 +94,16 @@ def _keep_current(target, data):
   return kept
 
 
-def save(target, text, *, source='', note='', make_current=False, pictures=None, based_on=UNKNOWN, _same=None):
+def save(
+  target, text, *, source='', note='', make_current=False, pictures=None, based_on=UNKNOWN, usage=None, _same=None
+):
   """Writes a new text. The first one, or one asked to be current, becomes the current text (the one it replaces is
   kept as a version); otherwise it is kept as a version beside the current one. `pictures` names the set of pictures
-  it was written with, `based_on` the id of the version it was written from (None: written afresh). Returns (path
-  written, is current)."""
+  it was written with, `based_on` the id of the version it was written from (None: written afresh), `usage` the tokens
+  and calls that wrote it. Returns (path written, is current)."""
   target = Path(target)
   data = _load(target)
-  meta = _meta(source, note, pictures, based_on)
+  meta = _meta(source, note, pictures, based_on, usage)
   _give_id(data, meta)
   meta |= _same or {}
   if target.is_file() and not make_current:
@@ -116,7 +120,9 @@ def save(target, text, *, source='', note='', make_current=False, pictures=None,
   return target, True
 
 
-def overwrite(target, name, text, *, source='', note='', make_current=False, pictures=None, based_on=UNKNOWN):
+def overwrite(
+  target, name, text, *, source='', note='', make_current=False, pictures=None, based_on=UNKNOWN, usage=None
+):
   """Writes a new text over an earlier one, the current text (`name` the target's own name) or a version, keeping
   neither: a chat AI's later round over the round before, whether or not it became current. A version written over
   takes the new time in its name; with `make_current` it becomes the current text. It stays the same text in the
@@ -129,14 +135,22 @@ def overwrite(target, name, text, *, source='', note='', make_current=False, pic
     same['based_on'] = old['based_on']
   if name == target.name:
     files.write_text(target, text)
-    data['current'] = _meta(source, note, pictures, based_on) | same
+    data['current'] = _meta(source, note, pictures, based_on, usage) | same
     _save(target, data)
     return target, True
   data['versions'].remove(old)
   target.with_name(name).unlink(missing_ok=True)
   _save(target, data)
   return save(
-    target, text, source=source, note=note, make_current=make_current, pictures=pictures, based_on=based_on, _same=same
+    target,
+    text,
+    source=source,
+    note=note,
+    make_current=make_current,
+    pictures=pictures,
+    based_on=based_on,
+    usage=usage,
+    _same=same,
   )
 
 
@@ -285,6 +299,7 @@ def listing(target) -> contract.Versions:
       'id': _id(meta),
       'based_on': meta.get('based_on'),
       'origin': 'revised' if meta.get('based_on') else 'fresh' if 'based_on' in meta else 'unknown',
+      'usage': meta.get('usage'),
     }
 
   current = entry(target.name, data['current']) if target.is_file() and data['current'] else None

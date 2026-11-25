@@ -1,4 +1,4 @@
-// The agent summary routes, run for real: Claude Code, Codex, Antigravity (its desktop app running and signed in) and
+// The agent summary routes, run for real: Claude Code, Codex and
 // the other agents' presets (pi, hermes, dsh). They spend the user's subscription or API credit, so they run only when
 // named, as in VA_E2E_AGENTS=claude,pi.
 
@@ -15,7 +15,7 @@ const GUI = path.resolve(__dirname, '..');
 
 const OTHERS = ['pi', 'hermes', 'dsh', 'agy']; // presets in programs.js (AGENTS), each a route of its own once ticked in the settings
 
-for (const agent of ['claude', 'codex', 'antigravity', ...OTHERS]) {
+for (const agent of ['claude', 'codex', ...OTHERS]) {
   test(`summary through ${agent}`, { skip: !wanted.includes(agent) && `set VA_E2E_AGENTS=${agent}`, timeout: 600_000 }, async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), `va-agent-${agent}-`));
     const workspace = path.join(root, 'workspace');

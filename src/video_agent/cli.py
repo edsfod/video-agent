@@ -16,6 +16,8 @@ from . import (
   processor,
   removal,
   settings,
+  staged,
+  staged_agy,
   summary_review,
   templates,
   transcript,
@@ -222,7 +224,17 @@ def build_parser():
     help='the workspace passed to process (default: video-agent-output)',
   )
   summarize.add_argument('--provider', choices=tuple(settings.PROVIDERS), help='default: the one set with config')
-  summarize.add_argument('--model', help='default: the one set with config')
+  summarize.add_argument('--model', help=f'default: the one set with config; with --staged, {staged_agy.MODEL}')
+  summarize.add_argument(
+    '--staged',
+    action='store_true',
+    help='write it in stages through the agy command line (Antigravity): units written at once, each in a '
+    'conversation of its own, checked and fixed by the program; goes on with an unfinished staged run of the video',
+  )
+  summarize.add_argument(
+    '--fix-model', help=f"with --staged: the model of the units' fix turns (default: {staged_agy.FIX_MODEL})"
+  )
+  summarize.add_argument('--restart', action='store_true', help='with --staged: start afresh instead of going on')
   summarize.add_argument('--base-url', help='API base URL, such as http://127.0.0.1:11434/v1 for Ollama')
   summarize.add_argument('--request', default='', help="the user's wishes for this summary, passed to the model")
   summarize.add_argument(
@@ -1074,6 +1086,8 @@ def _summarize(args):
     return 2
   if args.import_from:
     return _import(args)
+  if args.staged:
+    return _staged(args)
   chosen = settings.resolve(args.provider, args.model, args.base_url) | {'effort': args.effort}
   if args.collection:
     path = summarize_collection(
@@ -1099,6 +1113,22 @@ def _summarize(args):
     use_tools=not args.no_tools,
     overwrite=args.overwrite,
     template=args.template,
+  )
+  _written(path, args)
+  return 0
+
+
+def _staged(args):
+  if args.collection or (args.template and args.template != templates.STANDARD):
+    raise ValueError(f"--staged writes one video's summary to the built-in template ({templates.STANDARD}) only")
+  path = staged.summarize(
+    args.video,
+    args.output,
+    model=args.model,
+    fix_model=args.fix_model,
+    restart=args.restart,
+    overwrite=args.overwrite,
+    status=lambda message: print(message, file=sys.stderr, flush=True),
   )
   _written(path, args)
   return 0
@@ -1231,6 +1261,9 @@ def main(argv=None):
     import yt_dlp
 
     return yt_dlp.main(argv[1:])
+  if argv[:1] == ['_staged-gate']:  # internal: the hook that keeps agy to reading files (see staged_agy.gate)
+    print(json.dumps(staged_agy.gate(argv[1]), ensure_ascii=False))
+    return 0
   parser = build_parser()
   args = parser.parse_args(argv)
   try:

@@ -155,7 +155,7 @@
                 <label><input type="radio" name="route" value="deepseek" /> DeepSeek 网页</label>
                 <label><input type="radio" name="route" value="claude" /> Claude Code</label>
                 <label><input type="radio" name="route" value="codex" /> Codex</label>
-                <label><input type="radio" name="route" value="antigravity" /> Antigravity</label>
+                <label><input type="radio" name="route" value="staged" /> 分阶段（agy）</label>
                 <label><input type="radio" name="route" value="api" /> 模型 API</label>
               </div>
               <p id="route-note" class="muted"></p>
@@ -168,6 +168,7 @@
                 <label>模型<select id="route-model"></select></label>
                 <input id="route-model-custom" type="text" spellcheck="false" placeholder="模型名" hidden />
                 <label id="route-effort-label">思考强度<select id="route-effort"></select></label>
+                <label id="route-fix-model-label" hidden title="修改轮只处理程序查出的问题">修改轮<select id="route-fix-model"></select></label>
                 <span id="route-model-note" class="muted small-text"></span>
               </div>
               <textarea id="summary-request" rows="2" placeholder="对总结的要求（可不填），例如：写详细一点，重点讲数据"></textarea>
@@ -251,7 +252,6 @@
                   <option value="copy">复制材料（网页 AI）</option>
                   <option value="claude">Claude Code</option>
                   <option value="codex">Codex</option>
-                  <option value="antigravity">Antigravity</option>
                   <option value="api">模型 API</option>
                 </select>
                 <button id="collection-overview" class="primary">生成合集总结</button>

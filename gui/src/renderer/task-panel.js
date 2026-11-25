@@ -4,7 +4,7 @@ import { loadCollections } from './collections.js';
 import { renderWorkspaceLock } from './settings.js';
 import { askPlaylist } from './site-accounts.js';
 import { $, element, state } from './state.js';
-import { claudeLine, codexLine, effortFor, modelFor, modelTakes } from './summary.js';
+import { FIX_ROUTE, claudeLine, codexLine, effortFor, modelFor, modelTakes } from './summary.js';
 import { STANDARD_TEMPLATE, chosenTemplate } from './templates.js';
 import { addVideos, refresh, renderList } from './video-list.js';
 
@@ -29,8 +29,9 @@ export async function addTask(spec) {
     const model = modelTakes(spec.route) ? modelFor(spec.route) : '';
     const effort = modelTakes(spec.route) ? effortFor(spec.route) : '';
     const template = chosenTemplate();
-    spec = { ...spec, model: model || undefined, effort: effort || undefined, template };
-    const chosen = [model, effort, template === STANDARD_TEMPLATE ? '' : template].filter(Boolean);
+    const fixModel = spec.route === 'staged' ? modelFor(FIX_ROUTE) : '';
+    spec = { ...spec, model: model || undefined, effort: effort || undefined, fixModel: fixModel || undefined, template };
+    const chosen = [model, effort, fixModel && `修改轮 ${fixModel}`, template === STANDARD_TEMPLATE ? '' : template].filter(Boolean);
     if (chosen.length) spec.title = spec.title.replace(/^(总结|合集总结|学习提纲)（([^）]+)）/, `$1（$2 · ${chosen.join(' · ')}）`);
   }
   const result = await window.va.addTask(spec);

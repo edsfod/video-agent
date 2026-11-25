@@ -98,6 +98,7 @@ def import_summary(
   rounds=False,
   agent=False,
   template=None,
+  usage=None,
   status=lambda message: None,
 ):
   """Saves a summary written elsewhere, such as by a chat AI from `pack`, as 总结.md: a ```markdown fence is removed,
@@ -107,7 +108,8 @@ def import_summary(
   new one is kept as a version unless `overwrite` makes it current (versions.py). With `rounds` (a chat AI's answer,
   written to `template`), a 复查 section is taken off and the summary checked for the next round. With `agent` (an
   Agent's draft), the summary is checked too and what is found said, for the Agent to fix and import again, which
-  writes over its own text. Returns (path written, corrections applied)."""
+  writes over its own text. `usage` (tokens and calls) goes into the version record. Returns (path written,
+  corrections applied)."""
   video, info, asset, manifest = processed(video, workspace)
   text, pairs = take_corrections(clean(text))
   adjusted = bool(picture_review.SECTION.search(text))
@@ -138,7 +140,7 @@ def import_summary(
       if now != had:
         status(f'画面：去掉 {len(had - now)} 张，加上 {len(now - had)} 张，这个视频以后的总结用剩下的 {len(now)} 张')
         processor.write_context(asset)
-    written = {'source': source or '导入', 'note': note, 'make_current': overwrite, 'pictures': node}
+    written = {'source': source or '导入', 'note': note, 'make_current': overwrite, 'pictures': node, 'usage': usage}
     # A later round of the same run (an answer with a 复查, after an import that asked for another round) writes over
     # the round before, wherever that text is (current or a version), as long as it is still as the rounds wrote it
     # and to the same template. Anything else is a new text beside the others: a first draft, an answer after a run

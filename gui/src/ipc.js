@@ -32,7 +32,7 @@ function registerIpc() {
     cli: cliCommand(),
     claude: which('claude'),
     codex: which('codex'),
-    antigravity: require('./antigravity').server(),
+    agy: which('agy'),
     others: otherAgents(),
     agents: Object.fromEntries(
       Object.entries(AGENTS).map(([key, { name, command, skills }]) => [
@@ -46,10 +46,11 @@ function registerIpc() {
 
   ipcMain.handle('plugin:install', (_, agent) => installPlugin(agent));
   ipcMain.handle('models:list', (_, route) => {
-    if (route === 'antigravity') return require('./antigravity').models().catch((error) => ({ models: [], efforts: [], error: error.message }));
     const [command, ...prefix] = cliCommand();
-    return models.list(route, {
-      other: otherAgents().find((entry) => entry.key === route),
+    // The staged route runs agy itself, whether or not it is one of the other agents in the settings.
+    const staged = route === 'staged' ? { key: 'agy', file: which('agy') || 'agy', args: [] } : null;
+    return models.list(staged ? 'agy' : route, {
+      other: staged || otherAgents().find((entry) => entry.key === route),
       run: (file, args) => runToEnd(file, args),
       cli: (args) => runToEnd(command, [...prefix, ...args]),
     });

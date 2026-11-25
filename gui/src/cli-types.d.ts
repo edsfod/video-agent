@@ -190,6 +190,15 @@ export interface Compressed {
   still: boolean | null;
 }
 
+/** The model's tokens and calls that wrote a text, when the program ran the model itself (`summarize --staged`). */
+export interface Usage {
+  calls: number;
+  input: number;
+  cache_read: number;
+  output: number;
+  thinking: number;
+}
+
 export interface Version {
   file: string;
   created: string;
@@ -200,6 +209,7 @@ export interface Version {
   id: string;
   based_on: string | null;
   origin: 'fresh' | 'revised' | 'unknown';
+  usage: Usage | null;
 }
 
 /** `versions --json`: the current text and the others, newest first. */

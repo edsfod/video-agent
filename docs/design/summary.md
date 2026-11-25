@@ -1,7 +1,7 @@
 # 总结
 
 > 给谁看：要改总结的规则、模板或保存流程的人和 AI。回答：规则怎么组织、模板、「主线与单元」怎么排、「要点」上的链接怎么加、版本和谱系、画面集、导入时做什么和查什么。
-> 规则要让模型做到的每一件事见 [summary-requirements.md](../summary-requirements.md)；几种写总结的方式（Agent、Antigravity、模型 API、网页 AI）见 [routes.md](routes.md)。
+> 规则要让模型做到的每一件事见 [summary-requirements.md](../summary-requirements.md)；几种写总结的方式（Agent、分阶段、模型 API、网页 AI）见 [routes.md](routes.md)。
 
 ## 一、规则
 

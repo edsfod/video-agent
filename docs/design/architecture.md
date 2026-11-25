@@ -38,6 +38,7 @@
 | `model_api.py` | 模型 API：Anthropic 和 OpenAI 兼容接口各一个 `Provider`（模型列表、key、带补截工具的一次对话） |
 | `evidence.py` | 处理过的视频的文件夹和清单、「视频：」那一行、多少张图放得下 |
 | `summarize.py` | 用模型 API 给一个视频写总结 |
+| `staged.py`、`staged_agy.py`、`staged_prompts.py` | `summarize --staged`：分阶段写总结，经 agy 命令行（[staged.md](staged.md)） |
 | `packing.py` | `pack`：给网页 AI 的提示词，单独、打成 zip 或放进带编号图片的文件夹 |
 | `importer.py` | `summarize --import`：把别处写的文字存成总结或合集的文字，修好链接，取出字幕改正和画面调整 |
 | `forest.py` | 照详细内容里的关系排出「主线与单元」，并给「要点」加上 `#P<n>` 链接和正文里的画面 |
@@ -63,7 +64,6 @@
 | `src/settings.js` | 窗口的设置 |
 | `src/programs.js` | 找到并运行程序：命令行工具、Claude Code、Codex 和其他 Agent、终端、插件和许可文件 |
 | `src/jobs.js` | 运行队列里的任务：每种任务的命令行、Agent 路线、下载用的 cookie、后续任务 |
-| `src/antigravity.js` | Antigravity 路线：在运行中的 Antigravity 里新开对话交给它的 Agent，通过它的本地服务跟到结束 |
 | `src/chat-rounds.js` | DeepSeek 路线：`pack --folder`、DeepSeek、`summarize --import` 一轮轮跑，直到不再要图；对话太长时换新对话接着跑 |
 | `src/deepseek.js` | DeepSeek 网页版，每个对话一个窗口：附文件（失败的逐个重传）、输入、发送（回答没开始就重发）、读回答的代码块；监视页面的请求：发送太频繁的拒绝（所有窗口一起等）和每条消息带了什么 |
 | `src/extractor.js` | 从设置里下载 AutoSlides Extractor 的免安装版到数据文件夹；`childEnv` 让命令行用它 |
@@ -92,7 +92,7 @@
 3. **写总结**，都按选定的模板：
    - 模型 API：`summarize` 发出字幕和画面，写下结果；
    - Agent：Claude Code、Codex 或其他 Agent 照 skill 做，写 `总结.draft.md`，用 `summarize --import` 保存；
-   - Antigravity：桌面程序把同样的任务交给运行中的 Antigravity；
+   - 分阶段：`summarize --staged` 经 agy 命令行，主对话分单元、每个单元一个对话同时写，程序检查、合并、组装，再走同一个导入（[staged.md](staged.md)）；
    - 网页 AI：`pack` 生成提示词、zip 或文件夹，回答经 `summarize --import` 存回（修好链接）；DeepSeek 网页版由桌面程序一轮轮自动跑；
    - 用户自己的文字，走同一个导入。
 

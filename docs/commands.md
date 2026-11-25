@@ -172,13 +172,14 @@ video-agent frame "D:\Videos\lecture.mp4" 1:10 00:41:20 --output "D:\Video-Work"
 
 ### `summarize`
 
-可选。用模型 API 给处理过的视频写 `总结.md`，代替 Agent skill。先用同样的 `--output` 运行 `process`。模型收到 `summary-context.md` 和代表画面（含 `frames/extra/` 里的），照 `template` 打印的规则和模板写。开着工具调用时，模型可以要补截：`summarize` 把每张存进 `frames/extra/` 并把图发回去，最多 `--max-extra-frames` 张。
+可选。用模型 API 给处理过的视频写 `总结.md`，代替 Agent skill；加 `--staged` 时改为分阶段写，经 agy 命令行（见下）。先用同样的 `--output` 运行 `process`。模型收到 `summary-context.md` 和代表画面（含 `frames/extra/` 里的），照 `template` 打印的规则和模板写。开着工具调用时，模型可以要补截：`summarize` 把每张存进 `frames/extra/` 并把图发回去，最多 `--max-extra-frames` 张。
 
 ```text
 video-agent summarize VIDEO [-o WORKSPACE] [--provider anthropic|openai] [--model NAME] [--base-url URL]
                       [--request TEXT] [--template NAME] [--effort low|medium|high] [--max-images N]
                       [--max-extra-frames N] [--no-tools] [--make-current] [--import [FILE] [--source S] [--note N]]
 video-agent summarize --collection NAME [--guide] [-o WORKSPACE] [...]
+video-agent summarize VIDEO --staged [-o WORKSPACE] [--model NAME] [--fix-model NAME] [--restart] [--make-current]
 ```
 
 | 选项 | 默认 | 含义 |
@@ -194,6 +195,10 @@ video-agent summarize --collection NAME [--guide] [-o WORKSPACE] [...]
 | `--template NAME` | 选定的那个 | 这次总结用的模板（见 `template --list`） |
 | `--effort low\|medium\|high` | 不传 | 模型想多深（见 `models`） |
 | `--make-current`, `--overwrite` | 关 | 新文字成为当前的 `总结.md`，被替换的存成版本。不加时，已有总结旁边的新文字存成版本（见 `versions`） |
+| `--staged` | 关 | 分阶段写（[design/staged.md](design/staged.md)）：主对话分单元，每个单元一个对话同时写，程序检查后只把问题发回原对话改，最后组装并保存；经 Antigravity 命令行 `agy`，只用自带模板。没跑完时再运行同一条命令接着跑。用掉的 token 记进版本 |
+| `--model NAME`（和 `--staged`） | `gemini-3.8-flash-high` | 主对话和单元第一稿的模型 |
+| `--fix-model NAME` | `gemini-3.8-flash-medium` | 和 `--staged` 一起用：单元修改轮的模型 |
+| `--restart` | 关 | 和 `--staged` 一起用：不接着上次没跑完的，另开一次 |
 | `--collection NAME` | 无 | 不是给视频，而是从合集各集的总结写合集总结（`合集总结.md`） |
 | `--guide` | 关 | 和 `--collection` 一起用：改写学习提纲（`学习提纲.md`） |
 | `--source TEXT` | `导入` | 和 `--import` 一起用：是谁写的，例如 `网页 AI`、`Claude Code`，记在版本里 |

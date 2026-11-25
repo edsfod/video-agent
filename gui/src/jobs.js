@@ -8,7 +8,6 @@ const fs = require('node:fs');
 const shared = require('./shared');
 const { send } = shared;
 const accounts = require('./accounts');
-const antigravity = require('./antigravity');
 const chatRounds = require('./chat-rounds');
 const models = require('./models');
 const { TaskQueue, DEFAULT_LIMITS } = require('./tasks');
@@ -104,9 +103,11 @@ function cliArgs(task) {
     case 'summary': {
       const args = ['summarize', task.video, ...out];
       if (task.model) args.push('--model', task.model);
+      if (task.route === 'staged') args.push('--staged');
+      if (task.fixModel) args.push('--fix-model', task.fixModel);
       if (task.effort) args.push('--effort', task.effort);
       if (task.template) args.push('--template', task.template);
-      if (task.request) args.push('--request', task.request);
+      if (task.request && task.route !== 'staged') args.push('--request', task.request);
       if (task.overwrite) args.push('--overwrite');
       return args;
     }
@@ -130,8 +131,8 @@ function removeLeftovers(video) {
 
 function startTask(task) {
   if (task.kind === 'summary' && task.route === 'deepseek') return chatRounds.startDeepSeek(task);
-  if (['summary', 'collection'].includes(task.kind) && task.route === 'antigravity') return startAntigravity(task);
-  if (['summary', 'collection'].includes(task.kind) && task.route !== 'api') return startAgent(task);
+  // The staged route is the CLI's own (summarize --staged), run like the model API route.
+  if (['summary', 'collection'].includes(task.kind) && !['api', 'staged'].includes(task.route)) return startAgent(task);
   const [command, ...prefix] = cliCommand();
   const args = [...prefix, ...cliArgs(task)];
   const options = { cwd: task.workspace, title: task.title };
@@ -248,52 +249,6 @@ function startAgent(task) {
   }
 }
 
-// The Antigravity route (antigravity.js): the same task, to the agent of the Antigravity app that is running. Its
-// commands run in the app's shell, which may not have this app's CLI on PATH, so the task names the CLI's full path.
-// It counts as done when a text with its name as the source was saved meanwhile.
-const antigravityRuns = new Map();
-function startAntigravity(task) {
-  const name = `Antigravity ${task.model || antigravity.DEFAULT_MODEL}`;
-  const log = shared.logs.job(task.id, { title: task.title, command: ['Antigravity'], cwd: task.workspace });
-  const say = (text) => {
-    log.write(text);
-    shared.queue.output(task.id, 'stdout', text);
-    send('job:output', { id: task.id, stream: 'stdout', text });
-  };
-  const [command, ...prefix] = cliCommand();
-  const listing = async () => {
-    const result = await runToEnd(command, [...prefix, 'versions', ...target, '-o', task.workspace, '--json']);
-    try {
-      const found = JSON.parse(result.out);
-      return [found.current, ...found.versions].filter(Boolean);
-    } catch {
-      return [];
-    }
-  };
-  const { text, target, settle } = agentTask({ ...task, model: name.replace(/^Antigravity /, '') }, 'Antigravity');
-  const skill = path.join(pluginRoot(), 'skills', 'video-agent', 'SKILL.md');
-  const cli = [command, ...prefix].map((part) => `"${part.replace(/\\/g, '/')}"`).join(' ');
-  const prompt = `先读 ${skill} 并照它做，<video-agent> 用 ${cli}（写全路径，你的终端里可能没有 video-agent 命令）。`
-    + `不用问我，直接做完；做完说一句保存在哪里。\n${text.replace(/video-agent (summarize|collection|template)/g, `${cli} $1`)}`;
-  log.write(`----- 发给 Antigravity 的任务 -----\n${prompt}\n-----\n`);
-  const before = listing();
-  before.then((known) => {
-    const seen = new Set(known.map((entry) => `${entry.file} ${entry.created}`));
-    const saved = async () => (await listing()).some((entry) => entry.source.startsWith('Antigravity') && !seen.has(`${entry.file} ${entry.created}`));
-    const handle = antigravity.run(task, prompt, {
-      say,
-      saved,
-      done: (code) => {
-        antigravityRuns.delete(task.id);
-        settle();
-        log.close(code);
-        shared.queue.exited(task.id, code);
-      },
-    });
-    antigravityRuns.set(task.id, handle);
-  });
-}
-
 // The options that run another agent with the model chosen for this task (none: its own default). DeepSeek Harness
 // takes a patch file for its agent-default-model entry, whose config is replaced whole, so the provider it has now
 // is kept beside the new model.
@@ -343,7 +298,6 @@ function createQueue() {
     start: startTask,
     stop: (task) => {
       if (task.route === 'deepseek') return chatRounds.stop(task.id);
-      if (task.route === 'antigravity') return antigravityRuns.get(task.id)?.stop();
       return stopJob(task.id);
     },
     changed: () => {

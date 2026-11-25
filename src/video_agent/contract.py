@@ -215,6 +215,16 @@ class Compressed(TypedDict):
   still: bool | None
 
 
+class Usage(TypedDict):
+  """The model's tokens and calls that wrote a text, when the program ran the model itself (`summarize --staged`)."""
+
+  calls: int
+  input: int  # read, not from the cache
+  cache_read: int
+  output: int  # thinking included
+  thinking: int
+
+
 class Version(TypedDict):
   file: str
   created: str
@@ -227,6 +237,7 @@ class Version(TypedDict):
   origin: Literal[
     'fresh', 'revised', 'unknown'
   ]  # written afresh, from another version, or not recorded (before 2026-11-16)
+  usage: Usage | None
 
 
 class Versions(TypedDict):

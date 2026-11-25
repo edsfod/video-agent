@@ -3,7 +3,7 @@
 import { importCollection } from './lists.js';
 import { $, $$, baseName, current, element, failed, joinPath, markdown, pageVideo, state } from './state.js';
 import { ACTIVE, addTask, logAppend, sameVideo } from './task-panel.js';
-import { chosenTemplate } from './templates.js';
+import { STANDARD_TEMPLATE, chosenTemplate } from './templates.js';
 import { when } from './updates.js';
 import { refresh } from './video-list.js';
 import { pictureSetLabel, showImage } from './video-view.js';
@@ -11,7 +11,7 @@ import { pictureSetLabel, showImage } from './video-view.js';
 const ROUTE_NOTES = {
   claude: '在后台运行 Claude Code，按 video-agent skill 写总结，会按需补截画面。使用你的 Claude 订阅。',
   codex: '在后台运行 Codex，按同一份 skill 写总结。使用你的 Codex 订阅。',
-  antigravity: '交给正在运行的 Antigravity 桌面版，在它里面新开一个对话，按同一份 skill 写总结并保存；默认用 Gemini 3.8 Flash (High)。用你的 Antigravity 账号和额度；它以你的身份运行命令，不限于工作区。要先打开 Antigravity。',
+  staged: '用 Antigravity 命令行（agy）分阶段写：主对话分单元，每个单元一个对话同时写，程序检查后只把问题发回原对话改，最后由主对话写全局的部分。只给模型看图的工具，不运行命令。用你的 Antigravity 账号和额度；只能用自带的「标准」模板。',
   api: '用设置里的模型 API 写总结（字幕和画面会发给该服务商）。支持工具调用的模型会按需补截画面。',
   deepseek: '在 DeepSeek 网页版里写总结：程序打开 DeepSeek 窗口（第一次要在里面登录），发去提示词和画面，开着深度思考和智能搜索，写完自动导入。之后每一轮请它对照字幕复查上一稿，补上漏掉的内容，并把程序查出的问题（缺的节、没写到的时间段）和它要补的画面一起发过去，直到复查不再补上或改正，最多的轮数在下面设。每一轮都能在窗口里看到。',
   copy: '把规则、模板和字幕材料复制到剪贴板，贴进任何聊天 AI。要连画面一起给，用「导出 zip」；不收 zip、文件数有上限的（如 DeepSeek 网页版最多 50 个），用「导出文件夹」，屏幕页和画面会拼成总图凑进上限。写好后用「导入总结」存回来，画面链接照样能点开。',
@@ -21,11 +21,11 @@ const ROUTE_NOTES = {
 const otherRoute = (route) => state.env.others.find((agent) => agent.key === route);
 // The route's name in task titles; another agent goes by the name the settings give it.
 export const routeName = (route) =>
-  ({ api: '模型 API', claude: 'Claude Code', codex: 'Codex', deepseek: 'DeepSeek 网页', antigravity: 'Antigravity' })[route] || otherRoute(route)?.name;
+  ({ api: '模型 API', claude: 'Claude Code', codex: 'Codex', deepseek: 'DeepSeek 网页', staged: '分阶段 agy' })[route] || otherRoute(route)?.name;
 export const routeMissing = (route) =>
   (route === 'claude' && !state.env.claude) ||
   (route === 'codex' && !state.env.codex) ||
-  (route === 'antigravity' && !state.env.antigravity) ||
+  (route === 'staged' && !state.env.agy) ||
   otherRoute(route)?.found === false;
 const routeNote = (route) =>
   (!route && '选一种总结方式。') ||
@@ -48,7 +48,9 @@ function otherRouteLabels() {
 const CUSTOM_MODEL = '\u0000custom';
 export const modelFor = (route) => (state.settings.routeModels || {})[route] || '';
 export const effortFor = (route) => (state.settings.routeEfforts || {})[route] || '';
-export const modelTakes = (route) => ['api', 'claude', 'codex', 'antigravity'].includes(route) || !!otherRoute(route)?.model;
+export const modelTakes = (route) => ['api', 'claude', 'codex', 'staged'].includes(route) || !!otherRoute(route)?.model;
+// The staged route's fix turns run on a model of their own, kept as the route 'staged-fix'.
+export const FIX_ROUTE = 'staged-fix';
 const modelLists = {};
 
 async function saveRouteChoice(changes) {
@@ -67,7 +69,7 @@ async function renderModel() {
     select.replaceChildren(
       element('option', {
         value: '',
-        textContent: { api: '默认（设置里的模型）', antigravity: '默认（gemini-3.8-flash-high）' }[route] || `默认（${routeName(route)} 自己的设置）`,
+        textContent: { api: '默认（设置里的模型）', staged: '默认（gemini-3.8-flash-high）' }[route] || `默认（${routeName(route)} 自己的设置）`,
       }),
       ...list.models.map((model) => element('option', { value: model.value, textContent: model.label })),
       element('option', { value: CUSTOM_MODEL, textContent: '自定义…' }),
@@ -84,6 +86,15 @@ async function renderModel() {
     );
     $('route-effort').value = levels.includes(effortFor(route)) ? effortFor(route) : '';
     $('route-model-note').textContent = note || '';
+    $('route-fix-model-label').hidden = route !== 'staged';
+    if (route === 'staged') {
+      const fix = modelFor(FIX_ROUTE);
+      $('route-fix-model').replaceChildren(
+        element('option', { value: '', textContent: '默认（gemini-3.8-flash-medium）' }),
+        ...list.models.map((model) => element('option', { value: model.value, textContent: model.label })),
+      );
+      $('route-fix-model').value = list.models.some((model) => model.value === fix) ? fix : '';
+    }
   };
   if (!modelLists[route]) {
     fill({ models: [], efforts: [] }, '正在读取模型列表…');
@@ -103,6 +114,8 @@ $('route-model').onchange = async () => {
 };
 $('route-model-custom').onchange = () =>
   saveRouteChoice({ routeModels: { ...(state.settings.routeModels || {}), [String(state.route)]: $('route-model-custom').value.trim() } });
+$('route-fix-model').onchange = () =>
+  saveRouteChoice({ routeModels: { ...(state.settings.routeModels || {}), [FIX_ROUTE]: $('route-fix-model').value } });
 $('route-effort').onchange = () =>
   saveRouteChoice({ routeEfforts: { ...(state.settings.routeEfforts || {}), [String(state.route)]: $('route-effort').value } });
 
@@ -114,7 +127,7 @@ function renderRoutes() {
     const missing = routeMissing(input.value);
     input.disabled = missing;
     input.parentElement.classList.toggle('unavailable', missing);
-    input.parentElement.title = !missing ? '' : input.value === 'antigravity' ? '没有找到 Antigravity 桌面版' : `没有找到 ${otherRoute(input.value)?.file || input.value} 命令`;
+    input.parentElement.title = !missing ? '' : input.value === 'staged' ? '没有找到 agy（winget install Google.AntigravityCLI）' : `没有找到 ${otherRoute(input.value)?.file || input.value} 命令`;
     input.checked = input.value === state.route;
     input.onchange = () => {
       state.route = input.value;
@@ -142,7 +155,10 @@ export async function renderSummary(video) {
   renderRoutes();
   const article = $('summary');
   const info = video.info;
-  $('run-summary').disabled = !info?.processed || !state.route || state.route === 'other';
+  // The staged route writes to the built-in template only: its steps take that template's sections apart.
+  const ownTemplate = state.route === 'staged' && chosenTemplate() !== STANDARD_TEMPLATE;
+  $('run-summary').disabled = !info?.processed || !state.route || state.route === 'other' || ownTemplate;
+  if (ownTemplate) $('route-note').textContent = `${ROUTE_NOTES.staged} 现在选的是「${chosenTemplate()}」模板，换回「${STANDARD_TEMPLATE}」才能用。`;
   $('run-summary').textContent = state.route === 'copy' ? '复制材料' : info?.summary ? '重新生成总结' : '生成总结';
   $('open-summary').hidden = !info?.summary;
   const copying = state.route === 'copy' && !!info?.processed;
@@ -322,7 +338,7 @@ $('run-summary').onclick = async () => {
     kind: 'summary',
     title: `总结（${name}）：${baseName(video.path)}`,
     route,
-    agent: ['api', 'deepseek'].includes(route) ? undefined : route,
+    agent: ['api', 'deepseek', 'staged'].includes(route) ? undefined : route,
     maxFiles: route === 'deepseek' ? state.settings.webFiles || 50 : undefined,
     maxRounds: route === 'deepseek' ? state.settings.webRounds || 6 : undefined,
     video: video.path,

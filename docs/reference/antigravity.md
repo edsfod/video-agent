@@ -1,17 +1,7 @@
 # Antigravity
 
-> 给谁看：要改 Antigravity 路线（`gui/src/antigravity.js`）或 `agy` 预设的人和 AI。回答：Antigravity 桌面版和命令行实际怎么用、接口在哪。
-> 证据级别：桌面版的 `agentapi` 和本地服务没有公开文档，都是实测（带日期、版本）；`agy` 的部分来自它的文档和实测。
-
-## 桌面版（实测 2026-11-16，44.9.1）
-
-- 自带 `language_server.exe agentapi`，子命令 `new-conversation [--model] [--title] <prompt>`、`send-message`、`get-conversation-metadata`。`new-conversation` 立刻返回对话 id。
-- 它要运行中的服务的地址和 CSRF 令牌（环境变量 `ANTIGRAVITY_LS_ADDRESS`、`ANTIGRAVITY_CSRF_TOKEN`）；服务把它们写在 `~/.gemini/antigravity/daemon/hub_<端口>.json`，取进程还活着的最新一个。
-- 同一个服务的 Connect JSON 调用：`GetCascadeTrajectory`（步骤，以及 Agent 做完时变成 IDLE 的运行状态）、`GetCascadeModelConfigData`（模型列表）、`ForceStopCascadeTree`（带 `conversationId`，停止）。
-- 在测试视频上：Agent 读了 skill、写了草稿、用 `summarize --import` 保存，约两分半，没有提问；停止几秒内生效。
-- `agentapi` 不接受文件夹参数，不能限制 Agent 读哪些文件。
-- 有每周额度，用完任务会中断，到恢复日期才能再用。
-- 应用自己会装更新并重启（例如 2026-11-20 更新到 2.33.0），运行中的任务随之中断；日志在 `%APPDATA%\Antigravity\logs\main.log`。
+> 给谁看：要改分阶段写总结的 agy 通道（`staged_agy.py`）或 `agy` 预设的人和 AI。回答：Antigravity 命令行实际怎么用。
+> 证据级别：来自它的文档和实测（带日期、版本）。
 
 ## 命令行 `agy`（实测 2026-11-16，1.5.9）
 
@@ -19,3 +9,13 @@
 - `-p` 运行一个提示词后带状态退出；这个模式下任何需要询问的操作都被拒绝（它的无人值守文档），所以要 `--dangerously-skip-permissions`。
 - `--model` 指定模型，思考强度含在模型名里。
 - skill 文件夹 `~/.gemini/antigravity-cli/skills`（它的文档）；桌面版不读这个文件夹。
+
+## 分阶段用到的（实测 2026-11-23 至 2026-11-25，1.5.14）
+
+- `--input-format stream-json` 从标准输入收 `{"event":"user","message":{"content":…}}`，提示长度不受命令行限制；`--output-format stream-json` 逐行出事件：`step_update`（`agent_response` 带这次调用的 `usage`：`input_tokens`、`cache_read_tokens`、`output_tokens`、`thinking_tokens`；`tool` 带 `tool_name`）和最后的 `result`（`status`、`response`、`conversation_id`、`denied_actions`）。
+- `--conversation <id>` 接着原对话，每次一个新进程；这时 `result.usage` 是整个对话的累计，不是这一轮的。
+- 一次调用可能以 ERROR 结束，agy 自己再调一次；ERROR 的那次也读了、想了，用量照算。错误事件里不写原因（2026-11-23 那几次是网络中断）。
+- `--agent <名字>` 用工作区 `.agents/agents/<名字>.md` 里的自定义 agent（`tools:` 列出能用的工具）；但模型发出的未声明工具 agy 照样执行（实测有 `run_command`）。工作区 `.agents/hooks.json` 的 PreToolUse 钩子能拒绝它们，拒绝时给的理由会交给模型，模型接着作答。
+- 无头模式读工作区外的文件要权限，没法申请，读取被拒，整轮回答为空。
+- `--effort low` 配 `gemini-3.8-flash-high` 时用量全是 0；思考档位用模型名换（`-low`、`-medium`、`-high`）。
+- 后端偶尔回「empty conversation id」；同时启动十几个进程时，偶尔有进程在读入标准输入前就退出（写管道报 `OSError: [Errno 22]`）。两种都重试就好。

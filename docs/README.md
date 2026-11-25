@@ -11,12 +11,13 @@
 | [design/architecture.md](design/architecture.md) | 由哪些部分组成、数据怎么流、磁盘上的文件、部分之间的边界 | |
 | [design/processing.md](design/processing.md) | 下载和网站账号、字幕、画面布局和屏幕页、课件、代表画面、补截、压缩 | |
 | [design/summary.md](design/summary.md) | 总结的规则和模板、主线与单元、版本和谱系、画面集、导入时做什么和查什么 | |
-| [design/routes.md](design/routes.md) | 几种写总结的方式：Agent、Antigravity、模型 API、网页 AI 和 DeepSeek 网页版 | |
+| [design/routes.md](design/routes.md) | 几种写总结的方式：Agent、分阶段（agy）、模型 API、网页 AI 和 DeepSeek 网页版 | |
+| [design/staged.md](design/staged.md) | 分阶段写总结：步骤、状态文件、程序检查、画面、agy 通道、代价 | |
 | [design/app.md](design/app.md) | 桌面程序：技术、任务队列和并发、自动处理、界面、终端、日志、托盘 | |
 | [design/collections.md](design/collections.md) | 合集、跟随播放列表、合集总结和学习提纲 | |
 | [design/distribution.md](design/distribution.md) | 安装包、自带的 FFmpeg、许可和隐私说明、更新签名 | |
 | [design/article-summary.md](design/article-summary.md) | 总结文章（计划中） | |
-| [reference/deepseek-web.md](reference/deepseek-web.md)、[reference/antigravity.md](reference/antigravity.md) | 外部系统的实测事实：DeepSeek 网页版、Antigravity | |
+| [reference/deepseek-web.md](reference/deepseek-web.md)、[reference/antigravity.md](reference/antigravity.md) | 外部系统的实测事实：DeepSeek 网页版、agy | |
 | [cli.md](cli.md)、[commands.md](commands.md) | 给用户：命令行怎么用、每个命令和选项 | |
 | [development.md](development.md) | 测试、构建、发布、已知问题 | |
 | [conventions.md](conventions.md) | 文档、代码、提交怎么做 | |

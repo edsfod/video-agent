@@ -1,12 +1,12 @@
 # 写总结的几种方式
 
-> 给谁看：要改某种写总结方式的人和 AI。回答：Agent 应用、Antigravity、模型 API、网页 AI 和 DeepSeek 网页版各怎么工作、为什么这样做。
-> 总结的规则、模板、保存和检查见 [summary.md](summary.md)；DeepSeek 网页版和 Antigravity 的实测行为见 [reference/](../reference/)。
+> 给谁看：要改某种写总结方式的人和 AI。回答：Agent 应用、分阶段（agy）、模型 API、网页 AI 和 DeepSeek 网页版各怎么工作、为什么这样做。
+> 总结的规则、模板、保存和检查见 [summary.md](summary.md)；DeepSeek 网页版和 agy 的实测行为见 [reference/](../reference/)。
 
 ## 一、共同点
 
 - 每种方式都按选定的模板写，规则是同一份，写出的是同一种总结（[summary.md](summary.md)）。
-- 除了模型 API 由 `summarize` 直接保存，其余都经 `summarize --import` 保存，所以修链接、排「主线与单元」、检查、版本这些处理只有一处。
+- 除了模型 API 由 `summarize` 直接保存，其余都经 `summarize --import` 保存（分阶段在命令行里调同一个导入），所以修链接、排「主线与单元」、检查、版本这些处理只有一处。
 - 总结页上每种方式有自己的「模型」和「思考强度」下拉框，按方式分别记住（`routeModels`、`routeEfforts`），合集页也用；「默认」用这种方式自己的设置，「自定义…」可以手填。列表都从各工具自己存的或打印的东西读，不花 token（`gui/src/models.js`）。任务标题和总结的来源写明选了什么。
 - 进总结页时不预先选方式：用户点了才选，没选时「生成总结」不可用（用户 2026-10-30 定）。「复制材料」排第一，因为它什么都不用装。
 
@@ -26,13 +26,28 @@
 - 找程序：先找 `.exe`，再找 `.cmd`（`where pi` 先列出 cmd.exe 运行不了的 Git Bash 脚本）；预设不在 `PATH` 上时，按卸载信息里的安装目录（任何盘）或默认安装目录找，例如 DeepSeek Harness 的 `resources\runtime\cli\bin\dsh.cmd`。
 - 没装插件的 Agent：设置 → Agent 插件把 `skills/video-agent/` 复制到各预设读 skill 的地方（pi `~/.agents/skills`；Hermes Agent `<HERMES_HOME>/skills/media`；DeepSeek Harness `<DSH_HOME>/skills`；`agy` `~/.gemini/antigravity-cli/skills`），「复制到其他文件夹…」复制到任选的文件夹。只替换不存在的或以前复制的，从不覆盖另一个叫 `video-agent` 的文件夹；更新后和插件一起刷新。在桌面程序里运行时不需要这些：任务里直接写了 skill 文件的路径。
 
-## 三、Antigravity 桌面版
+## 三、分阶段（agy）
 
-- 一种独立的方式（用户 2026-11-16 定），不是「其他 Agent」的预设：它不是跑完一个任务就退出的命令。桌面程序在运行中的 Antigravity 里新开一个对话，交给它的 Agent 和 Codex 同样的任务，通过 Antigravity 的本地服务跟到结束；用户也能在 Antigravity 的窗口里看进度。
-- 运行期间存下了来源以 `Antigravity` 开头的总结，才算完成；Agent 停了却没存，任务失败并说明。
-- 默认模型 `gemini-3.8-flash-high`（用户 2026-11-16 定），总结页的模型列表来自 Antigravity；思考强度含在模型名里。只在装了 Antigravity 时显示，需要它开着并登录好。停止任务会停止它的对话。
-- 它的 Agent 以用户身份、按用户自己的 Antigravity 设置和钩子运行命令。
-- 接口的细节（`agentapi`、本地服务的地址和令牌、跟踪进度的调用）见 [reference/antigravity.md](../reference/antigravity.md)。
+- 一种独立的方式（用户 2026-11-25 定）：命令行自己跑 `summarize --staged`，经 Antigravity 命令行 `agy` 调模型，不经任何 Agent 应用。主对话分单元，每个单元一个对话同时写，程序检查后只把问题发回原对话改，最后主对话写全局的部分。做法见 [staged.md](staged.md)。
+- 模型只有看图一个工具，不运行命令，读不了视频文件夹以外的文件（自定义 agent 加钩子）；外壳约 2,900 token。
+- 总结页的「模型」是第一稿和主对话的，默认 `gemini-3.8-flash-high`；「修改轮」另选，默认 `gemini-3.8-flash-medium`。列表来自 `agy models`；思考强度含在模型名里。用户的要求不传。
+- 只能用自带的「标准」模板：选了别的模板时这种方式不可用，并写明原因。合集总结和学习提纲不能用这种方式。
+- 只在找得到 `agy` 时可选（`winget install Google.AntigravityCLI`，用 Antigravity 桌面版的登录）。停止任务会结束命令行和它启动的 agy；再生成一次接着跑没跑完的部分。
+
+### 分阶段接哪些通道
+
+分阶段要求通道能只开看图一个工具、在原对话里接着问、报出每次调用的用量，并能同时跑几十个对话（用户 2026-11-25 定）：
+
+| 通道 | 分阶段 |
+|---|---|
+| agy 命令行 | 接了 |
+| claude、codex 命令行 | 以后接：都有自定义 agent、限制工具、接续对话的开关；接之前在 10 分钟片段上量外壳和质量 |
+| 其他 Agent 命令行（pi、Hermes、DeepSeek Harness） | 不接：能不能限制工具、接续对话没查 |
+| 模型 API | 不做 |
+| Agent 应用的桌面版 | 不接：系统提示和工具都控制不了（Antigravity 桌面版一个对话写全篇读入 778 万缓存 token）。Antigravity 桌面版这种方式已去掉，同样的模型走 agy |
+| 网页 AI | 不接：人手做不了几十个对话；DeepSeek 网页版消息间隔至少 1 分钟，还会限流 |
+
+Agent 应用以插件和 skill 作入口时，以后让那边的 Agent 只调用 `summarize --staged`，外壳只花在一条命令上；等 claude、codex 通道接上再改，在哪个应用里就用哪个应用自己的模型。
 
 ## 四、模型 API
 
