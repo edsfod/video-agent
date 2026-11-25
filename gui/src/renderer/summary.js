@@ -87,13 +87,17 @@ async function renderModel() {
     $('route-effort').value = levels.includes(effortFor(route)) ? effortFor(route) : '';
     $('route-model-note').textContent = note || '';
     $('route-fix-model-label').hidden = route !== 'staged';
+    $('route-fix-model-custom').hidden = true;
     if (route === 'staged') {
       const fix = modelFor(FIX_ROUTE);
       $('route-fix-model').replaceChildren(
         element('option', { value: '', textContent: '默认（gemini-3.8-flash-medium）' }),
         ...list.models.map((model) => element('option', { value: model.value, textContent: model.label })),
+        element('option', { value: CUSTOM_MODEL, textContent: '自定义…' }),
       );
-      $('route-fix-model').value = list.models.some((model) => model.value === fix) ? fix : '';
+      $('route-fix-model').value = !fix ? '' : list.models.some((model) => model.value === fix) ? fix : CUSTOM_MODEL;
+      $('route-fix-model-custom').hidden = $('route-fix-model').value !== CUSTOM_MODEL;
+      if (!$('route-fix-model-custom').hidden) $('route-fix-model-custom').value = fix;
     }
   };
   if (!modelLists[route]) {
@@ -114,8 +118,14 @@ $('route-model').onchange = async () => {
 };
 $('route-model-custom').onchange = () =>
   saveRouteChoice({ routeModels: { ...(state.settings.routeModels || {}), [String(state.route)]: $('route-model-custom').value.trim() } });
-$('route-fix-model').onchange = () =>
+$('route-fix-model').onchange = () => {
+  const custom = $('route-fix-model').value === CUSTOM_MODEL;
+  $('route-fix-model-custom').hidden = !custom;
+  if (custom) return $('route-fix-model-custom').focus();
   saveRouteChoice({ routeModels: { ...(state.settings.routeModels || {}), [FIX_ROUTE]: $('route-fix-model').value } });
+};
+$('route-fix-model-custom').onchange = () =>
+  saveRouteChoice({ routeModels: { ...(state.settings.routeModels || {}), [FIX_ROUTE]: $('route-fix-model-custom').value.trim() } });
 $('route-effort').onchange = () =>
   saveRouteChoice({ routeEfforts: { ...(state.settings.routeEfforts || {}), [String(state.route)]: $('route-effort').value } });
 
@@ -165,6 +175,8 @@ export async function renderSummary(video) {
   for (const id of ['export-zip', 'export-folder', 'export-limit-label', 'import-summary']) $(id).hidden = !copying;
   $('export-limit').value = state.settings.webFiles || 50;
   $('rounds-limit-label').hidden = state.route !== 'deepseek' || !info?.processed;
+  // The staged route takes no wishes: its steps each have their own task text.
+  $('summary-request').hidden = state.route === 'staged';
   $('rounds-limit').value = state.settings.webRounds || 6;
   renderPictureSet(video);
   if (!info?.processed) {
@@ -329,7 +341,7 @@ $('run-summary').onclick = async () => {
   const info = video.info;
   const route = state.route;
   if (!info || !route) return; // not read yet, or no route chosen
-  const request = $('summary-request').value.trim();
+  const request = route === 'staged' ? '' : $('summary-request').value.trim();
   if (route === 'copy') return copyMaterial();
   const name = routeName(route);
   // A summary there already stays current; the new one is kept as a version to compare and choose.
