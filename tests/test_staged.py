@@ -220,3 +220,15 @@ def test_a_whole_run_writes_each_unit_in_its_own_conversation_and_saves_the_toke
   assert (run.dir / 'imported').is_file()
   # a run that is done is not gone on with: the next one starts afresh
   assert staged.Run(video, workspace, status=lambda message: None, channel=channel).dir != run.dir
+
+
+def test_what_the_model_copies_from_the_prompt_is_taken_out_of_the_body():
+  text = '## 正文\n\n- **S1** 甲\n  - 子行：乙\n  - 画面读出（上半、左下）：丙\n\n## 画面\n\n- #1 用在 S1：图。读出（上半）：丁\n'
+  assert (
+    staged.clean(text)
+    == '## 正文\n\n- **S1** 甲\n  - 乙\n  - 画面：丙\n\n## 画面\n\n- #1 用在 S1：图。读出（上半）：丁\n'
+  )
+  units = [{'id': 'U010926', 'title': '纯公式二维码'}]
+  assert (
+    staged.unnamed('几个演示（U000847、U003216）和 U010926 的方案。', units) == '几个演示和 「纯公式二维码」 的方案。'
+  )

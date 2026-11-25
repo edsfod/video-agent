@@ -253,6 +253,26 @@ def mark_unchecked(text, checked=()):
   return head + heading + ''.join(rest), marked
 
 
+def clean(text):
+  """A unit's draft without what the model copied from the prompt into 「## 正文」: a 「子行：」 label at the start of a
+  sub-line, and 「画面读出（上半）：」, whose position is for the program's crops and belongs in 「## 画面」."""
+  head, heading, tail = text.partition('## 正文')
+  if not heading:
+    return text
+  rest = re.split(r'(?m)^(?=## )', tail, maxsplit=1)
+  rest[0] = re.sub(r'(?m)^(\s+- )子行\s*[:：]\s*', r'\1', rest[0])
+  rest[0] = re.sub(r'(?:画面)?读出\s*[（(][^）)\n]{1,20}[）)]\s*[:：]\s*', '画面：', rest[0])
+  return head + heading + ''.join(rest)
+
+
+def unnamed(text, units):
+  """M3's text without the units' ids (U004027), which name the units in its material, not for the reader: a list of
+  them in brackets goes, one in a sentence becomes the unit's title."""
+  titles = {u['id']: u['title'] for u in units}
+  text = re.sub(r'\s*[（(]\s*U\d{6}(?:\s*[、,，]\s*U\d{6})*\s*[)）]', '', text)
+  return re.sub(r'\bU\d{6}\b', lambda m: f'「{titles[m[0]]}」' if m[0] in titles else '', text)
+
+
 def unlink_dropped(text, paths, own):
   """(text, how many): links in 「## 正文」 to a picture the unit itself marks 无用 go to the picture it repeats
   (「重复 #m」), or away. `paths` is {number: path}, `own` {path: why}."""
@@ -334,6 +354,7 @@ def assemble(units, drafts, whole, head):
   """The summary in the template's form: the units' 详细内容, and 元信息, 概要, 要点 and the rest from M3's reply
   `whole`. 要点 are written by the program from the propositions M3 names; `head` is the title and the 视频 line."""
   body, props, _, next_number = numbered(units, drafts)
+  whole = unnamed(whole, units)
   joined = '；'.join(item.rstrip('。') for item in items(section(whole, '接上')))
   main = (items(section(whole, '主结论')) or [''])[0]
   summarizer = ''
@@ -695,7 +716,7 @@ class Run:
       text = drafts[unit['id']]
       found = '\n'.join(f'### {name}\n{section(text, name) or "无"}' for name in ('事项', '预设', '需确认', '要点候选'))
       reports.append(
-        f'## {unit["id"]} {unit["title"]}\n'
+        f'## {unit["title"]}（`{clock(unit["start"])}`–`{clock(unit["end"])}`）\n'
         + re.sub(r'\bS(\d+)\b', lambda m, mapping=mapping: f'P{mapping.get(m[1], m[1])}', found)
       )
     prompt = prompts.M3.format(ledger='\n'.join(ledger), reports='\n'.join(reports))
@@ -1005,7 +1026,8 @@ class Run:
       self.say(f'{unit["id"]} 剩下 {len(left)} 处：' + '；'.join(left)[:400])
 
   def mark(self, unit):
-    """Marks the formulas read off pictures and not checked on an enlarged crop."""
+    """Cleans what the model copied from the prompt into the draft, and marks the formulas read off pictures and not
+    checked on an enlarged crop."""
     folder = self.dir / 'units' / unit['id']
     text = read(folder / 'body.md') or ''
     zoomed = {int(z.split(':')[0]) for z in self.record.get('zoomed', {}).get(unit['id'], [])}
@@ -1013,9 +1035,9 @@ class Run:
     for line in (section(text, '画面') or '').splitlines():
       if numbers(line) & zoomed:
         checked |= set(re.findall(r'`([^`]+)`', line))
-    text, marked = mark_unchecked(text, checked)
-    if marked:
-      write(folder / 'body.md', text)
+    cleaned, _ = mark_unchecked(clean(text), checked)
+    if cleaned != text:
+      write(folder / 'body.md', cleaned)
 
   # ---- the loop ------------------------------------------------------------------------------------------------------
 
