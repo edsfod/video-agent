@@ -17,7 +17,8 @@
 | [app-design.md](app-design.md) | 桌面程序：技术、任务队列和并发、自动处理、界面、终端、日志、托盘 |
 | [collections-design.md](collections-design.md) | 合集、跟随播放列表、合集总结和学习提纲 |
 | [distribution-design.md](distribution-design.md) | 安装包、自带的 FFmpeg、许可和隐私说明、更新签名 |
-| [roadmap.md](roadmap.md) | 还没排期的方向：总结文章 |
+| [adr/](adr/) | 为什么选了现在的方案：跨模块的取舍，以及试过、否决的做法 |
+| [roadmap.md](roadmap.md) | 还没排期的方向和它们的前提 |
 | [reference/deepseek-web.md](reference/deepseek-web.md)、[reference/antigravity.md](reference/antigravity.md) | 外部系统的实测事实：DeepSeek 网页版、agy |
 | [cli.md](cli.md)、[commands.md](commands.md) | 给用户：命令行怎么用、每个命令和选项 |
 | [development.md](development.md) | 测试、构建、发布、已知问题 |
@@ -33,7 +34,7 @@
 
 | 部分 | 怎么更新 |
 |---|---|
-| 需求、设计、参考、运行、约定 | 原地改写，只保留当前版本；决定写在所属的那篇里，带日期；推翻时直接改 |
+| 需求、设计、参考、运行、约定、ADR | 原地改写，只保留当前版本；跨模块的取舍写成 ADR，只影响一篇的决定写在那篇里；推翻时直接改，被推翻的做法和原因写进 ADR 的「备选方案」 |
 | 讨论过程、试错经过 | 不进文档，留在 git 历史和对话里；试过的做法只写结论 |
 | 发布说明、发布检查记录 | 只追加 |
 | 用户的原始材料 | 原样保存，只追加 |

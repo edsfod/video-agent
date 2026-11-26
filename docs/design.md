@@ -44,7 +44,7 @@
 ### 页面和主进程
 
 - 页面在沙箱里运行，开着上下文隔离和严格的 CSP，只能通过 `window.va`（`preload.js`）找主进程。
-- Markdown 用 marked 渲染、DOMPurify 净化；`fs:read` 只读工作区里的文件；`shell:open` 能打开任何路径，因为总结里的链接可能指向任何地方（用户定）。
+- Markdown 用 marked 渲染、DOMPurify 净化；`fs:read` 只读工作区里的文件；`shell:open` 能打开任何路径，因为总结里的链接可能指向任何地方（[ADR-0002](adr/0002-no-allowlist-for-the-page.md)）。
 
 ## 持久化
 

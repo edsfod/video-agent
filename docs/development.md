@@ -24,7 +24,7 @@
 
 - 命令行：`packaging/build_cli.py` 用 PyInstaller 冻结，带上 yt-dlp 和 `packaging/ffmpeg/build.sh` 编译的 LGPL FFmpeg（源码随每次发布附上）。
 - 安装包：electron-builder 打成未签名的 NSIS 安装包，安装时先显示 `PRIVACY.md`，并把命令行工具加进用户的 `PATH`。
-- LGPL FFmpeg 的预编译包（[distribution-design.md](distribution-design.md) 第三节）：`build.sh` 的版本或编译命令改了以后，CI 每个用到它的任务都要重新编译（什么缓存都没有时 FFmpeg 这一步约 16 分钟，2026-11-22），本机 pre-push 也跳过打包冒烟测试，直到换上新的预编译包：
+- LGPL FFmpeg 的预编译包（[distribution-design.md](distribution-design.md)「自带的 FFmpeg」）：`build.sh` 的版本或编译命令改了以后，CI 每个用到它的任务都要重新编译（什么缓存都没有时 FFmpeg 这一步约 16 分钟，2026-11-22），本机 pre-push 也跳过打包冒烟测试，直到换上新的预编译包：
   1. 等 installer 任务编完，删掉本机的 `build/ffmpeg`，`gh run download <运行号> -n ffmpeg-lgpl -D build/ffmpeg`，再跑 `bash packaging/ffmpeg/fetch.sh --verify`，要通过。
   2. `tar -czf ffmpeg-lgpl-<哈希>.tar.gz -C build/ffmpeg .`，哈希是 `bash packaging/ffmpeg/fetch.sh --hash` 的输出；`gh release upload v0.9.0 ffmpeg-lgpl-<哈希>.tar.gz`。
   3. 把 `packaging/ffmpeg/fetch.sh` 里的 `PREBUILT_BUILD_HASH` 改成这个哈希，`PREBUILT_ARCHIVE_SHA256` 改成压缩包的 SHA-256，提交。
@@ -51,3 +51,6 @@ README 的截图在 `docs/images/`，由 `gui/` 下的 `npm run screenshots -- <
 
 - 本机的端到端测试时好时坏：一次窗口在「添加本地视频」时关掉（node-pty 报 `AttachConsole failed`），一次 DeepSeek 网页任务慢到超时；原因没查。
 - 维护者机器上 0.2.0 的前两次静默安装把 PATH 选项存成了 0（不加入），之后同一安装包和 CI 都存成 1；没查明。
+- 网站账号的真实登录（尤其 Google）和用它下载没有测过：要用户的账号。导出、cookies.txt 导入、排序和隐藏有端到端测试。
+- `拓展：` 有时复述视频别处讲过的话。规则和自查都写了不许，结构上没找到原因。
+- 要点可能写得太粗：2026-11-21 的一份第 1 课总结（Antigravity，`gemini-3.8-flash-high`）要点只有 8 条，每段一条，时间段长 4–20 分钟。要点该写多细、时间线要不要另成一节，没定。
