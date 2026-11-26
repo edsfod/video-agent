@@ -2,7 +2,7 @@
 
 扫：docs/（不含 archive、user-notes、releases 和 release-log.md）、.claude/rules/、README.md、ARCHITECTURE.md、PRIVACY.md，以及代码里的注释和文档字符串
 （src/、tests/、scripts/、packaging/、gui/src、gui/test、gui/scripts、.github/）。
-找：归给用户的引语、「Claude 判断」这类过程标记、带钟点的过程记录、指向已归档旧文档的引用，以及代码注释里「谁哪天说了什么」。
+找：归给用户的引语、「Claude 判断」这类过程标记、带钟点的过程记录、指向已归档旧文档的引用、文档里决定的出处和日期，以及代码注释里「谁哪天说了什么」。
 
 用法：
     python scripts/lint_writing.py              # 全部查一遍，有问题时退出码 1
@@ -60,6 +60,7 @@ RULES_ANY = [
 ]
 RULES_DOC = [
   ('带钟点的过程记录', re.compile(r'20\d\d-\d\d-\d\d \d{1,2}:\d{2}(?!:)')),
+  ('文档里写了决定的出处和日期（写进提交信息）', re.compile(r'（用户 ?20\d\d-\d\d-\d\d ?定')),
 ]
 RULES_CODE = [
   (

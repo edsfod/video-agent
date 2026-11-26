@@ -20,11 +20,11 @@ npm run screenshots -- <工作区> <视频>   # 重新生成 README 的截图
   - 端到端测试平时从源码跑；对着解包后的安装包只重跑打包会影响到的那部分和更新测试，其余用 `devTest` 声明。
   - `gui/test/agents.test.js` 只在设了 `VA_E2E_AGENTS` 时调用真的 Agent。
 - 测试等状态，不等时间。
-- 界面改动除跑测试外，也在本地打开开发窗口实查（用户 2026-10-28 定）。
+- 界面改动除跑测试外，也在本地打开开发窗口实查。
 
 ## 在哪里跑
 
-- 本机：`pre-push` 钩子（`scripts/githooks/pre-push`）按这次推送改了什么挑检查（规则和 GitHub 一样，见 `.github/scripts/changed-jobs.sh`）：只改文档什么都不跑；改了命令行跑 ruff、mypy、pytest 和入口；改了窗口代码跑 GUI 的类型检查和单元测试；改了打包相关的文件，再打包一次命令行工具并跑它的冒烟测试。开窗口的端到端测试不在本机跑（用户 2026-10-30 定：太慢，GitHub 上也会跑），`update` 也是开窗口的；会安装程序、改真实 PATH 或已安装程序的测试（`update-install`、`installer-path`）只在 GitHub 上跑，用临时目录、临时注册表项隔离的（如 `user-path`）可以在本机跑（用户 2026-11-21 定）。推送的提交都已在远端时跳过。
+- 本机：`pre-push` 钩子（`scripts/githooks/pre-push`）按这次推送改了什么挑检查（规则和 GitHub 一样，见 `.github/scripts/changed-jobs.sh`）：只改文档什么都不跑；改了命令行跑 ruff、mypy、pytest 和入口；改了窗口代码跑 GUI 的类型检查和单元测试；改了打包相关的文件，再打包一次命令行工具并跑它的冒烟测试。开窗口的端到端测试不在本机跑（太慢，GitHub 上也会跑），`update` 也是开窗口的；会安装程序、改真实 PATH 或已安装程序的测试（`update-install`、`installer-path`）只在 GitHub 上跑，用临时目录、临时注册表项隔离的（如 `user-path`）可以在本机跑。推送的提交都已在远端时跳过。
 - GitHub（`.github/workflows/test.yml`，只在 Windows 上）：按改动挑任务。cli 任务跑命令行的检查；gui 任务跑端到端测试（约 2.5 分钟）；installer 任务（构建、PATH 选项、静默安装、更新安装，约 5 分钟）只在依赖、打包、安装器、图标、更新器改了时跑。只改版本号的提交（`.github/scripts/version_only.py`）只跑版本号检查。同一分支上被新推送取代的运行会取消；每个任务都有时限。
 - git 钩子：`sh scripts/githooks/install.sh` 把 `scripts/githooks/` 下的 pre-commit（写法检查）、commit-msg（AI 署名、写法检查）和 pre-push 装进 `.git/hooks/`，见 [writing.md](writing.md)。
 - 本机跑端到端测试：在 `gui/` 下 `node --test --test-concurrency=1 test/e2e.test.js`，用临时的 APPDATA 和 `--user-data`。

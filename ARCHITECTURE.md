@@ -1,5 +1,5 @@
 <!--
-类别：状态 · 实现层。读者：要改代码的人和 AI。
+类别：状态 · 实现层（docs/doc-rules.md）。读者：要改代码的人和 AI。
 装：全局概览、代码地图、不变量、横切关注点（含跨模块改动清单）。
 不装：机制细节、文件格式和接口字段（→ docs/design.md 与各篇 docs/*-design.md）、需求（→ docs/requirements.md）、
       决策论证（→ docs/adr/）、测试和发布的步骤（→ docs/development.md）。

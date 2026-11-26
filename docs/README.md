@@ -22,6 +22,7 @@
 | [reference/deepseek-web.md](reference/deepseek-web.md)、[reference/antigravity.md](reference/antigravity.md) | 外部系统的实测事实：DeepSeek 网页版、agy |
 | [cli.md](cli.md)、[commands.md](commands.md) | 给用户：命令行怎么用、每个命令和选项 |
 | [development.md](development.md) | 测试、构建、发布、已知问题 |
+| [doc-rules.md](doc-rules.md) | 每类信息放在哪份文档、按什么规则写、怎么更新 |
 | [conventions.md](conventions.md) | 文档、代码、提交怎么做 |
 | [writing.md](writing.md) | 仓库里的文字怎么写，为什么 AI 爱写成过程记录、怎么防 |
 | [releases/](releases/) | 每一版的发布说明（公开），只追加 |
@@ -32,12 +33,4 @@
 
 ## 文档怎么分、怎么更新
 
-| 部分 | 怎么更新 |
-|---|---|
-| 需求、设计、参考、运行、约定、ADR | 原地改写，只保留当前版本；跨模块的取舍写成 ADR，只影响一篇的决定写在那篇里；推翻时直接改，被推翻的做法和原因写进 ADR 的「备选方案」 |
-| 讨论过程、试错经过 | 不进文档，留在 git 历史和对话里；试过的做法只写结论 |
-| 发布说明、发布检查记录 | 只追加 |
-| 用户的原始材料 | 原样保存，只追加 |
-| 归档 | 冻结；只当查漏的材料，内容并入新文档后可以删 |
-
-每篇开头写两行：给谁看、回答什么。回答不了这个问题的内容不属于这一篇。不设交接文档和单独的决策日志。
+见 [doc-rules.md](doc-rules.md)。
