@@ -78,6 +78,7 @@ Electron。不含处理媒体或写总结的逻辑，只运行命令行和 Agent
 | `A5` | 页面在沙箱里运行（`contextIsolation`、`sandbox`、CSP），只经 `window.va` 找主进程 | 页面能直接读写任意文件 | `gui/src/window.js` 的 `webPreferences`；`preload.js` 由 `npm run typecheck` 对照 `va.d.ts` 检查 |
 | `A6` | 版本号在各处一致，只用 `scripts/bump_version.py` 改 | 安装包、wheel、插件和 README 的版本对不上 | `test_versions_match`、`test_bump_version_changes_every_file_or_none` |
 | `A7` | 视频文件夹和文件的名字（含 `总结.md` 等中文名）被桌面程序、skill 和总结里的链接读取；桌面程序和 skill 写的名字与命令行的常量（`evidence.SUMMARY_NAME`、`collection.OVERVIEW`、`collection.GUIDE`、`cli.DOWNLOADS`）一致；改名必须带迁移 | 桌面程序和 skill 找不到文件；已有工作区里的总结和链接失效 | `tests/test_names.py`（名字一致）；迁移无自动检查 |
+| `A8` | 命令行不依赖任何模型服务商的库，也不依赖界面库；模型 API 只在 `model_api.py` 里用 `requests` 走 HTTP | 装命令行要连带装服务商的库；换服务商要改 `model_api.py` 以外的代码 | `pyproject.toml` 的 `dependencies` 只有 `requests`、`imageio-ffmpeg`、`yt-dlp` |
 
 **数据安全约束**（违反会丢失或弄坏用户的数据，或让用户装上不可信的程序）：
 
@@ -94,6 +95,7 @@ Electron。不含处理媒体或写总结的逻辑，只运行命令行和 Agent
 
 - **数据位置**：视频的文件夹和合集都在工作区里；命令行的设置在 `%APPDATA%\video-agent\`，桌面程序的在 `%APPDATA%\Video Agent\`。各文件用途见 [docs/design.md](docs/design.md)。
 - **外部工具**：yt-dlp、FFmpeg、AutoSlides Extractor 作为程序运行，不复制代码；`PATH` 上的优先，再找自带的。
+- **数量上限**：`processor.MAX_FRAMES`、`processor.MAX_PAGES`、`gui/src/chat-rounds.js` 的 `MAX_ROUNDS` 这类上限只用来挡住失控，不是目标；到了上限要向用户说明。
 - **文本文件**：仓库统一用 LF（`.gitattributes`）；Python 写文本文件时传 `newline='\n'`。
 - **隐私**：音频只在加了 `--allow-remote-asr` 时发给必剪；传 API key 用标准输入，不写进日志；脚本输出里 DeepSeek 的请求和响应要过滤，因为里面带登录令牌。
 - **测试分层**：命令行用 pytest 和 mypy，真实 FFmpeg 处理生成的短片，必剪对着本机假服务器；桌面程序用 `npm run typecheck` 和 `node --test`，开窗口的端到端测试和改真实安装的测试只在 GitHub 上跑。见 [docs/development.md](docs/development.md)。

@@ -7,8 +7,8 @@
 | 文档 | 回答什么 |
 |---|---|
 | [ARCHITECTURE.md](../ARCHITECTURE.md) | 代码在哪、什么不能破坏、改一处要连带改哪里 |
-| [requirements.md](requirements.md) | 要解决什么、怎样算做成、范围和约束 |
-| [summary-requirements.md](summary-requirements.md) | 总结提示词要让模型做到的每一件事，各写在提示词的哪里 |
+| [requirements.md](requirements.md) | 目标、范围、场景，以及每条需求（`SRC`、`FRM`、`SUM`、`MGT`、`APP`、`INS`、`PRV`）怎样算做到 |
+| [summary-requirements.md](summary-requirements.md) | 总结提示词要让模型做到的每一件事（`PRM-`），各写在提示词的哪里 |
 | [design.md](design.md) | 数据怎么流、命令行和桌面程序之间的契约、磁盘上的文件、并发；各子系统设计的索引 |
 | [processing-design.md](processing-design.md) | 下载和网站账号、字幕、画面布局和屏幕页、课件、代表画面、补截、压缩 |
 | [summary-design.md](summary-design.md) | 总结的规则和模板、主线与单元、版本和谱系、画面集、导入时做什么和查什么 |

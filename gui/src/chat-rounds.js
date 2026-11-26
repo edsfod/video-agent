@@ -13,7 +13,7 @@ const { send } = shared;
 const deepseek = require('./deepseek');
 const { cliCommand, runToEnd } = require('./programs');
 
-// A runaway limit, said when reached: a chat AI whose 复查 keeps finding something stops here (docs/requirements.md);
+// A runaway limit, said when reached: a chat AI whose 复查 keeps finding something stops here (ARCHITECTURE.md);
 // configurable on the summary page.
 const MAX_ROUNDS = 6;
 // A conversation goes on to a new one past this many characters said in it since its first message, about 4 rounds on
