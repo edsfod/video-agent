@@ -1,5 +1,5 @@
 #!/bin/sh
-# 推送前在本机跑这次改动涉及的检查，通过了就直接推到 main，不等 GitHub 的测试（docs/development.md）：
+# 推送前在本机跑这次改动涉及的检查（docs/development.md）：
 # 文档引用检查（每次都跑）；命令行的 ruff、格式、mypy、pytest 和入口；GUI 的类型检查和不开窗口的单元测试；
 # 改了打包相关的文件时再打包一次命令行工具。
 # 开窗口的端到端测试（e2e、update），和会安装程序、改真实 PATH 或已安装程序的测试（update-install、installer-path）只在 GitHub 上跑。失败时以非 0 退出，挡下这次推送。
@@ -72,4 +72,4 @@ if [ "$packaging" = yes ]; then
     *) fail "准备并校验 LGPL FFmpeg（bash packaging/ffmpeg/fetch.sh 看详情）" ;;
   esac
 fi
-echo "pre-push：本地检查通过，可以推到 main；GitHub 上的测试随后跑，不用等。" >&2
+echo "pre-push：本地检查通过。" >&2
