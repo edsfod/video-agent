@@ -99,7 +99,7 @@ Electron。不含处理媒体或写总结的逻辑，只运行命令行和 Agent
 - **文本文件**：仓库统一用 LF（`.gitattributes`）；Python 写文本文件时传 `newline='\n'`。
 - **隐私**：音频只在加了 `--allow-remote-asr` 时发给必剪；传 API key 用标准输入，不写进日志；脚本输出里 DeepSeek 的请求和响应要过滤，因为里面带登录令牌。
 - **测试分层**：命令行用 pytest 和 mypy，真实 FFmpeg 处理生成的短片，必剪对着本机假服务器；桌面程序用 `npm run typecheck` 和 `node --test`，开窗口的端到端测试和改真实安装的测试只在 GitHub 上跑。见 [docs/development.md](docs/development.md)。
-- **文字**：文档、注释、提交信息的写法由 `scripts/lint_writing.py` 检查。见 [docs/writing.md](docs/writing.md)。
+- **文字**：文档、注释、提交信息的写法由 `scripts/lint_writing.py` 检查，见 [docs/writing.md](docs/writing.md)；文档和注释引用的需求、PRM、ADR、不变量编号和文件由 `scripts/verify_doc_references.py` 检查。
 
 ### 跨模块改动清单
 
@@ -113,4 +113,4 @@ Electron。不含处理媒体或写总结的逻辑，只运行命令行和 Agent
 | 改视频文件夹或文件的名字 | 命令行的常量和迁移代码；`gui/`；`SKILL.md`；`tests/test_names.py` 的表；[docs/design.md](docs/design.md) 的磁盘文件 | `uv run pytest tests/test_names.py`；端到端测试 |
 | 改版本号 | 只运行 `uv run scripts/bump_version.py <版本>` | `test_versions_match` |
 | 改 `packaging/ffmpeg/build.sh` 的版本或编译命令 | 换预编译包，步骤见 [docs/development.md](docs/development.md)「构建」 | `bash packaging/ffmpeg/fetch.sh --verify` |
-| 移动或改名文档 | 代码注释里的 `docs/` 路径 | `rg "docs/" src gui packaging scripts .github` |
+| 移动或改名文档、增删需求或 ADR | 代码注释里的 `docs/` 路径；文档里的相对链接和编号；废弃的编号写进所属文件的「已废弃编号」 | `uv run python scripts/verify_doc_references.py` |
