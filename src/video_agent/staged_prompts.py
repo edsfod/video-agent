@@ -1,4 +1,4 @@
-"""Task texts of the staged summary (docs/design/staged.md). The material is in the prompt; the reply is the result,
+"""Task texts of the staged summary (docs/staged-design.md). The material is in the prompt; the reply is the result,
 which the program saves and checks. The main conversation (M1, M2, M3) never sees pictures; a unit conversation
 opens its pictures with view_file and is told what to fix in later turns."""
 

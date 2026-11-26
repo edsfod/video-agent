@@ -1,4 +1,4 @@
-"""`summarize --staged`: a video's summary written in stages (docs/design/staged.md). One main conversation that never
+"""`summarize --staged`: a video's summary written in stages (docs/staged-design.md). One main conversation that never
 sees pictures marks the transcript and cuts it into units (M1), weighs the writers' objections to the cut (M2) and
 writes the parts about the whole (M3); one conversation per unit writes that unit from its transcript and pictures and
 is told in later turns what the program's checks found. The program checks, merges and assembles; the model only fixes

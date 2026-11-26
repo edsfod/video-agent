@@ -1,6 +1,6 @@
 """检查仓库里的文字是不是写成了过程记录（docs/writing.md）。
 
-扫：docs/（不含 archive、user-notes、releases 和 release-log.md）、.claude/rules/、README.md、PRIVACY.md，以及代码里的注释和文档字符串
+扫：docs/（不含 archive、user-notes、releases 和 release-log.md）、.claude/rules/、README.md、ARCHITECTURE.md、PRIVACY.md，以及代码里的注释和文档字符串
 （src/、tests/、scripts/、packaging/、gui/src、gui/test、gui/scripts、.github/）。
 找：归给用户的引语、「Claude 判断」这类过程标记、带钟点的过程记录、指向已归档旧文档的引用，以及代码注释里「谁哪天说了什么」。
 
@@ -27,7 +27,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 
 DOC_DIRS = [ROOT / 'docs', ROOT / '.claude' / 'rules']
-DOC_FILES = [ROOT / 'README.md', ROOT / 'PRIVACY.md']
+DOC_FILES = [ROOT / 'README.md', ROOT / 'ARCHITECTURE.md', ROOT / 'PRIVACY.md']
 DOC_EXCLUDE = [ROOT / 'docs' / 'archive', ROOT / 'docs' / 'user-notes', ROOT / 'docs' / 'releases']
 CODE_DIRS = [
   ROOT / 'src',
@@ -55,9 +55,7 @@ RULES_ANY = [
   ('过程标记', re.compile(r"Claude judgment|Claude 判断|Claude's proposal|等用户定")),
   (
     '已归档的旧文档路径',
-    re.compile(
-      r'\bdocs/(?:product-rules\.md|working-rules\.md|decisions/)|(?<![A-Za-z0-9_-])ARCHITECTURE\.md|(?:\(|\.\./)decisions/'
-    ),
+    re.compile(r'\bdocs/(?:product-rules\.md|working-rules\.md|decisions/)|(?:\(|\.\./)decisions/'),
   ),
 ]
 RULES_DOC = [

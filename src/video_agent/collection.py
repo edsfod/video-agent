@@ -1,5 +1,5 @@
 """Collections: an ordered set of related videos, such as a course, a series, a playlist or a workshop, with files of
-their own (docs/design/collections.md). Nothing here assumes lectures.
+their own (docs/collections-design.md). Nothing here assumes lectures.
 
 A collection lives in `<workspace>/合集/<name>/`: `collection.json` (the videos in order, shared terms, skipped videos
 and why), `合集总结.md` (overview) and `学习提纲.md` (study guide with self-test questions). Each video keeps its own

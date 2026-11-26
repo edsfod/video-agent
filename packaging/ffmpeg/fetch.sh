@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Prepares and verifies build/ffmpeg without compiling from scratch when packaging/ffmpeg/build.sh has the pinned
-# build_hash (comments and blank lines stripped; docs/design/distribution.md).
+# build_hash (comments and blank lines stripped; docs/distribution-design.md).
 # build/ffmpeg/BUILD-HASH names the build_hash the tree was built from, so a tree from an older build.sh is not taken.
 # Only whole-line comments are left out of the hash: a comment at the end of a line in build.sh counts as a change.
 # Usage:

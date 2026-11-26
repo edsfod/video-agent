@@ -16,8 +16,8 @@
 ## 三、合集的文字
 
 - 合集总结和学习提纲从各集的总结写，各集总结已经链接了画面，所以不用发图。方式：`summarize --collection NAME [--guide]` 用模型 API（有没跳过、又没有总结的集时拒绝）；`pack --collection` 和 `summarize --collection --import` 给网页 AI；Agent 按 skill 的「A collection」做，可以把几集分给子 Agent。DeepSeek 网页版暂时不能用。
-- 合集总结有「需留意」一节和一列（从各集收集的截止时间、任务、提醒、通知）和跳过的视频一节；学习提纲有重点（讲者强调的，例如考试提示）、各主题和折叠了答案与出处的自测题。规则在总结模板里（[summary.md](summary.md)）。
-- 版本和单个视频的总结一样（[summary.md](summary.md) 第四节）；合集页目前只显示当前的文字。
+- 合集总结有「需留意」一节和一列（从各集收集的截止时间、任务、提醒、通知）和跳过的视频一节；学习提纲有重点（讲者强调的，例如考试提示）、各主题和折叠了答案与出处的自测题。规则在总结模板里（[summary-design.md](summary-design.md)）。
+- 版本和单个视频的总结一样（[summary-design.md](summary-design.md) 第四节）；合集页目前只显示当前的文字。
 
 ## 四、窗口
 

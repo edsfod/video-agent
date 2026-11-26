@@ -1,12 +1,12 @@
 # 桌面程序
 
 > 给谁看：要改桌面程序（`gui/`）的人和 AI。回答：界面怎么组织、任务队列和并发规则、自动处理、终端、日志、托盘、设置。
-> 各模块管什么见 [architecture.md](architecture.md)；网站账号见 [processing.md](processing.md)；更新和安装包见 [distribution.md](distribution.md)；写总结的方式见 [routes.md](routes.md)。
+> 各模块管什么见 [ARCHITECTURE.md](../ARCHITECTURE.md)；网站账号见 [processing-design.md](processing-design.md)；更新和安装包见 [distribution-design.md](distribution-design.md)；写总结的方式见 [routes-design.md](routes-design.md)。
 
 ## 一、技术和边界
 
 - Electron，终端用 xterm.js 和 node-pty（VS Code 在 Windows 上用的组合，经 ConPTY）。Qt 没有维护中的终端组件，内嵌终端的需求决定了用 Electron。
-- 桌面程序把命令行当子进程运行，自己不含处理媒体或写总结的逻辑（[requirements.md](../requirements.md)）。
+- 桌面程序把命令行当子进程运行，自己不含处理媒体或写总结的逻辑（[requirements.md](requirements.md)）。
 - 保持 JavaScript，不改成 TypeScript（用户 2026-10-29 定）：`tsc` 借 JSDoc 检查主进程和页面的全部代码（严格模式，含空值检查；不要求每个参数都标类型，`catch` 到的错误是 `any`），不编译；每个文件都不大，改成 `.ts` 只会给打包和测试多一个编译步骤。页面用 `<script type="module">` 从 `file://` 加载 ES 模块，没有构建步骤。
 - 页面和主进程之间不设白名单（用户 2026-10-29 定）：页面能让主进程运行任何命令行命令，`shell:open` 能打开任何路径。用户本来就有命令行和内嵌终端，这类限制挡不住什么，还会让每个新功能都得去加白名单。
 - 队列放在主进程，不在页面里：页面重新加载也不丢，关窗口后在托盘里继续跑；重启后不保留排队中的任务。
@@ -38,12 +38,12 @@
 ## 三、自动处理
 
 - 「下载或添加后自动处理」默认开（用户 2026-10-28 定），记住选择：下载保存的每个文件、从本地添加的视频，按窗口的画面设置和必剪设置排一个处理（不带课件）。下载时发现已经存在的文件不再处理：`download --json`、`collection update --json` 给每个路径标出是不是新的。
-- 「没有字幕时用必剪转录」默认开，下载后的处理也用它；勾选框说明音频会发给 B 站。从本地添加、没有字幕的视频先问（[processing.md](processing.md)）。
+- 「没有字幕时用必剪转录」默认开，下载后的处理也用它；勾选框说明音频会发给 B 站。从本地添加、没有字幕的视频先问（[processing-design.md](processing-design.md)）。
 
 ## 四、界面
 
 - 侧栏只列合集，带各自视频的任务数；视频从合集页打开，视频页有「← 合集 · 第 N 集」返回。不在任何合集里的视频列在「视频」下。再点一次已打开的视频或合集就关上它，回到开始页。启动时不自动打开任何东西；合集读到之后才画列表，免得视频先在「视频」下闪一下。
-- 视频页的标签：处理、字幕、画面、总结、终端。处理页显示 `layout.jpg`，可以拖出屏幕区域重新处理；字幕页显示在用的字幕，能切到原字幕，列出、添加、撤回改正；画面页见 [summary.md](summary.md) 第五节；总结页见 [routes.md](routes.md) 和 [summary.md](summary.md)。
+- 视频页的标签：处理、字幕、画面、总结、终端。处理页显示 `layout.jpg`，可以拖出屏幕区域重新处理；字幕页显示在用的字幕，能切到原字幕，列出、添加、撤回改正；画面页见 [summary-design.md](summary-design.md) 第五节；总结页见 [routes-design.md](routes-design.md) 和 [summary-design.md](summary-design.md)。
 - AutoSlides Extractor 的勾选框说明写总结不需要它，`tools` 找不到时变灰并说明；字幕卡片写明来源（B 站 AI 字幕、同名字幕文件、某种语言），悬停显示文件名。
 - 外观：跟随系统、浅色、深色（`nativeTheme.themeSource`），选了立即预览，保存设置才留下。
 - 设置：右上角 ×、Esc、点外面，没改动时直接关；有改动时始终可见的保存行显示「有改动还没保存」和「不保存」「保存」。skill 查看器和日志点外面也会关。
@@ -59,11 +59,11 @@
 
 ## 六、和命令行的数据
 
-- 命令行的 JSON 类型由 `contract.py` 定义，桌面程序用生成的 `cli-types.d.ts`（[architecture.md](architecture.md) 第四节）。
+- 命令行的 JSON 类型由 `contract.py` 定义，桌面程序用生成的 `cli-types.d.ts`（[design.md](design.md)「接口契约」）。
 - 合集列表一次只读一份，同时来的请求共用之后的那次读取；读失败时保留已显示的合集，在侧栏说明，5 秒后再读。
 
 ## 七、待定
 
 - 网站账号的导出、cookies.txt 导入、排序和隐藏有端到端测试；真实登录（尤其 Google）和用它下载要用户的账号，没测过。
-- 本机的端到端测试时好时坏，原因没查（[development.md](../development.md)）。
+- 本机的端到端测试时好时坏，原因没查（[development.md](development.md)）。
 - 总结页的跳转和交互（设想，暂不实现，用户 2026-11-20 定）：要点、主线与单元这两种视图和详细内容之间双向跳转，跳到详细内容以后能跳回原处；从任意文字直接点开对应命题关联的画面；点详细内容分段标题上的时间段或命题的时间点，直接打开并播放那一段视频。

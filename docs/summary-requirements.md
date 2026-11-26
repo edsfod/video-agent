@@ -9,7 +9,7 @@
 - **网页 AI 的附加部分**：在 `src/video_agent/packing.py` 里，只有网页 AI 的材料会带上。包括 `reminder`（材料末尾重复模板的「自查」，再加三条网页 AI 才有的事）、`review_section`（复查轮的要求）、`CORRECTIONS_SECTION`、`PICTURES_SECTION`，以及认图、总图、新对话的说明。
 - **其他路线的附加部分**：`summarize.py` 的截帧工具提示，`skills/video-agent/SKILL.md` 的步骤，`gui/src/jobs.js` 给 Agent 的任务。
 
-「写在哪里」写模板里的节（如「二·来源」），或者「程序」：不由模型去做、由程序做到的，例如「主线与单元」由 `src/video_agent/forest.py` 照详细内容里的关系排出（见 [design/summary.md](design/summary.md)）。
+「写在哪里」写模板里的节（如「二·来源」），或者「程序」：不由模型去做、由程序做到的，例如「主线与单元」由 `src/video_agent/forest.py` 照详细内容里的关系排出（见 [summary-design.md](summary-design.md)）。
 
 ## 目的
 
@@ -201,4 +201,4 @@
 | X4 | 每张链接的图写一行「画面」，没有就写无 | `review_section` |
 | X5 | 复查节的写法和格式 | `review_section` |
 
-字幕改正一节、画面调整一节、认图编号、总图、新对话、没附图时的说明，见 [design/routes.md](design/routes.md)。
+字幕改正一节、画面调整一节、认图编号、总图、新对话、没附图时的说明，见 [routes-design.md](routes-design.md)。

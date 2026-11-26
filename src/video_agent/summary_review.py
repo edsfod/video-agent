@@ -1,4 +1,4 @@
-"""Rounds of a chat AI's summary until it holds what is worth noting (docs/design/routes.md). Every answer imported from
+"""Rounds of a chat AI's summary until it holds what is worth noting (docs/routes-design.md). Every answer imported from
 a chat AI is checked for what a program can see: the template's sections, the 画面调整 section, the stretches of speech
 the detailed part leaves out, times past the end. A first draft always goes to one round of 复查, in which the chat AI
 goes through the transcript again against its draft and says in a 复查 section what it added and corrected; the rounds

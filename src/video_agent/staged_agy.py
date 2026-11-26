@@ -1,4 +1,4 @@
-"""The agy command line (Antigravity) as the channel of the staged summary (docs/design/staged.md): one turn is one
+"""The agy command line (Antigravity) as the channel of the staged summary (docs/staged-design.md): one turn is one
 `agy -p` with a custom agent that has only view_file, in a new conversation or one it goes on with. The prompt goes in
 on stdin, so its length is not limited by the command line."""
 

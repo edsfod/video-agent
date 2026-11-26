@@ -1,6 +1,6 @@
 # 意图与需求
 
-> 给谁看：参与设计和实现的人和 AI。回答：要解决什么、怎样算做成、范围和约束。各部分怎么做见 [design/](design/)。
+> 给谁看：参与设计和实现的人和 AI。回答：要解决什么、怎样算做成、范围和约束。各部分怎么做见 [design.md](design.md)。
 
 ## 要解决的问题
 
@@ -53,7 +53,7 @@
 
 - 只支持 Windows（用户 2026-10-27 定）。
 - 许可证 AGPL-3.0-or-later；安装包里的 FFmpeg 按 LGPL，每次发布附上源码。
-- 总结文章：计划中，见 [design/article-summary.md](design/article-summary.md)。
+- 总结文章：计划中，见 [roadmap.md](roadmap.md)。
 - 不做：常驻的 MCP 服务；某个平台专用的逻辑（例如雁课堂的归 AutoSlides）。
 
 ## 约束

@@ -195,7 +195,7 @@ video-agent summarize VIDEO --staged [-o WORKSPACE] [--model NAME] [--fix-model 
 | `--template NAME` | 选定的那个 | 这次总结用的模板（见 `template --list`） |
 | `--effort low\|medium\|high` | 不传 | 模型想多深（见 `models`） |
 | `--make-current`, `--overwrite` | 关 | 新文字成为当前的 `总结.md`，被替换的存成版本。不加时，已有总结旁边的新文字存成版本（见 `versions`） |
-| `--staged` | 关 | 分阶段写（[design/staged.md](design/staged.md)）：主对话分单元，每个单元一个对话同时写，程序检查后只把问题发回原对话改，最后组装并保存；经 Antigravity 命令行 `agy`，只用自带模板。没跑完时再运行同一条命令接着跑。用掉的 token 记进版本 |
+| `--staged` | 关 | 分阶段写（[staged-design.md](staged-design.md)）：主对话分单元，每个单元一个对话同时写，程序检查后只把问题发回原对话改，最后组装并保存；经 Antigravity 命令行 `agy`，只用自带模板。没跑完时再运行同一条命令接着跑。用掉的 token 记进版本 |
 | `--model NAME`（和 `--staged`） | `gemini-3.8-flash-high` | 主对话和单元第一稿的模型 |
 | `--fix-model NAME` | `gemini-3.8-flash-medium` | 和 `--staged` 一起用：单元修改轮的模型 |
 | `--restart` | 关 | 和 `--staged` 一起用：不接着上次没跑完的，另开一次 |
@@ -375,7 +375,7 @@ video-agent collection update "连载" -o D:\Video-Work
     timeline.json
 ```
 
-取到能用的字幕时才有字幕文件。没声音也没字幕的视频得到空的字幕文件；有讲话却没有识别服务的，没有字幕文件，这次标为不完整。`summary-context.md` 有字幕文字和代表画面、幻灯片的相对路径，是 `skills/video-agent/` 里的 Agent skill 或 `summarize` 命令的材料，二者都把 `总结.md` 写在它旁边。源视频不移动、不修改。以前的抽帧和幻灯片结果保留。完整的文件清单见 [design/architecture.md](design/architecture.md)。
+取到能用的字幕时才有字幕文件。没声音也没字幕的视频得到空的字幕文件；有讲话却没有识别服务的，没有字幕文件，这次标为不完整。`summary-context.md` 有字幕文字和代表画面、幻灯片的相对路径，是 `skills/video-agent/` 里的 Agent skill 或 `summarize` 命令的材料，二者都把 `总结.md` 写在它旁边。源视频不移动、不修改。以前的抽帧和幻灯片结果保留。完整的文件清单见 [design.md](design.md)。
 
 ## 退出状态
 

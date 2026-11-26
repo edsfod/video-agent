@@ -5,7 +5,7 @@
 # separate programs. Run it in an MSYS2 UCRT64 shell with the packages listed in .github/actions/ffmpeg/action.yml; it
 # writes build/ffmpeg/, keeping dav1d, SVT-AV1 and FFmpeg's unpacked source in build/ffmpeg-deps and build/ffmpeg-work
 # for the next run. The LGPL requires the corresponding source, so the exact tarballs land in build/ffmpeg/source
-# and go onto every release beside the installer (see docs/design/distribution.md).
+# and go onto every release beside the installer (see docs/distribution-design.md).
 # After changing this file, publish the new prebuilt build (docs/development.md, 构建). Comments go on lines of their
 # own: fetch.sh hashes the other lines.
 set -euo pipefail

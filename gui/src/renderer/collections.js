@@ -1,4 +1,4 @@
-// Collections: the sidebar list and a collection's page (docs/design/collections.md).
+// Collections: the sidebar list and a collection's page (docs/collections-design.md).
 
 import { askSkip, renderSource } from './lists.js';
 import { $, $$, baseName, CLI_JSON_VERSION, current, element, joinPath, markdown, state } from './state.js';
@@ -8,7 +8,7 @@ import { addVideos, isVideo, renderList, select, showHome } from './video-list.j
 import { renderVideo } from './video-view.js';
 
 // A collection is an ordered set of related videos with an overview and a study guide
-// (docs/design/collections.md); everything goes through `video-agent collection`, `summarize --collection` and `pack --collection`.
+// (docs/collections-design.md); everything goes through `video-agent collection`, `summarize --collection` and `pack --collection`.
 
 /** @type {(...args: string[]) => ['collection', ...string[]]} */
 const collectionArgs = (...args) => ['collection', ...args, '-o', state.settings.workspace];

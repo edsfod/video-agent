@@ -1,7 +1,7 @@
 # 分阶段写总结
 
 > 给谁看：要改 `summarize --staged`（`src/video_agent/staged.py`、`staged_agy.py`、`staged_prompts.py`）的人和 AI。回答：分成哪几步、状态存在哪里、程序查什么改什么、画面怎么给、通道怎么用、花多少。
-> 总结的规则和模板见 [summary.md](summary.md)；它和别的写总结方式的关系见 [routes.md](routes.md)。
+> 总结的规则和模板见 [summary-design.md](summary-design.md)；它和别的写总结方式的关系见 [routes-design.md](routes-design.md)。
 
 ## 一、为什么分阶段
 
@@ -84,7 +84,7 @@ $M_1 \cdot (\Vert\, W_u) \cdot M_2 \cdot (\Vert\, F_u) \cdot M_3 \cdot T$
 - 用量取这一轮每次调用的 `usage` 相加：接着原对话时，结果里的用量是整个对话的累计。以 ERROR 结束的调用（agy 自己重来）也计入，另记次数。
 - 后端回「empty conversation id」，或 agy 在读入提示前就退出（同时启动几十个进程时出现过），隔 15 秒重试，最多 3 次。
 - 每一版的合计（调用次数、未命中、缓存命中、输出、思考）写进版本记录的 `usage`，备注里也写一份，总结页能看到。
-- 别的通道：claude、codex 命令行也有自定义 agent、限制工具、接续对话的开关，接之前先在 10 分钟片段上量外壳和质量；模型 API、网页 AI 和桌面版不接，见 [routes.md](routes.md)。
+- 别的通道：claude、codex 命令行也有自定义 agent、限制工具、接续对话的开关，接之前先在 10 分钟片段上量外壳和质量；模型 API、网页 AI 和桌面版不接，见 [routes-design.md](routes-design.md)。
 
 ## 七、代价
 

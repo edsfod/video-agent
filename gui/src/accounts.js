@@ -1,4 +1,4 @@
-// Site accounts for downloads (ordered and hideable per site; docs/design/processing.md). yt-dlp cannot read the
+// Site accounts for downloads (ordered and hideable per site; docs/processing-design.md). yt-dlp cannot read the
 // cookies of a running Edge or Chrome (locked database, app-bound encryption since Chromium 127), so each site is
 // opened once in a window of our own; its cookies live in a persistent partition of its own (encrypted with DPAPI in
 // the packaged app, see `electronFuses` in package.json) and are exported to a Netscape
