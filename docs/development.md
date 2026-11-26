@@ -2,6 +2,15 @@
 
 > 给谁看：要改代码、跑测试或发布的人和 AI。回答：测试有哪些、在哪里跑、怎么构建安装包、怎么发布、已知问题。
 
+## 常用命令
+
+```powershell
+uv run pytest              # 命令行工具的测试
+cd gui; npm ci; npm test   # 桌面程序的测试，含端到端测试（会打开窗口）
+npm run dist               # 先用 PyInstaller 打包命令行工具（需要 uv，以及 build/ffmpeg：CI 的 ffmpeg-lgpl 产物，或在 MSYS2 里运行 packaging/ffmpeg/build.sh），再打包安装程序
+npm run screenshots -- <工作区> <视频>   # 重新生成 README 的截图
+```
+
 ## 测试
 
 - 命令行：`tests/`，pytest 加 mypy。用真实的 FFmpeg 处理生成的短片；必剪对着本机的假服务器；有一项测试保证 `pyproject.toml`、插件清单、`gui/package.json`、skill 和 README 里的版本号一致。
