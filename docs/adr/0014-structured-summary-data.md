@@ -36,6 +36,6 @@
 
 - 版本的保存、覆盖、删除、设为当前和谱系，都要把 `总结.md` 和它的数据当作一对处理（`SUM-04`）；`summarize --import` 要能收数据。
 - 和现有实现还不一致的地方：
-  - 分阶段统一编号、拼成线性的 Markdown（`staged.numbered`、`staged.assemble`），用 `staged.unnamed` 换掉单元编号，正文写画面路径并用 `staged.unlink_dropped` 处理；
+  - 分阶段的数据只存在运行文件夹里（`summary.json`），版本里只有由它生成的 `总结.md`；
   - 桌面程序从 HTML 里找回结构（`summary.js` 的 `gatherPointPictures`、`showEntry`）；
   - 模板里有总结者的「拓展单元」。

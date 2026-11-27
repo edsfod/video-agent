@@ -38,7 +38,7 @@ Video Agent 把一段视频变成可以读的总结：先整理出字幕和当�
 - **视频和字幕**：`download.py` 运行 yt-dlp；`transcript.py` 读、挑、写带时间的字幕；`providers/bcut.py` 是必剪语音识别；`corrections.py` 是字幕改正（`fix`）。见 [processing-design.md](docs/processing-design.md)。
 - **画面**：`media.py` 运行 FFmpeg 和 ffprobe；`layout.py` 找屏幕区域和摄像头区域；`page_rules.py` 决定留哪些屏幕页，是纯函数，不运行 FFmpeg，用合成的图测试；`slide_extractor.py` 接 AutoSlides Extractor 和导入的课件；`compress.py` 原地重编码成 AV1。见 [processing-design.md](docs/processing-design.md)。
 - **处理**：`processor.py` 实现 `process`，建视频文件夹、`manifest.json` 和 `summary-context.md`；`evidence.py` 读处理过的文件夹和清单。
-- **写总结的方式**：`summarize.py` 加 `model_api.py`（模型 API）；`staged.py`、`staged_agy.py`、`staged_prompts.py`（分阶段，经 agy）；`packing.py`（给网页 AI 的材料）；`importer.py`（`summarize --import`：Agent、分阶段、网页 AI 和用户自己的文字都经它保存）。见 [routes-design.md](docs/routes-design.md)、[staged-design.md](docs/staged-design.md)。
+- **写总结的方式**：`summarize.py` 加 `model_api.py`（模型 API）；`staged.py`、`staged_agy.py`、`staged_prompts.py`（分阶段，经 agy），`summary_data.py`（分阶段成稿的数据：读入、检查、生成 Markdown）；`packing.py`（给网页 AI 的材料）；`importer.py`（`summarize --import`：Agent、分阶段、网页 AI 和用户自己的文字都经它保存）。见 [routes-design.md](docs/routes-design.md)、[staged-design.md](docs/staged-design.md)。
 - **总结的加工和保存**：`forest.py` 排「主线与单元」、给「要点」加链接和画面；`summary_review.py` 是导入时的检查和网页 AI 的多轮复查；`picture_review.py`、`pictures.py` 管画面调整和画面集；`versions.py` 管版本和谱系；`templates.py` 和 `prompts/` 是模板。见 [summary-design.md](docs/summary-design.md)。
 - **合集和删除**：`collection.py`、`collection_summary.py`、`removal.py`。见 [collections-design.md](docs/collections-design.md)。
 

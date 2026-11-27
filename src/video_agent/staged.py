@@ -1,8 +1,8 @@
 """`summarize --staged`: a video's summary written in stages (docs/staged-design.md). One main conversation that never
 sees pictures marks the transcript and cuts it into units (M1), weighs the writers' objections to the cut (M2) and
 writes the parts about the whole (M3); one conversation per unit writes that unit from its transcript and pictures and
-is told in later turns what the program's checks found. The program checks, merges and assembles; the model only fixes
-what it is told. State is the files in <video folder>/staged/<run>/, so a run cut short goes on where it stopped."""
+is told in later turns what the program's checks found. The program checks, merges and reads it all into the summary's
+data (summary_data.py); the model only fixes what it is told. State is the files in <video folder>/staged/<run>/, so a run cut short goes on where it stopped."""
 
 import json
 import re
@@ -14,8 +14,9 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
 
-from . import evidence, files, importer, media, staged_agy, templates
+from . import evidence, files, importer, media, staged_agy, summary_data, templates
 from . import staged_prompts as prompts
+from .summary_data import blocks, clock, seconds
 
 FOLDER = 'staged'
 STEP_S = 5  # one sample of the screen region every STEP_S seconds
@@ -65,15 +66,6 @@ class StagedError(RuntimeError):
 # ---- text ------------------------------------------------------------------------------------------------------------
 
 
-def seconds(text):
-  return sum(int(part) * 60**place for place, part in enumerate(reversed(text.split(':'))))
-
-
-def clock(second):
-  second = round(second)
-  return f'{second // 3600:02d}:{second // 60 % 60:02d}:{second % 60:02d}'
-
-
 def section(text, name):
   found = re.search(rf'^##\s*{re.escape(name)}\s*\n(.*?)(?=^##\s|\Z)', text or '', re.MULTILINE | re.DOTALL)
   return found[1].strip() if found else None
@@ -106,20 +98,6 @@ def write(path, text):
 
 def posix(path):
   return Path(path).as_posix()
-
-
-def blocks(body):
-  """{'S<n>': the proposition line and its sub-lines} of a 正文 section, in order."""
-  found, key = {}, None
-  for line in (body or '').splitlines():
-    if match := re.match(r'^- \*\*S(\d+)\*\*', line):
-      key = f'S{match[1]}'
-      found[key] = [line]
-    elif key and (line.startswith('  ') or not line.strip()):
-      found[key].append(line)
-    else:
-      key = None
-  return {k: '\n'.join(v).rstrip() for k, v in found.items()}
 
 
 def numbers(line):
@@ -169,8 +147,10 @@ def parse_units(text, length):
   for line in items(section(text, '单元')):
     if not (match := re.match(rf'`?{CLOCK}`?\s*(.*)', line)):
       continue
-    parts = [part.strip() for part in match[2].split('|')] + ['', '']
-    found.append({'start': seconds(match[1]), 'title': parts[0], 'kind': parts[1] or '论证', 'line': parts[2]})
+    parts = [part.strip() for part in match[2].split('|')] + ['', '', '']
+    found.append(
+      {'start': seconds(match[1]), 'title': parts[0], 'kind': parts[1] or '论证', 'line': parts[2], 'attach': parts[3]}
+    )
   found.sort(key=lambda u: u['start'])
   for number, unit in enumerate(found):
     unit['id'] = 'U' + clock(unit['start']).replace(':', '')
@@ -216,7 +196,7 @@ def merge(text, patch):
   text = replace_section(text, '正文', '\n'.join(merged[k] for k in sorted(merged, key=lambda k: int(k[1:]))))
   if shown:
     text = replace_section(text, '画面', '\n'.join(line for _, line in shown))
-  for name in ('事项', '预设', '需确认', '要点候选', '边界', '补截'):
+  for name in ('事项', '预设', '需确认', '归属意见', '边界', '补截'):
     if (replaced := section(patch, name)) is not None and section(text, name) is not None:
       text = replace_section(text, name, replaced)
   return text, len(new)
@@ -225,7 +205,7 @@ def merge(text, patch):
 def pointer(head):
   """A proposition line that only names what the video did there."""
   plain = re.sub(r'\[[^\]]*\]\([^)]*\)', '', head)
-  plain = re.sub(r'^-\s*\*\*S\d+\*\*\s*|`[^`]*`\s*|←.*$', '', plain).strip()
+  plain = re.sub(r'^-\s*\*\*S\d+\*\*\s*|(?:支撑|反驳|步骤|展开)\s*S\d+\s*|`[^`]*`\s*|←.*$', '', plain).strip()
   return bool(POINTER.search(plain) or LEAD.match(plain)) and len(plain) <= POINTER_LEN
 
 
@@ -265,37 +245,6 @@ def clean(text):
   return head + heading + ''.join(rest)
 
 
-def unnamed(text, units):
-  """M3's text without the units' ids (U004027), which name the units in its material, not for the reader: a list of
-  them in brackets goes, one in a sentence becomes the unit's title."""
-  titles = {u['id']: u['title'] for u in units}
-  text = re.sub(r'\s*[（(]\s*U\d{6}(?:\s*[、,，]\s*U\d{6})*\s*[)）]', '', text)
-  return re.sub(r'\bU\d{6}\b', lambda m: f'「{titles[m[0]]}」' if m[0] in titles else '', text)
-
-
-def unlink_dropped(text, paths, own):
-  """(text, how many): links in 「## 正文」 to a picture the unit itself marks 无用 go to the picture it repeats
-  (「重复 #m」), or away. `paths` is {number: path}, `own` {path: why}."""
-  fixed = 0
-
-  def unlink(match):
-    nonlocal fixed
-    if match[3] not in own:
-      return match[0]
-    fixed += 1
-    same = re.search(r'重复\s*#(\d+)', own[match[3]])
-    if same and int(same[1]) in paths and paths[int(same[1])] not in own:
-      return f'{match[1]}{match[2]}{paths[int(same[1])]}{match[4]}'
-    return ''
-
-  head, heading, tail = text.partition('## 正文')
-  if not heading:
-    return text, 0
-  rest = re.split(r'(?m)^(?=## )', tail, maxsplit=1)
-  rest[0] = re.sub(r'( ?)(\[[^\]]*\]\(<?)([^)>]+?\.(?:jpe?g|png))(>?\))', unlink, rest[0])
-  return head + heading + ''.join(rest), fixed
-
-
 def objections(texts):
   """{unit id: its writer's 「## 边界」} for the units whose writer objected to the table; `texts` is {id: draft}."""
   found = {}
@@ -323,95 +272,15 @@ def duplicates(drafts):
   return found
 
 
-def numbered(units, drafts):
-  """(详细内容, {P: (second, line)}, [(unit, {S: P})], next number): the units' propositions numbered P1, P2… through
-  the whole, with their relations. `drafts` is {unit id: draft}."""
-  parts, props, maps, number = [], {}, [], 0
-  for unit in units:
-    if unit['skip']:
-      continue
-    body = section(drafts.get(unit['id']) or '', '正文') or ''
-    mapping = {}
-    for match in re.finditer(r'^- \*\*S(\d+)\*\*', body, re.MULTILINE):
-      if match[1] not in mapping:
-        number += 1
-        mapping[match[1]] = number
-
-    def relation(match, mapping=mapping):
-      return match[1] + ' ' + re.sub(r'S(\d+)', lambda m: f'P{mapping.get(m[1], m[1])}', match[2])
-
-    text = re.sub(r'\*\*S(\d+)\*\*', lambda m, mapping=mapping: f'**P{mapping.get(m[1], m[1])}**', body)
-    text = re.sub(r'(←|反驳|步骤)\s*((?:S\d+\s*[,，、]?\s*)+)', relation, text)
-    for match in re.finditer(r'^- \*\*P(\d+)\*\*(.*)$', text, re.MULTILINE):
-      stamp = re.search(rf'`{CLOCK}`', match[2])
-      props[int(match[1])] = (seconds(stamp[1]) if stamp else unit['start'], match[0])
-    parts.append(f'### {unit["title"]} `{clock(unit["start"])}`–`{clock(unit["end"])}`\n\n{text.strip()}\n')
-    maps.append((unit, mapping))
-  return '\n'.join(parts), props, maps, number + 1
-
-
-def assemble(units, drafts, whole, head):
-  """The summary in the template's form: the units' 详细内容, and 元信息, 概要, 要点 and the rest from M3's reply
-  `whole`. 要点 are written by the program from the propositions M3 names; `head` is the title and the 视频 line."""
-  body, props, _, next_number = numbered(units, drafts)
-  whole = unnamed(whole, units)
-  joined = '；'.join(item.rstrip('。') for item in items(section(whole, '接上')))
-  main = (items(section(whole, '主结论')) or [''])[0]
-  summarizer = ''
-  if main and '总结者归纳' in main:
-    premises = ', '.join(f'P{n}' for n in re.findall(r'P(\d+)', main))
-    claim = re.sub(r'`?总结者归纳`?|[（(]?\s*←\s*(P\d+\s*[,，、]?\s*)+[）)]?|[，,。；;]+$', '', main).strip(' ，,：:')
-    summarizer = f'\n### 总结者归纳\n\n- **P{next_number}** `总结者归纳` ← {premises} {claim}\n'
-    summarizer += f'  - 接上：{joined}\n' if joined else ''
-  elif main and (found := re.search(r'P(\d+)', main)) and joined:
-    lines = body.split('\n')
-    start = next((i for i, line in enumerate(lines) if line.startswith(f'- **P{found[1]}**')), None)
-    if start is not None:
-      end = start + 1
-      while end < len(lines) and lines[end].startswith('  '):
-        end += 1
-      lines.insert(end, f'  - 接上：{joined}')
-      body = '\n'.join(lines)
-  steps = {}
-  for n, (_, line) in props.items():
-    for match in re.finditer(r'步骤\s*P(\d+)', line):
-      steps.setdefault(int(match[1]), []).append(n)
-  tags = r'`(?:\d{1,2}:\d{2}:\d{2}|引用|观点|推断|事实|总结者归纳)`'  # only times and tags; other code spans stay
-  relation = r'(?:←\s*(?:P\d+\s*[,，、]?\s*)+|反驳\s*P\d+\s*|步骤\s*P\d+\s*)'
-  points = []
-  for item in items(section(whole, '要点')):
-    named = [int(n) for n in re.findall(r'P(\d+)', item) if int(n) in props]
-    if not named:
-      continue
-    near = set(named)  # the time span of a point covers its premises and steps
-    for n in named:
-      if arrow := re.search(r'←\s*((?:P\d+\s*[,，、]?\s*)+)', props[n][1]):
-        near |= {int(p) for p in re.findall(r'P(\d+)', arrow[1]) if int(p) in props}
-      near |= set(steps.get(n, []))
-    times = sorted(props[n][0] for n in near)
-    text = re.sub(r'^- \*\*P\d+\*\*\s*', '', props[named[0]][1])
-    text = re.sub(tags + rf'|`{relation}`|{relation}[。；;]?|\[[^\]]*\]\([^)]*\)', '', text)
-    text = re.sub(r'\s{2,}', ' ', text).strip(' ：:')
-    span = f'`{clock(times[0])}`' + (f'–`{clock(times[-1])}`' if times[-1] > times[0] else '')
-    points.append(f'- {span} {text}（' + '、'.join(f'**P{n}**' for n in dict.fromkeys(named)) + '）')
-  marker = '<!-- video-agent: 这一节由程序根据详细内容生成，你只写拓展单元 -->'
-  return (
-    f'{head}\n\n## 元信息\n\n{section(whole, "元信息") or ""}\n\n### 需留意\n\n{section(whole, "需留意") or ""}\n\n'
-    f'## 概要\n\n{section(whole, "概要") or ""}\n\n## 要点\n\n'
-    + '\n'.join(points)
-    + f'\n\n## 主线与单元\n\n{marker}\n\n'
-    f'## 详细内容\n\n{body.strip()}\n{summarizer}\n## 需确认\n\n{section(whole, "需确认") or "无"}\n'
-  )
-
-
 def rules(template_text):
-  """(rules for a unit, rules for the whole): the template's sections each step needs."""
+  """The template's rules a unit's writer needs: who reads, the items, sources, labels, additions, how to write a
+  proposition, pictures. The relations and the sections of the whole are told in the unit's task, in the units' own
+  form (ADR-0014)."""
   chunks = re.split(r'^(?=## )', template_text, flags=re.MULTILINE)
   named = {chunk[3]: chunk for chunk in chunks if re.match(r'## [一二三四五六七]、', chunk)}
-  note = '这是总结规则的一部分，只留下这一步用得到的节；各节怎么拼成整篇由程序做。\n\n'
-  return note + ''.join(named.get(key, '') for key in '一二四五七'), note + ''.join(
-    named.get(key, '') for key in '一二三'
-  )
+  two = re.sub(r'^### 关系\n.*?(?=^### )', '', named.get('二', ''), flags=re.MULTILINE | re.DOTALL)
+  note = '这是总结规则的一部分，只留下这一步用得到的节。\n\n'
+  return note + named.get('一', '') + two + named.get('四', '') + named.get('五', '')
 
 
 def usage_text(used):
@@ -451,7 +320,7 @@ class Run:
     self.record.setdefault('model', model or channel.MODEL)
     self.record.setdefault('fix_model', fix_model or channel.FIX_MODEL)
     self.save()
-    self.unit_rules, self.whole_rules = rules(templates.built_in(templates.STANDARD))
+    self.unit_rules = rules(templates.built_in(templates.STANDARD))
 
   def say(self, text):
     line = f'[{time.strftime("%H:%M:%S")}] {text}'
@@ -651,7 +520,7 @@ class Run:
       text = found['response']
       pick = lambda names: '\n\n'.join(f'## {n}\n{section(text, n) or "无"}' for n in names) + '\n'
       write(self.dir / 'regular.md', pick(('改正', '锚点', '无内容')))
-      write(self.dir / 'units.md', pick(('单元', '事项', '元信息', '主结论', '连接处')))
+      write(self.dir / 'units.md', pick(('单元', '主线', '推进', '事项', '元信息', '连接处')))
 
   def m1_fix(self, problems):
     prompt = prompts.M1FIX.format(problems='\n'.join(f'- {p}' for p in problems))
@@ -707,21 +576,87 @@ class Run:
     return new
 
   def m3(self, units):
-    drafts = self.drafts(units)
-    body, _, maps, _ = numbered(units, drafts)
-    write(self.dir / 'body.md', body)
-    ledger = [re.sub(r'\[[^\]]*\]\([^)]*\)', '', line) for line in body.splitlines() if line.startswith('- **P')]
-    reports = []
-    for unit, mapping in maps:
-      text = drafts[unit['id']]
-      found = '\n'.join(f'### {name}\n{section(text, name) or "无"}' for name in ('事项', '预设', '需确认', '要点候选'))
-      reports.append(
-        f'## {unit["title"]}（`{clock(unit["start"])}`–`{clock(unit["end"])}`）\n'
-        + re.sub(r'\bS(\d+)\b', lambda m, mapping=mapping: f'P{mapping.get(m[1], m[1])}', found)
+    """The parts about the whole: the mainlines, each unit's attachment, the edges between units, and the front. What
+    does not hold together goes back to the main conversation once (summary_data.whole_problems)."""
+    writing = [u for u in units if not u['skip']]
+    drafts, parts = self.drafts(writing), []
+    for unit in writing:
+      data, _ = self.unit_data(unit, drafts[unit['id']])
+      found = '\n'.join(
+        f'{name}：{section(drafts[unit["id"]], name) or "无"}' for name in ('事项', '预设', '需确认', '归属意见')
       )
-    prompt = prompts.M3.format(ledger='\n'.join(ledger), reports='\n'.join(reports))
-    if found := self.turn('M3', prompt, self.main_conversation()):
-      write(self.dir / 'global.md', found['response'])
+      parts.append(
+        f'### {unit["id"]} {unit["title"]}（`{clock(unit["start"])}`–`{clock(unit["end"])}`，{unit["kind"]}；'
+        f'第一轮的归属：{unit["attach"] or "无"}）\n'
+        + '\n'.join(summary_data.item_line(item, depth) for depth, item in summary_data.tree(data))
+        + '\n\n'
+        + found
+      )
+    table = read(self.dir / 'units.md')
+    drafted = '\n\n'.join(f'## {name}\n{section(table, name) or "无"}' for name in ('主线', '推进', '连接处'))
+    if 'M3' not in self.record['turns']:
+      prompt = prompts.M3.format(units='\n\n'.join(parts), drafts=drafted)
+      if found := self.turn('M3', prompt, self.main_conversation()):
+        write(self.dir / 'global.md', found['response'])
+    whole = read(self.dir / 'global.md')
+    if whole is None or 'M3-fix' in self.record['turns']:
+      return
+    problems = self.whole_problems(writing, whole)
+    if problems and (
+      found := self.turn(
+        'M3-fix', prompts.M3FIX.format(problems='\n'.join(f'- {p}' for p in problems)), self.main_conversation()
+      )
+    ):
+      for name in ('主线', '归属', '推进'):
+        if (again := section(found['response'], name)) is not None:
+          whole = (
+            replace_section(whole, name, again)
+            if section(whole, name) is not None
+            else f'{whole.rstrip()}\n\n## {name}\n{again}\n'
+          )
+      write(self.dir / 'global.md', whole)
+
+  def whole_problems(self, writing, whole):
+    problems, _ = summary_data.whole_problems(
+      [u['id'] for u in writing],
+      section(whole, '归属'),
+      summary_data.read_lines(section(whole, '主线')),
+      summary_data.read_edges(section(whole, '推进')),
+    )
+    return problems
+
+  def unit_data(self, unit, draft):
+    return summary_data.unit_data(unit, draft or '', self.paths(self.dir / 'units' / unit['id']), section)
+
+  def data(self, units):
+    """The summary as data, from the units' drafts and the main conversation's last turn."""
+    writing = [u for u in units if not u['skip']]
+    drafts, whole = self.drafts(writing), read(self.dir / 'global.md')
+    lines = summary_data.read_lines(section(whole, '主线'))
+    edges = summary_data.read_edges(section(whole, '推进'))
+    problems, attach = summary_data.whole_problems([u['id'] for u in writing], section(whole, '归属'), lines, edges)
+    found = []
+    for unit in writing:
+      data, _ = self.unit_data(unit, drafts[unit['id']])
+      data['attach'] = attach.get(unit['id'])
+      found.append(data)
+    with LOCK:
+      self.record['whole_problems'] = problems
+    self.save()
+    if problems:
+      self.say(f'主线和归属剩下 {len(problems)} 处：' + '；'.join(problems)[:400])
+    return {
+      'format': summary_data.FORMAT,
+      'title': evidence.video_name(self.video),
+      'video': evidence.video_line(self.video, self.length),
+      'meta': summary_data.bullets(section(whole, '元信息')),
+      'notices': summary_data.bullets(section(whole, '需留意')),
+      'abstract': section(whole, '概要') or '',
+      'unsure': summary_data.bullets(section(whole, '需确认')),
+      'units': found,
+      'lines': lines,
+      'edges': edges,
+    }
 
   # ---- a unit --------------------------------------------------------------------------------------------------------
 
@@ -733,7 +668,7 @@ class Run:
     for line in read(folder / 'frames.md').splitlines():
       if match := re.match(r'- #(\d+) (`[^`]+`) (\S+) (\S+)', line):
         single = folder / 'labelled' / f'{int(match[1]):03d}.jpg'
-        listing.append(f'- #{match[1]} {match[2]} {match[3]} 链接写：{match[4]} 单张图：{posix(single)}')
+        listing.append(f'- #{match[1]} {match[2]} {match[3]} 单张图：{posix(single)}')
     return prompts.W.format(
       title=unit['title'],
       start=clock(unit['start']),
@@ -743,7 +678,8 @@ class Run:
       gap=GAP_S,
       sheets='、'.join((read(folder / 'sheets.txt') or '').split()) or '（没有）',
       rules=self.unit_rules,
-      units=section(read(self.dir / 'units.md'), '单元'),
+      units='## 单元\n' + (section(read(self.dir / 'units.md'), '单元') or ''),
+      lines='## 主线\n' + (section(read(self.dir / 'units.md'), '主线') or '无'),
       frames='\n'.join(listing) or '（这个单元没有画面）',
       excerpt=read(folder / 'excerpt.md'),
     )
@@ -797,12 +733,13 @@ class Run:
     return problems
 
   def body_problems(self, unit, folder, new=()):
-    """Errors in the draft the writer fixes: no propositions, times outside the unit, picture numbers with no line in
-    「## 画面」 (but `new` ones, just captured, the writer has not seen yet), links to missing files."""
+    """Errors in the draft the writer fixes: no items, items off the unit's tree, times outside the unit, picture
+    numbers with no line in 「## 画面」 (but `new` ones, just captured, the writer has not seen yet), pictures hung on
+    items that are not there, links in 正文."""
     text = read(folder / 'body.md')
-    if not text or not section(text, '正文') or '**S1**' not in text:
-      return ['没有「## 正文」或没有 **S1**']
-    problems = []
+    if not text or not blocks(section(text, '正文')):
+      return ['没有「## 正文」或没有条目']
+    _, problems = self.unit_data(unit, text)
     for match in re.finditer(rf'^- \*\*S(\d+)\*\*[^\n]*?`{CLOCK}`', section(text, '正文'), re.MULTILINE):
       if not unit['start'] - MARGIN_S <= seconds(match[2]) <= unit['end'] + MARGIN_S:
         problems.append(f'S{match[1]} 的时间 {match[2]} 不在本单元 {clock(unit["start"])}–{clock(unit["end"])} 里')
@@ -812,9 +749,6 @@ class Run:
       covered |= set(range(int(match[1]), int(match[2] or match[1]) + 1))
     if missing := sorted(set(range(1, count + 1)) - covered - set(new)):
       problems.append('「## 画面」缺这些编号：' + '、'.join(f'#{n}' for n in missing))
-    for link in re.findall(r'\]\(<?([^)>]+?\.(?:jpe?g|png))>?\)', text):
-      if not (self.asset / link).is_file():
-        problems.append(f'链接的图不存在：{link}')
     return problems
 
   def own_dropped(self, folder):
@@ -828,31 +762,8 @@ class Run:
     return found
 
   def tidy(self, unit, folder):
-    """What the program puts right itself: a link whose file is missing but whose file name is in the unit's list, a
-    link to a picture the unit marks 无用; and the pictures marked 无用 noted for later lists."""
-    listed = {}
-    for number, path in self.paths(folder).items():
-      listed[Path(path).name] = path
-      listed[f'{number:03d}.jpg'] = path
-    text = read(folder / 'body.md') or ''
-
-    def repair(match):
-      link = match[2]
-      if (self.asset / link).is_file():
-        return match[0]
-      path = Path(link)
-      if path.is_absolute() and path.is_file() and self.asset in path.parents and 'labelled' not in path.parts:
-        right = posix(path.relative_to(self.asset))
-      else:
-        right = listed.get(path.name)
-      return f'{match[1]}{right}{match[3]}' if right else match[0]
-
-    fixed = re.sub(r'(\]\(<?)([^)>]+?\.(?:jpe?g|png))(>?\))', repair, text)
-    own = self.own_dropped(folder)
-    fixed, _ = unlink_dropped(fixed, self.paths(folder), own)
-    if fixed != text:
-      write(folder / 'body.md', fixed)
-    if own:
+    """Notes the pictures the unit marks 无用, so later lists leave them out."""
+    if own := self.own_dropped(folder):
       with LOCK:
         write(self.dir / 'dropped.json', json.dumps(self.dropped() | own, ensure_ascii=False, indent=1) + '\n')
 
@@ -888,9 +799,7 @@ class Run:
       self.label_picture(raw, target, f'#{number} {clock(second)}')
       labelled.append(target)
       lines.append(f'- #{number} `{clock(second)}` 补截 {posix(raw.relative_to(self.asset))}')
-      told.append(
-        f'- #{number} `{clock(second)}` 补截 链接写：{posix(raw.relative_to(self.asset))} 单张图：{posix(target)}（要看：{what}）'
-      )
+      told.append(f'- #{number} `{clock(second)}` 补截 单张图：{posix(target)}（要看：{what}）')
     write(folder / 'frames.md', '\n'.join(lines) + '\n')
     count = len(list((folder / 'sheets').glob('extra-*')))
     sheets = media.sheets(labelled, 2, folder / 'sheets' / f'extra-{count + 1}')
@@ -1099,12 +1008,12 @@ class Run:
       raise StagedError(f'{len(missing)} 个单元没有写成（{"、".join(missing)}）；再运行同一条命令接着写')
     for unit in writing:
       self.mark(unit)
-    if not (self.dir / 'global.md').is_file():
-      self.m3(units)
+    self.m3(units)
     if not (self.dir / 'global.md').is_file():
       raise StagedError('主对话最后一轮没有交出全局部分；再运行同一条命令接着写')
-    head = f'# {evidence.video_name(self.video)}\n\n{evidence.video_line(self.video, self.length)}'
-    text = assemble(units, self.drafts(units), read(self.dir / 'global.md'), head)
+    data = self.data(units)
+    write(self.dir / 'summary.json', json.dumps(data, ensure_ascii=False, indent=1) + '\n')
+    text = summary_data.markdown(data)
     write(self.dir / 'summary.md', text)
     total = self.total()
     model = self.record['model'] + (
@@ -1119,6 +1028,7 @@ class Run:
       note=f'{model}；{usage_text(total)}',
       template=templates.STANDARD,
       usage=total,
+      structured=True,
       status=self.say,
     )
     write(self.dir / 'imported', datetime.now().isoformat(timespec='seconds') + '\n')
