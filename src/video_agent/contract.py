@@ -238,6 +238,7 @@ class Version(TypedDict):
     'fresh', 'revised', 'unknown'
   ]  # written afresh, from another version, or not recorded (before 2026-11-16)
   usage: Usage | None
+  data: str | None  # the summary's data the text was written from (summary_data.py), None when it has none
 
 
 class Versions(TypedDict):

@@ -343,6 +343,7 @@ def test_a_whole_run_writes_each_unit_in_its_own_conversation_and_saves_the_toke
   assert '- U000000 没有归属' in channel.prompts[4][0]
   current = versions.listing(target)['current']
   assert current['source'] == 'fake 分阶段'
+  assert current['data'] and versions.data_of(target)['units'][0]['id'] == 'U000000'  # the data is kept with it
   assert current['usage'] == {'calls': 5, 'input': 50, 'cache_read': 25, 'output': 15, 'thinking': 10}
   assert (run.dir / 'imported').is_file()
   # a run that is done is not gone on with: the next one starts afresh

@@ -99,19 +99,19 @@ def import_summary(
   agent=False,
   template=None,
   usage=None,
-  structured=False,
+  data=None,
   status=lambda message: None,
 ):
   """Saves a summary written elsewhere, such as by a chat AI from `pack`, as 总结.md: a ```markdown fence is removed,
-    rewritten links point at the video's files again, frames asked for with CAPTURE links are taken, the 视频 line is the
-    one this program writes, a 字幕改正 section goes into the cleaned transcript and a 画面调整 section into
-    picture-review.json, with the candidates it asks for taken. With a summary there already, the
-    new one is kept as a version unless `overwrite` makes it current (versions.py). With `rounds` (a chat AI's answer,
-    written to `template`), a 复查 section is taken off and the summary checked for the next round. With `agent` (an
-    Agent's draft), the summary is checked too and what is found said, for the Agent to fix and import again, which
-    writes over its own text. `usage` (tokens and calls) goes into the version record. A `structured` text is written by
-  the program from the summary's data (summary_data.py) and has no 详细内容 to lay out. Returns (path written,
-    corrections applied)."""
+  rewritten links point at the video's files again, frames asked for with CAPTURE links are taken, the 视频 line is the
+  one this program writes, a 字幕改正 section goes into the cleaned transcript and a 画面调整 section into
+  picture-review.json, with the candidates it asks for taken. With a summary there already, the
+  new one is kept as a version unless `overwrite` makes it current (versions.py). With `rounds` (a chat AI's answer,
+  written to `template`), a 复查 section is taken off and the summary checked for the next round. With `agent` (an
+  Agent's draft), the summary is checked too and what is found said, for the Agent to fix and import again, which
+  writes over its own text. `usage` (tokens and calls) goes into the version record. A text with `data` was written
+  by the program from the summary's data (summary_data.py): it has no 详细内容 to lay out, and the data is kept with
+  it. Returns (path written, corrections applied)."""
   video, info, asset, manifest = processed(video, workspace)
   text, pairs = take_corrections(clean(text))
   adjusted = bool(picture_review.SECTION.search(text))
@@ -129,7 +129,7 @@ def import_summary(
   text = re.sub(r'^视频：.*?时长：[0-9:]+', lambda _: line, text, count=1, flags=re.MULTILINE)
   with files.video_lock(asset, 'import the summary'):
     text = _capture_frames(text, video, asset, length, status)
-    if not structured:
+    if data is None:
       text, _ = forest.place(text, templates.text(template))  # the logic view and 要点 links, from 详细内容 (forest.py)
     # A chat AI's round grows a set of pictures from the current one: without those it does not need, with every
     # picture its draft links (pictures.py).
@@ -144,6 +144,7 @@ def import_summary(
         status(f'画面：去掉 {len(had - now)} 张，加上 {len(now - had)} 张，这个视频以后的总结用剩下的 {len(now)} 张')
         processor.write_context(asset)
     written = {'source': source or '导入', 'note': note, 'make_current': overwrite, 'pictures': node, 'usage': usage}
+    written['data'] = data
     # A later round of the same run (an answer with a 复查, after an import that asked for another round) writes over
     # the round before, wherever that text is (current or a version), as long as it is still as the rounds wrote it
     # and to the same template. Anything else is a new text beside the others: a first draft, an answer after a run

@@ -210,6 +210,7 @@ export interface Version {
   based_on: string | null;
   origin: 'fresh' | 'revised' | 'unknown';
   usage: Usage | null;
+  data: string | null;
 }
 
 /** `versions --json`: the current text and the others, newest first. */

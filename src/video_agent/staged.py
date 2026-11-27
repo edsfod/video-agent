@@ -1028,7 +1028,7 @@ class Run:
       note=f'{model}；{usage_text(total)}',
       template=templates.STANDARD,
       usage=total,
-      structured=True,
+      data=data,
       status=self.say,
     )
     write(self.dir / 'imported', datetime.now().isoformat(timespec='seconds') + '\n')

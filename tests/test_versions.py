@@ -73,3 +73,23 @@ def test_each_text_records_whether_it_was_written_afresh_or_from_another_and_kee
   assert (current['id'], current['based_on']) == (mine, old)
   # The lines the template gives every text do not count.
   assert versions.closest(target, body, ignore=body.splitlines()) is None
+
+
+def test_a_summarys_data_goes_with_its_text_and_lapses_when_the_text_is_changed(tmp_path):
+  target = tmp_path / '总结.md'
+  versions.save(target, '第一稿\n', data={'units': [1]})
+  assert versions.data_of(target)['units'] == [1]
+  second, current = versions.save(target, '第二稿\n')  # a version beside the current one, with no data
+  assert not current and versions.data_of(second) is None
+  versions.save(target, '第三稿\n', make_current=True, data={'units': [3]})
+  assert versions.data_of(target)['units'] == [3]
+  first = next(v for v in versions.listing(target)['versions'] if v['file'] != second.name)
+  assert first['data'] and versions.data_of(tmp_path / first['file'])['units'] == [1]  # the old current kept its data
+  versions.use(target, first['file'])
+  assert versions.data_of(target)['units'] == [1]
+  kept = next(v for v in versions.listing(target)['versions'] if versions.data_of(tmp_path / v['file']))
+  assert versions.data_of(tmp_path / kept['file'])['units'] == [3]
+  versions.delete(target, kept['file'])
+  assert not versions.data_path(tmp_path / kept['file']).exists()
+  target.write_text('改过的\n', encoding='utf-8')  # changed by hand: the data no longer counts
+  assert versions.data_of(target) is None and versions.listing(target)['current']['data'] is None

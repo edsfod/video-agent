@@ -9,8 +9,13 @@ Each text also records where it came from: written afresh (`based_on` null), or 
 (`based_on` that version's id), which an import finds by the share of lines the two have word for word (`closest`). The
 ids stay with a text when it is renamed (made current, or current no longer), so the versions form a forest. Older
 records without `based_on` show neither.
+
+A text the program wrote from a summary's data (summary_data.py, ADR-0014) has the data beside it under the same name
+with `.json` (`总结.json`, `总结 (….).json`), and the data goes wherever the text goes. The data records a digest of
+the text it gave; a text changed since (by hand, or an Agent writing the file itself) no longer has data.
 """
 
+import hashlib
 import json
 import shutil
 from datetime import datetime
@@ -32,6 +37,39 @@ LINE = 20  # shorter lines (headings, labels) are left out of the comparison
 
 def _index_path(target):
   return target.with_name(f'{target.stem}.versions.json')
+
+
+def data_path(path):
+  """Where the data of the text at `path` is kept."""
+  return Path(path).with_suffix('.json')
+
+
+def digest(text):
+  return hashlib.sha256(text.encode('utf-8')).hexdigest()
+
+
+def _write(path, text, data):
+  """Writes a text and its data, or takes away data left from a text written there before."""
+  files.write_text(path, text)
+  if data is None:
+    data_path(path).unlink(missing_ok=True)
+  else:
+    files.write_text(data_path(path), json.dumps(data | {'digest': digest(text)}, ensure_ascii=False, indent=1) + '\n')
+
+
+def _carry(source, target, *, move=False):
+  """The data of the text at `source` to go with it to `target`."""
+  data_path(target).unlink(missing_ok=True)
+  if data_path(source).is_file():
+    (shutil.move if move else shutil.copy2)(data_path(source), data_path(target))
+
+
+def data_of(path):
+  """The data of the text at `path`, None when it has none or the text was changed since it was written."""
+  if not data_path(path).is_file() or not Path(path).is_file():
+    return None
+  data = json.loads(data_path(path).read_text(encoding='utf-8'))
+  return data if data.get('digest') == digest(Path(path).read_text(encoding='utf-8')) else None
 
 
 def _load(target):
@@ -90,57 +128,69 @@ def _keep_current(target, data):
   meta = data['current'] or _meta('', '')
   kept = _version_name(target, meta['created'])
   shutil.copy2(target, kept)
+  _carry(target, kept)
   data['versions'].append({'file': kept.name, **meta})
   return kept
 
 
 def save(
-  target, text, *, source='', note='', make_current=False, pictures=None, based_on=UNKNOWN, usage=None, _same=None
+  target,
+  text,
+  *,
+  source='',
+  note='',
+  make_current=False,
+  pictures=None,
+  based_on=UNKNOWN,
+  usage=None,
+  data=None,
+  _same=None,
 ):
   """Writes a new text. The first one, or one asked to be current, becomes the current text (the one it replaces is
   kept as a version); otherwise it is kept as a version beside the current one. `pictures` names the set of pictures
   it was written with, `based_on` the id of the version it was written from (None: written afresh), `usage` the tokens
-  and calls that wrote it. Returns (path written, is current)."""
+  and calls that wrote it, `data` the summary's data it was written from. Returns (path written, is current)."""
   target = Path(target)
-  data = _load(target)
+  index = _load(target)
   meta = _meta(source, note, pictures, based_on, usage)
-  _give_id(data, meta)
+  _give_id(index, meta)
   meta |= _same or {}
   if target.is_file() and not make_current:
     path = _version_name(target, meta['created'])
-    files.write_text(path, text)
-    data['versions'].append({'file': path.name, **meta})
-    _save(target, data)
+    _write(path, text, data)
+    index['versions'].append({'file': path.name, **meta})
+    _save(target, index)
     return path, False
   if target.is_file():
-    _keep_current(target, data)
-  files.write_text(target, text)
-  data['current'] = meta
-  _save(target, data)
+    _keep_current(target, index)
+  _write(target, text, data)
+  index['current'] = meta
+  _save(target, index)
   return target, True
 
 
 def overwrite(
-  target, name, text, *, source='', note='', make_current=False, pictures=None, based_on=UNKNOWN, usage=None
+  target, name, text, *, source='', note='', make_current=False, pictures=None, based_on=UNKNOWN, usage=None, data=None
 ):
   """Writes a new text over an earlier one, the current text (`name` the target's own name) or a version, keeping
   neither: a chat AI's later round over the round before, whether or not it became current. A version written over
   takes the new time in its name; with `make_current` it becomes the current text. It stays the same text in the
   record: its id, and where it came from unless a source is found now. Returns (path written, is current)."""
   target = Path(target)
-  data = _load(target)
-  old = data['current'] if name == target.name else _find(target, data, name)
+  index = _load(target)
+  old = index['current'] if name == target.name else _find(target, index, name)
   same = {'id': _id(old)}
   if based_on in (None, UNKNOWN) and 'based_on' in old:
     same['based_on'] = old['based_on']
   if name == target.name:
-    files.write_text(target, text)
-    data['current'] = _meta(source, note, pictures, based_on, usage) | same
-    _save(target, data)
+    _write(target, text, data)
+    index['current'] = _meta(source, note, pictures, based_on, usage) | same
+    _save(target, index)
     return target, True
-  data['versions'].remove(old)
+  index['versions'].remove(old)
   target.with_name(name).unlink(missing_ok=True)
-  _save(target, data)
+  data_path(target.with_name(name)).unlink(missing_ok=True)
+  _save(target, index)
   return save(
     target,
     text,
@@ -150,6 +200,7 @@ def overwrite(
     pictures=pictures,
     based_on=based_on,
     usage=usage,
+    data=data,
     _same=same,
   )
 
@@ -198,6 +249,7 @@ def keep(target, *, source=''):
   meta = data['current'] or _meta('', '')
   kept = _version_name(target, meta['created'])
   shutil.copy2(target, kept)
+  _carry(target, kept)
   data['versions'].append({'file': kept.name, **meta, 'kept_for': source})
   _save(target, data)
   return kept
@@ -230,6 +282,7 @@ def _settle(target, data):
     if any(other.is_file() and other.read_bytes() == text for other in others):
       data['versions'].remove(version)
       path.unlink()
+      data_path(path).unlink(missing_ok=True)
     elif target.is_file() and data['current'] == {key: value for key, value in version.items() if key != 'file'}:
       stamp = datetime.fromtimestamp(target.stat().st_mtime).isoformat(timespec='seconds')
       data['current'] = {'created': stamp, 'source': source, 'note': ''}
@@ -252,6 +305,7 @@ def use(target, name):
   text = target.with_name(name).read_text(encoding='utf-8')
   kept = _keep_current(target, data) if target.is_file() else None
   files.write_text(target, text)
+  _carry(target.with_name(name), target, move=True)
   target.with_name(name).unlink()
   data['versions'].remove(chosen)
   data['current'] = {key: value for key, value in chosen.items() if key != 'file'}
@@ -265,6 +319,7 @@ def delete(target, name):
   data = _load(target)
   chosen = _find(target, data, name)
   target.with_name(name).unlink(missing_ok=True)
+  data_path(target.with_name(name)).unlink(missing_ok=True)
   data['versions'].remove(chosen)
   _save(target, data)
 
@@ -300,6 +355,7 @@ def listing(target) -> contract.Versions:
       'based_on': meta.get('based_on'),
       'origin': 'revised' if meta.get('based_on') else 'fresh' if 'based_on' in meta else 'unknown',
       'usage': meta.get('usage'),
+      'data': str(data_path(path)) if data_of(path) is not None else None,
     }
 
   current = entry(target.name, data['current']) if target.is_file() and data['current'] else None
