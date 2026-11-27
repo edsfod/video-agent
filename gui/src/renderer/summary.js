@@ -250,8 +250,17 @@ function gatherPointPictures(article) {
   }
 }
 
-// A number in 主线与单元 links to its entry in 详细内容 (forest.py): the bold number there, after that heading.
+// A unit in the mainline outline links to the unit in the time outline (summary_data.py), which opens; a number in
+// 主线与单元 links to its entry in 详细内容 (forest.py): the bold number there, after that heading.
 function showEntry(article, number) {
+  const unit = /^U\d{6}$/.test(number) ? article.querySelector(`details#${number}`) : null;
+  if (unit instanceof HTMLDetailsElement) {
+    unit.open = true;
+    unit.scrollIntoView({ block: 'start' });
+    unit.classList.add('entry-shown');
+    setTimeout(() => unit.classList.remove('entry-shown'), 1500);
+    return;
+  }
   const heading = [...article.querySelectorAll('h2')].find((item) => item.textContent.trim() === '详细内容');
   if (!heading) return;
   const entry = [...article.querySelectorAll('strong')].find(

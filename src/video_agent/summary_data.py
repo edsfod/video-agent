@@ -2,6 +2,7 @@
 The model's text is read into it once; what does not hold together is sent back to whoever wrote it; the Markdown that
 readers of text get (a collection's overview, the version history, an export) is written from it."""
 
+import html
 import re
 
 CLOCK = r'(\d{1,2}:\d{2}:\d{2})'
@@ -274,11 +275,16 @@ def whole_problems(units, attach_text, lines, edges):
 
 
 def markdown(data):
-  """The summary as Markdown: the front, the mainlines, then every unit in time order with all its items."""
+  """The summary as Markdown (ADR-0013): the front, then two outlines over the same units. The time outline lists every
+  unit in time order by its head, folded, and opens to the whole unit; the mainline outline lists each mainline's units
+  by what they give it, each linking to its unit in the time outline. Opened all, either outline gives every unit."""
   units = {u['id']: u for u in data['units']}
 
   def name(uid):
     return f'「{units[uid]["title"]}」' if uid in units else uid
+
+  def link(uid):
+    return f'[「{units[uid]["title"]}」](#{uid})' if uid in units else uid
 
   def refs(text):  # the spaces a model puts around an id in Chinese go with it
     return re.sub(
@@ -293,10 +299,23 @@ def markdown(data):
   out = [f'# {data["title"]}', '', data['video'], '', '## 元信息', '', *listed(data['meta'])]
   if data['notices']:
     out += ['', '### 需留意', '', *listed(data['notices'])]
-  out += ['', '## 概要', '', refs(data['abstract']), '', '## 主线', '', *mainlines(data, name, refs), '## 单元', '']
+  out += ['', '## 概要', '', refs(data['abstract']), '', '## 时间提纲', '']
   for unit in data['units']:
-    out += unit_markdown(unit, data, name, refs) + ['']
-  out += ['## 需确认', '', *listed(data['unsure'])]
+    side = ' · 旁支' if 'side' in (unit['attach'] or {}) else ''
+    shown = re.sub(r'`([^`]+)`', r'<code>\1</code>', html.escape(refs(head(unit)), quote=False))
+    summary = (
+      f'<details id="{unit["id"]}"><summary><strong>{html.escape(unit["title"])}</strong> '
+      f'<code>{clock(unit["start"])}–{clock(unit["end"])}</code>{side}：{shown}</summary>'
+    )
+    out += [
+      summary,
+      '',
+      *unit_markdown(unit, data, name, refs),
+      '',
+      '</details>',
+      '',
+    ]
+  out += ['## 主线提纲', '', *mainlines(data, link, refs), '## 需确认', '', *listed(data['unsure'])]
   return '\n'.join(out).rstrip() + '\n'
 
 
@@ -358,8 +377,8 @@ def item_line(item, depth, refs=lambda text: text):
 
 
 def unit_markdown(unit, data, name, refs):
-  out = [f'### {unit["title"]} `{clock(unit["start"])}`–`{clock(unit["end"])}`', '']
-  out += [f'{unit["kind"]} · {where(unit, data, name)}', '']
+  """The whole unit, as it shows opened: its kind and attachment, then its tree."""
+  out = [f'{unit["kind"]} · {where(unit, data, name)}', '']
   seen = set()  # a picture used for several items shows under the first of them
   for depth, item in tree(unit):
     pad = '  ' * depth
