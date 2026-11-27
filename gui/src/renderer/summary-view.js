@@ -233,9 +233,17 @@ export function renderOutlines(article, found, open) {
     html('p', data.video),
     element('h2', { textContent: '元信息' }),
     listed(data.meta),
-    ...(data.notices.length ? [element('h3', { textContent: '需留意' }), listed(data.notices)] : []),
+    ...(data.notices.length ? [element('h3', { textContent: '须知' }), listed(data.notices)] : []),
     element('h2', { textContent: '概要' }),
     html('p', data.abstract),
+    element('h2', { textContent: '关于这份总结' }),
+    element('p', {
+      textContent: `${[
+        ...(view.about.model ? [`模型：${view.about.model}`] : []),
+        `需确认 ${view.about.unsure} 处`,
+        `AI 未核对 ${view.about.unchecked} 处`,
+      ].join('；')}。`,
+    }),
   ];
   const bar = element('div', { className: 'outline-bar' }, [
     element('div', { className: 'outline-tabs' }, tabs),

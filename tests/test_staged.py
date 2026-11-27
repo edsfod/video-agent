@@ -282,6 +282,9 @@ def test_the_markdown_has_both_outlines_as_lists_of_links_and_every_unit_folded(
   data['units'][0]['items'][0]['pictures'] = data['units'][0]['items'][1]['pictures'] = [shown]
   text = summary_data.markdown(data)
   assert '讲者用「例子」论证了「结论」S0。' in text and '- 预设：' not in text
+  data['units'][0]['items'][2]['details'] = '- 公式 `=A1+B1`（AI 未核对）'
+  data['unsure'] = ['`00:00:10` 听不清']
+  assert '## 关于这份总结\n\n需确认 1 处；AI 未核对 1 处。\n\n## 要点提纲' in summary_data.markdown(data)
   assert (
     '## 要点提纲\n\n### 为什么 Z\n\n- `00:00:00` [「例子」](#U000000)：例子说明 Y。\n'
     '  - `00:02:00` [「题外话」](#U000200)【旁支】：顺便一提。\n- `00:01:00` [「结论」](#U000100)【主结论】：所以 Z。\n'
@@ -362,7 +365,7 @@ class Channel:
     elif prompt.startswith('最后一轮'):  # one unit left without an attachment, for the check to find
       reply = (
         f'{WHOLE}\n## 归属\n- U000004 L1\n\n## 概要\n讲者用 U000004 演示了测试图。\n\n## 元信息\n- 类型：测试\n\n'
-        '## 需留意\n- 点名、签到、小测：无\n\n## 需确认\n无\n'
+        '## 须知\n- 点名、签到、小测：无\n\n## 需确认\n无\n'
       )
     elif prompt.startswith('程序检查了「## 主线」'):
       reply = f'{WHOLE}\n## 归属\n- U000000 L1\n- U000004 L1\n'
@@ -405,6 +408,10 @@ def test_a_whole_run_writes_each_unit_in_its_own_conversation_and_saves_the_toke
     and '  - 铺垫：[「开场」](#U000000)：先说明后面的画面是合成的（总结者归纳）' in text  # setup is drawn too
   )
   assert '讲者用「图表」演示了测试图。' in text
+  assert (
+    '### 须知\n\n- 点名、签到、小测：无' in text
+    and '模型：model-high，修改轮 model-medium；需确认 0 处；AI 未核对 0 处。' in text
+  )
   data = json.loads((run.dir / 'summary.json').read_text(encoding='utf-8'))
   assert [u['attach'] for u in data['units']] == [{'line': 'L1'}, {'line': 'L1'}]
   assert run.record['whole_problems'] == []

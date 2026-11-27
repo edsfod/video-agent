@@ -287,6 +287,7 @@ def view(data):
   return {
     'points': _points(data, units, start),
     'argument': _argument(data, units, start),
+    'about': about(data),
     'units': {
       uid: {
         'points': [{'item': item['id'], 'depth': depth} for depth, item in tree(unit, 'points')],
@@ -297,6 +298,25 @@ def view(data):
       for uid, unit in units.items()
     },
   }
+
+
+UNCHECKED = '（AI 未核对）'
+
+
+def about(data):
+  """What the summary says of itself: the model that wrote it, how many places are unsure, how many pieces read off
+  pictures are not checked."""
+  texts = [part for u in data['units'] for item in u['items'] for part in (item['text'], item['details'])]
+  return {
+    'model': data.get('model', ''),
+    'unsure': len(data['unsure']),
+    'unchecked': sum(text.count(UNCHECKED) for text in texts),
+  }
+
+
+def about_line(found):
+  parts = [f'模型：{found["model"]}'] if found['model'] else []
+  return '；'.join([*parts, f'需确认 {found["unsure"]} 处', f'AI 未核对 {found["unchecked"]} 处']) + '。'
 
 
 def _points(data, units, start):
@@ -409,8 +429,20 @@ def markdown(data):
 
   out = [f'# {data["title"]}', '', data['video'], '', '## 元信息', '', *listed(data['meta'])]
   if data['notices']:
-    out += ['', '### 需留意', '', *listed(data['notices'])]
-  out += ['', '## 概要', '', refs(data['abstract']), '', '## 要点提纲', '']
+    out += ['', '### 须知', '', *listed(data['notices'])]
+  out += [
+    '',
+    '## 概要',
+    '',
+    refs(data['abstract']),
+    '',
+    '## 关于这份总结',
+    '',
+    about_line(shape['about']),
+    '',
+    '## 要点提纲',
+    '',
+  ]
   sides = {'unit': '旁支', 'between': '旁支，插在两个单元之间', 'line': '旁支，给整条主线做背景'}
   for group in shape['points']:
     out += [f'### {refs(group["topic"]) or group["line"]}', '']

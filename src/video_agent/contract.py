@@ -433,6 +433,7 @@ class SummaryData(TypedDict):
   notices: list[str]
   abstract: str
   unsure: list[str]
+  model: NotRequired[str]  # the model that wrote it (data written before 2026-11-28 lacks it)
   units: list[Unit]
   lines: list[Line]
   edges: list[Edge]
@@ -474,9 +475,18 @@ class UnitView(TypedDict):
   argument_more: list[str]  # and the argument outline (支撑, 反驳, 步骤)
 
 
+class About(TypedDict):
+  """What a summary says of itself, shown after its abstract."""
+
+  model: str
+  unsure: int  # places marked 需确认
+  unchecked: int  # pieces read off pictures and marked AI 未核对
+
+
 class View(TypedDict):
   points: list[PointGroup]
   argument: list[ArgumentRow]
+  about: About
   units: dict[str, UnitView]
 
 

@@ -385,6 +385,7 @@ export interface SummaryData {
   notices: string[];
   abstract: string;
   unsure: string[];
+  model?: string;
   units: Unit[];
   lines: Line[];
   edges: Edge[];
@@ -426,9 +427,17 @@ export interface UnitView {
   argument_more: string[];
 }
 
+/** What a summary says of itself, shown after its abstract. */
+export interface About {
+  model: string;
+  unsure: number;
+  unchecked: number;
+}
+
 export interface View {
   points: PointGroup[];
   argument: ArgumentRow[];
+  about: About;
   units: Record<string, UnitView>;
 }
 

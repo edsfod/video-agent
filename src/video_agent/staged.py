@@ -658,9 +658,11 @@ class Run:
       'title': evidence.video_name(self.video),
       'video': evidence.video_line(self.video, self.length),
       'meta': summary_data.bullets(section(whole, '元信息')),
-      'notices': summary_data.bullets(section(whole, '需留意')),
+      'notices': summary_data.bullets(section(whole, '须知') or section(whole, '需留意')),  # 需留意: runs begun before
       'abstract': section(whole, '概要') or '',
       'unsure': summary_data.bullets(section(whole, '需确认')),
+      'model': self.record['model']
+      + (f'，修改轮 {self.record["fix_model"]}' if self.record['fix_model'] != self.record['model'] else ''),
       'units': found,
       'lines': lines,
       'edges': edges,
