@@ -12,6 +12,7 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
+from importlib import resources
 from pathlib import Path
 
 from . import evidence, files, importer, media, staged_agy, summary_data, templates
@@ -276,15 +277,15 @@ def duplicates(drafts):
   return found
 
 
-def rules(template_text):
-  """The template's rules a unit's writer needs: who reads, the items, sources, labels, additions, how to write a
-  proposition, pictures. The relations and the sections of the whole are told in the unit's task, in the units' own
-  form (ADR-0014)."""
-  chunks = re.split(r'^(?=## )', template_text, flags=re.MULTILINE)
-  named = {chunk[3]: chunk for chunk in chunks if re.match(r'## [一二三四五六七]、', chunk)}
-  two = re.sub(r'^### 关系\n.*?(?=^### )', '', named.get('二', ''), flags=re.MULTILINE | re.DOTALL)
-  note = '这是总结规则的一部分，只留下这一步用得到的节。\n\n'
-  return note + named.get('一', '') + two + named.get('四', '') + named.get('五', '')
+RULES = {'M1': '三七八', 'W': '一二三四五六七', 'M3': '七八'}  # the sections of prompts/staged.md each step takes
+
+
+def rules(step, text=None):
+  """The sections of the staged rules (prompts/staged.md) that `step` needs."""
+  text = text if text is not None else resources.files('video_agent').joinpath('prompts/staged.md').read_text('utf-8')
+  chunks = re.split(r'^(?=## )', text, flags=re.MULTILINE)
+  named = {chunk[3]: chunk.rstrip() + '\n\n' for chunk in chunks if re.match(r'## [一二三四五六七八九十]、', chunk)}
+  return ''.join(named.get(key, '') for key in RULES[step]).rstrip()
 
 
 def usage_text(used):
@@ -326,7 +327,6 @@ class Run:
     self.record.setdefault('model', model or channel.MODEL)
     self.record.setdefault('fix_model', fix_model or channel.FIX_MODEL)
     self.save()
-    self.unit_rules = rules(templates.built_in(templates.STANDARD))
 
   def say(self, text):
     line = f'[{time.strftime("%H:%M:%S")}] {text}'
@@ -521,7 +521,9 @@ class Run:
 
   def m1(self):
     """Marks (regular.md) and the units with the draft of the whole (units.md), in one turn on the transcript."""
-    prompt = prompts.M1.format(start=clock(0), end=clock(self.length), transcript='\n'.join(self.raw_lines()))
+    prompt = prompts.M1.format(
+      start=clock(0), end=clock(self.length), rules=rules('M1'), transcript='\n'.join(self.raw_lines())
+    )
     if found := self.turn('M1', prompt):
       text = found['response']
       pick = lambda names: '\n\n'.join(f'## {n}\n{section(text, n) or "无"}' for n in names) + '\n'
@@ -601,7 +603,7 @@ class Run:
     table = read(self.dir / 'units.md')
     drafted = '\n\n'.join(f'## {name}\n{section(table, name) or "无"}' for name in ('主线', '推进', '连接处'))
     if 'M3' not in self.record['turns']:
-      prompt = prompts.M3.format(units='\n\n'.join(parts), drafts=drafted)
+      prompt = prompts.M3.format(units='\n\n'.join(parts), drafts=drafted, rules=rules('M3'))
       if found := self.turn('M3', prompt, self.main_conversation()):
         write(self.dir / 'global.md', found['response'])
     whole = read(self.dir / 'global.md')
@@ -683,7 +685,7 @@ class Run:
       line=unit['line'],
       gap=GAP_S,
       sheets='、'.join((read(folder / 'sheets.txt') or '').split()) or '（没有）',
-      rules=self.unit_rules,
+      rules=rules('W'),
       units='## 单元\n' + (section(read(self.dir / 'units.md'), '单元') or ''),
       lines='## 主线\n' + (section(read(self.dir / 'units.md'), '主线') or '无'),
       frames='\n'.join(listing) or '（这个单元没有画面）',

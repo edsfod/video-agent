@@ -31,7 +31,7 @@
 - 一种独立的方式（用户定，[ADR-0010](adr/0010-staged-through-agy.md)）：命令行自己跑 `summarize --staged`，经 Antigravity 命令行 `agy` 调模型，不经任何 Agent 应用。主对话分单元，每个单元一个对话同时写，程序检查后只把问题发回原对话改，最后主对话写全局的部分。做法见 [staged-design.md](staged-design.md)。
 - 模型只有看图一个工具，不运行命令，读不了视频文件夹以外的文件（自定义 agent 加钩子）；外壳约 2,900 token。
 - 总结页的「模型」是第一稿和主对话的，默认 `gemini-3.8-flash-high`；「修改轮」另选，默认 `gemini-3.8-flash-medium`；两个都能选「自定义…」手填。列表来自 `agy models`；思考强度含在模型名里。这种方式不收「对总结的要求」，总结页上不显示那个输入框（用户定）。
-- 只能用自带的「标准」模板：选了别的模板时这种方式不可用，并写明原因。合集总结和学习提纲不能用这种方式。
+- 分阶段不读模板，用自己的规则（[staged-design.md](staged-design.md)「步骤」）；选了别的模板时这种方式不可用，并写明原因。合集总结和学习提纲不能用这种方式。
 - 只在找得到 `agy` 时可选（`winget install Google.AntigravityCLI`，用 Antigravity 桌面版的登录）。停止任务会结束命令行和它启动的 agy；再生成一次接着跑没跑完的部分。
 
 ### 分阶段接哪些通道

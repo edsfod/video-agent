@@ -31,6 +31,6 @@ pi、Hermes、DeepSeek Harness 的命令行能不能限制工具、接续对话�
 
 ## 影响
 
-- 只能用自带的「标准」模板（[ADR-0008](0008-one-template.md)）；合集总结和学习提纲不能用这种方式。
+- 分阶段用自己的规则，不读模板（[ADR-0015](0015-staged-only.md)）；选了别的模板时不让用这种方式。合集总结和学习提纲不能用这种方式。
 - 要装 `agy`，并用 Antigravity 桌面版的登录。
 - 写得多，花得也多：用量见 [staged-design.md](../staged-design.md)「代价」。

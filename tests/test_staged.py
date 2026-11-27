@@ -439,3 +439,13 @@ def test_what_the_model_copies_from_the_prompt_is_taken_out_of_the_body():
   own = staged.clean('## 正文\n\n- **S1** 公式 `=1+MOD(INT(NOW()*86400/A$30), 3)` [AI 未核对]，图上 【AI 未核对】\n')
   marked, count = staged.mark_unchecked(own)
   assert count == 0 and marked.count('AI 未核对') == 2 and '`=1+MOD(INT(NOW()*86400/A$30), 3)`（AI 未核对）' in marked
+
+
+def test_each_step_gets_its_sections_of_the_staged_rules():
+  from importlib import resources
+
+  assert '## 四、单元树' in staged.rules('W') and '## 八、前置部分' not in staged.rules('W')
+  assert staged.rules('M3').startswith('## 七、') and '## 八、前置部分' in staged.rules('M3')
+  text = resources.files('video_agent').joinpath('prompts/staged.md').read_text('utf-8')
+  sections = set(re.findall(r'^## ([一二三四五六七八九十])、', text, re.MULTILINE))
+  assert sections == set(''.join(staged.RULES.values()))  # every section goes to some step, and each step's exist
