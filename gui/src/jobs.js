@@ -34,12 +34,14 @@ function startJob(id, command, args, { cwd, stdin, env, title = id, prompt, onCl
   }));
   shared.jobs.set(id, { child, title });
   if (stdin !== undefined) child.stdin.end(stdin);
-  const relay = (stream) => (chunk) => {
-    const text = chunk.toString('utf8');
+  const relay = (stream) => (text) => {
     log.write(text);
     shared.queue.output(id, stream, text);
     send('job:output', { id, stream, text });
   };
+  // Decoded across chunks: a character split between two chunks would otherwise come out as two U+FFFD.
+  child.stdout.setEncoding('utf8');
+  child.stderr.setEncoding('utf8');
   child.stdout.on('data', relay('stdout'));
   child.stderr.on('data', relay('stderr'));
   child.on('error', (error) => {

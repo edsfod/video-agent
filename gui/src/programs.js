@@ -223,8 +223,10 @@ function runToEnd(command, args, stdin) {
     child.stdin.end(stdin ?? '');
     let out = '';
     let err = '';
-    child.stdout.on('data', (chunk) => (out += chunk.toString('utf8')));
-    child.stderr.on('data', (chunk) => (err += chunk.toString('utf8')));
+    child.stdout.setEncoding('utf8'); // as in startJob (jobs.js)
+    child.stderr.setEncoding('utf8');
+    child.stdout.on('data', (text) => (out += text));
+    child.stderr.on('data', (text) => (err += text));
     child.on('error', (error) => resolve({ code: -1, out, err: error.message }));
     child.on('close', (code) => resolve({ code, out, err }));
   });
