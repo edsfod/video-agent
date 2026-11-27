@@ -15,9 +15,10 @@ on:
 # makes its test video with the LGPL FFmpeg instead of installing another one.
 #
 # Each job runs only when the push changed something it tests (.github/scripts/changed-jobs.sh): a change to the
-# documentation runs none, the window's code runs gui, the CLI's code runs cli and gui, and packaging or updater
-# changes run installer. A skipped job counts as passed, so fast-forwarding main after a passed run still means every
-# needed job passed.
+# documentation runs none of them, the window's code runs gui, the CLI's code runs cli and gui, and packaging or
+# updater changes run installer. The changes job itself checks on every push that the numbers and links the
+# documentation and comments cite exist (scripts/verify_doc_references.py). A skipped job counts as passed, so
+# fast-forwarding main after a passed run still means every needed job passed.
 concurrency:
   group: test-${{ github.ref }}
   cancel-in-progress: true
@@ -47,6 +48,7 @@ jobs:
           SHA: ${{ github.sha }}
           REPO: ${{ github.repository }}
           GH_TOKEN: ${{ github.token }}
+      - run: python3 scripts/verify_doc_references.py
 
   cli:
     needs: changes

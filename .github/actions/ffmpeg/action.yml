@@ -2,7 +2,7 @@ name: LGPL FFmpeg
 description: >-
   Puts the LGPL FFmpeg the installer ships in build/ffmpeg: from the cache, from the verified prebuilt archive on
   GitHub Releases (packaging/ffmpeg/fetch.sh), or built by packaging/ffmpeg/build.sh in MSYS2 UCRT64 when build.sh's
-  non-comment commands change (docs/design/distribution.md). Expects the repository checked out. The cache key's "2"
+  non-comment commands change (docs/distribution-design.md). Expects the repository checked out. The cache key's "2"
   marks trees that carry build/ffmpeg/BUILD-HASH, which fetch.sh needs to take a tree.
 
 runs:

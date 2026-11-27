@@ -2,7 +2,7 @@
 folder with its transcript, pictures and every summary version, and its place in collections; the video file itself,
 with the subtitle and info files yt-dlp saved beside it, only when this program downloaded it (into the workspace's
 下载 folder or a followed collection's download folder). A video the user added from their own disk stays where it is
-(docs/requirements.md).
+(MGT-02).
 """
 
 import json

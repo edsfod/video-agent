@@ -1,5 +1,5 @@
 """Versions of a written file (a video's 总结.md, a collection's overview or study guide): a new text never replaces the
-current one unless asked, and nothing is lost when it does (docs/design/summary.md).
+current one unless asked, and nothing is lost when it does (docs/summary-design.md).
 
 The current text stays at its usual name, which every link and route reads. Each other version is a file beside it,
 `总结 (2026-10-28 15-30-12).md`, in the same folder so its relative links to frames still work. `<name>.versions.json`

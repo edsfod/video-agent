@@ -1,4 +1,4 @@
-"""Which of a video's pictures a summary is given, as a tree of sets (docs/design/summary.md). The root is every
+"""Which of a video's pictures a summary is given, as a tree of sets (docs/summary-design.md). The root is every
 picture processing took (representative frames, screen pages or slides) and those captured later outside a chat AI's
 rounds; each node is a set derived from its parent by dropping and adding pictures, made when a chat AI's round drops
 pictures it does not need or links ones it chose, or when the user drops or restores one by hand. The pictures stay

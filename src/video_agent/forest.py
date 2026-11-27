@@ -1,4 +1,4 @@
-"""主线与单元, built from 详细内容 (docs/design/summary.md).
+"""主线与单元, built from 详细内容 (docs/summary-design.md).
 
 The model makes each judgment once, in 详细内容: what each proposition says (its line is the claim in one sentence, the
 particulars in lines under it), how propositions relate (`← P1, P2` support, `反驳 P4`, `步骤 P39` a step of an event),

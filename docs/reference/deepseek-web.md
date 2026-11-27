@@ -34,3 +34,7 @@
 - 查运行中的任务卡在哪：`node -e "process._debugProcess(<主进程 PID>)"` 在 127.0.0.1:9229 打开主进程的调试器，在里面用 `process.mainModule.require('electron')` 和 `webContents.executeJavaScript` 查，查完关掉调试器。
 - 页面脚本（fe-static.deepseek.com/chat/static/main.*.js，一行约 1.6 MB）可以下载下来按字符串搜条件。
 - 服务器上的对话历史可以用脚本取回，用来核对回答是否完整、每一轮改了多少。
+
+## 尚未查明
+
+- 换一个新对话能不能避开限流。

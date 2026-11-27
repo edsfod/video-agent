@@ -1,6 +1,6 @@
 """Writes that readers never see half done, and one writer at a time per video folder.
 
-Which runs may overlap (see docs/design/app.md): `process` and `summarize` change shared files in a
+Which runs may overlap (see docs/app-design.md): `process` and `summarize` change shared files in a
 video's folder (`transcript.*`, `summary-context.md`, `manifest.json`, `总结.md`), so each holds the folder's lock while
 it runs and a second one fails at once instead of waiting. `frame` writes only its own new file and takes no lock, so
 an Agent may call it while a summary is being written. Readers (`show`, the GUI) take no lock; every shared file is

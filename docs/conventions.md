@@ -4,9 +4,7 @@
 
 ## 文档
 
-- 文档地图和体系见 [README](README.md)。规格（需求、设计、参考、运行、约定）原地改写，只保留当前版本；过程留在 git 历史和对话里。
-- 一条事实只有一个归宿：写全在一篇里，别处引用。决定写在它所属的那篇里，带日期；推翻时直接改，不留旧说法，不另设决策日志和交接文档。
-- 怎么写见 [writing.md](writing.md)。
+- 文档怎么分、放哪、怎么更新见 [doc-rules.md](doc-rules.md)；文档地图见 [README](README.md)；文字怎么写见 [writing.md](writing.md)。
 - 改动的文档和改动放在同一个提交里。
 - 现状以代码为准：文档和代码冲突时先查代码。
 - 用户亲手写的原始材料放 `docs/user-notes/`（不进 git，仓库是公开的），文件名英文、带日期 `主题-YYYY-MM-DD.md`，配图放 `docs/user-notes/images/<笔记名>/`；只追加，不改写用户的文字。
@@ -25,8 +23,8 @@
 
 ## 提交
 
-- 直接推 `main`：提交只带本次改的路径（`git commit -m "…" -- <路径…>`，新文件先 `git add`），然后 `git pull --rebase`，再推。`pre-push` 钩子跑这次改动涉及的快速检查（见 [development.md](development.md)）；不等 GitHub 的运行结果，它发现的问题接着修。发布前例外：要等。
-- 提交信息说改了什么；正文写要点和整理后的决定，带日期。
+- 提交只带本次改的路径（`git commit -m "…" -- <路径…>`，新文件先 `git add`）。推送时 `pre-push` 钩子跑这次改动涉及的检查（见 [development.md](development.md)）；推送后不等 GitHub 的运行结果，它发现的问题接着修。发布前要等。
+- 提交信息说改了什么；正文写要点和整理后的决定，用户做的决定写「（用户 YYYY-MM-DD 定）」。
 
 ## 给人看的文字
 

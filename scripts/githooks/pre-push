@@ -1,6 +1,7 @@
 #!/bin/sh
-# 推送前在本机跑这次改动涉及的检查，通过了就直接推到 main，不等 GitHub 的测试（docs/development.md）：
-# 命令行的 ruff、格式、mypy、pytest 和入口；GUI 的类型检查和不开窗口的单元测试；改了打包相关的文件时再打包一次命令行工具。
+# 推送前在本机跑这次改动涉及的检查（docs/development.md）：
+# 文档引用检查（每次都跑）；命令行的 ruff、格式、mypy、pytest 和入口；GUI 的类型检查和不开窗口的单元测试；
+# 改了打包相关的文件时再打包一次命令行工具。
 # 开窗口的端到端测试（e2e、update），和会安装程序、改真实 PATH 或已安装程序的测试（update-install、installer-path）只在 GitHub 上跑。失败时以非 0 退出，挡下这次推送。
 cd "$(git rev-parse --show-toplevel)" || exit 1
 fail() { echo "pre-push：$1 失败，不推送" >&2; exit 1; }
@@ -20,12 +21,22 @@ if [ "$new" = no ]; then
   exit 0
 fi
 
-# 和 GitHub 一样按改动挑检查（.github/scripts/changed-jobs.sh）：只改文档什么都不跑。
+# 需求、PRM、ADR、不变量编号和相对链接都要存在。只用 Python 自带的模块，一秒内跑完，只改文档时也跑。
+uv run --no-project --quiet python scripts/verify_doc_references.py >/dev/null 2>&1 ||
+  fail "文档引用检查（uv run --no-project python scripts/verify_doc_references.py 看详情）"
+
+# 和 GitHub 一样按改动挑其余的检查（.github/scripts/changed-jobs.sh）：只改文档时不再跑别的。基准和 GitHub 不同：
+# 远端已有的分支只看这次新推的提交（远端那一版之后的），之前的提交推送时已经查过；新分支、远端那一版不在本机或
+# 不是这次的祖先（强制推送）时，看整个分支相对 main 的改动。GitHub 总看整个分支，因为后一次推送会取消前一次运行。
 cli=false gui=false installer=false packaging=no
 while read -r local_ref local_sha remote_ref remote_sha; do
   case "$remote_ref" in refs/heads/*) ;; *) continue ;; esac   # 标签不另外检查
   [ "$local_sha" = "$zero" ] && continue                       # 删分支
-  base=$(git merge-base "$local_sha" origin/main 2>/dev/null)
+  if [ "$remote_sha" != "$zero" ] && git merge-base --is-ancestor "$remote_sha" "$local_sha" 2>/dev/null; then
+    base=$remote_sha
+  else
+    base=$(git merge-base "$local_sha" origin/main 2>/dev/null)
+  fi
   picked=$(bash .github/scripts/changed-jobs.sh "$base" "$local_sha" 2>/dev/null) || picked='cli=true gui=true installer=true'
   case "$picked" in *cli=true*) cli=true ;; esac
   case "$picked" in *gui=true*) gui=true ;; esac
@@ -67,4 +78,4 @@ if [ "$packaging" = yes ]; then
     *) fail "准备并校验 LGPL FFmpeg（bash packaging/ffmpeg/fetch.sh 看详情）" ;;
   esac
 fi
-echo "pre-push：本地检查通过，可以推到 main；GitHub 上的测试随后跑，不用等。" >&2
+echo "pre-push：本地检查通过。" >&2

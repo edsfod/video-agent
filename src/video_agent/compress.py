@@ -2,7 +2,7 @@
 
 Measured on 5-minute clips of a Yanhekt lecture, at the source resolution, against the clip with VMAF: a 1080p screen
 recording (H.264, 835 kbps) came to 20 % of its size at 10 frames a second with SVT-AV1 at CRF 40 (VMAF 96.8), and a
-classroom camera recording (H.264, 1.75 Mbps) to 59 % at CRF 40 (VMAF 94.7); see docs/design/processing.md. A
+classroom camera recording (H.264, 1.75 Mbps) to 59 % at CRF 40 (VMAF 94.7); see docs/adr/0006-svt-av1.md. A
 video already in AV1, HEVC or VP9, such as Bilibili's, is left alone: it gains little. The new file is written beside
 the old one and replaces it only when its duration matches and it is smaller; the path stays the same, so the video's
 processing folder and summaries still belong to it. A tag in the file marks it, so compressing again does nothing.

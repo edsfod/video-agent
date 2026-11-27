@@ -1,6 +1,6 @@
 // DeepSeek's web chat (chat.deepseek.com) in a window of its own, used through the official page rather than a
 // reverse-engineered API: the user signs in there, and ask() attaches the files, types the text, sends it and reads
-// the answer (docs/design/routes.md). Nothing here knows about videos, so it serves any round of text and files;
+// the answer (docs/routes-design.md). Nothing here knows about videos, so it serves any round of text and files;
 // another chat site would be a module with the same ask().
 //
 // What the page offers, as found on 2026-10-29: a textarea; toggle buttons (.ds-toggle-button, selected with
