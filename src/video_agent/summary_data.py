@@ -287,8 +287,8 @@ def markdown(data):
       text or '',
     )
 
-  def listed(lines):
-    return [f'- {refs(line)}' for line in lines] or ['无']
+  def listed(lines):  # an item the model left empty (「预设：」) is left out
+    return [f'- {refs(line)}' for line in lines if not re.fullmatch(r'[^：:]{1,12}[：:]\s*', line)] or ['无']
 
   out = [f'# {data["title"]}', '', data['video'], '', '## 元信息', '', *listed(data['meta'])]
   if data['notices']:
@@ -360,13 +360,16 @@ def item_line(item, depth, refs=lambda text: text):
 def unit_markdown(unit, data, name, refs):
   out = [f'### {unit["title"]} `{clock(unit["start"])}`–`{clock(unit["end"])}`', '']
   out += [f'{unit["kind"]} · {where(unit, data, name)}', '']
+  seen = set()  # a picture used for several items shows under the first of them
   for depth, item in tree(unit):
     pad = '  ' * depth
     out.append(item_line(item, depth, refs))
     for line in item['details'].splitlines():
       out.append(f'{pad}  {refs(line)}' if line.strip() else '')
     for picture in item['pictures']:
-      out.append(f'{pad}  - [{picture["caption"] or "画面"}](<{picture["path"]}>)')
+      if picture['path'] not in seen:
+        seen.add(picture['path'])
+        out.append(f'{pad}  - [{picture["caption"] or "画面"}](<{picture["path"]}>)')
   return out
 
 

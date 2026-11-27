@@ -235,13 +235,17 @@ def mark_unchecked(text, checked=()):
 
 def clean(text):
   """A unit's draft without what the model copied from the prompt into 「## 正文」: a 「子行：」 label at the start of a
-  sub-line, and 「画面读出（上半）：」, whose position is for the program's crops and belongs in 「## 画面」."""
+  sub-line, and 「画面读出（上半）：」, whose position is for the program's crops and belongs in 「## 画面」; an 「AI 未核对」
+  the model wrote in brackets takes the program's form, so the program does not mark it a second time."""
   head, heading, tail = text.partition('## 正文')
   if not heading:
     return text
   rest = re.split(r'(?m)^(?=## )', tail, maxsplit=1)
   rest[0] = re.sub(r'(?m)^(\s+- )子行\s*[:：]\s*', r'\1', rest[0])
   rest[0] = re.sub(r'(?:画面)?读出\s*[（(][^）)\n]{1,20}[）)]\s*[:：]\s*', '画面：', rest[0])
+  rest[0] = re.sub(
+    r'\s*[\[【]AI 未核对[\]】]', UNCHECKED, rest[0]
+  )  # the model's own mark, written as the program writes it
   return head + heading + ''.join(rest)
 
 

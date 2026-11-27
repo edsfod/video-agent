@@ -238,6 +238,12 @@ def test_the_markdown_shows_the_mainlines_then_every_unit_whole():
     in text
   )
   assert '论证 · 旁支，从「例子」岔出' in text
+  # an item left empty is left out; a picture used for two items shows once
+  data['meta'] = ['类型：测试', '预设：']
+  shown = {'path': 'a.jpg', 'caption': '表格'}
+  data['units'][0]['items'][0]['pictures'] = data['units'][0]['items'][1]['pictures'] = [shown]
+  text = summary_data.markdown(data)
+  assert '- 预设：' not in text and text.count('(<a.jpg>)') == 1
 
 
 def test_a_turns_usage_is_the_sum_of_its_calls_failed_ones_included():
@@ -368,3 +374,7 @@ def test_what_the_model_copies_from_the_prompt_is_taken_out_of_the_body():
     staged.clean(text)
     == '## 正文\n\n- **S1** 甲\n  - 乙\n  - 画面：丙\n\n## 画面\n\n- #1 用在 S1：图。读出（上半）：丁\n'
   )
+  # the model's own bracketed mark takes the program's form and is not marked again
+  own = staged.clean('## 正文\n\n- **S1** 公式 `=1+MOD(INT(NOW()*86400/A$30), 3)` [AI 未核对]，图上 【AI 未核对】\n')
+  marked, count = staged.mark_unchecked(own)
+  assert count == 0 and marked.count('AI 未核对') == 2 and '`=1+MOD(INT(NOW()*86400/A$30), 3)`（AI 未核对）' in marked
