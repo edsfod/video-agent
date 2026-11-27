@@ -25,12 +25,18 @@ fi
 uv run --no-project --quiet python scripts/verify_doc_references.py >/dev/null 2>&1 ||
   fail "文档引用检查（uv run --no-project python scripts/verify_doc_references.py 看详情）"
 
-# 和 GitHub 一样按改动挑其余的检查（.github/scripts/changed-jobs.sh）：只改文档时不再跑别的。
+# 和 GitHub 一样按改动挑其余的检查（.github/scripts/changed-jobs.sh）：只改文档时不再跑别的。基准和 GitHub 不同：
+# 远端已有的分支只看这次新推的提交（远端那一版之后的），之前的提交推送时已经查过；新分支、远端那一版不在本机或
+# 不是这次的祖先（强制推送）时，看整个分支相对 main 的改动。GitHub 总看整个分支，因为后一次推送会取消前一次运行。
 cli=false gui=false installer=false packaging=no
 while read -r local_ref local_sha remote_ref remote_sha; do
   case "$remote_ref" in refs/heads/*) ;; *) continue ;; esac   # 标签不另外检查
   [ "$local_sha" = "$zero" ] && continue                       # 删分支
-  base=$(git merge-base "$local_sha" origin/main 2>/dev/null)
+  if [ "$remote_sha" != "$zero" ] && git merge-base --is-ancestor "$remote_sha" "$local_sha" 2>/dev/null; then
+    base=$remote_sha
+  else
+    base=$(git merge-base "$local_sha" origin/main 2>/dev/null)
+  fi
   picked=$(bash .github/scripts/changed-jobs.sh "$base" "$local_sha" 2>/dev/null) || picked='cli=true gui=true installer=true'
   case "$picked" in *cli=true*) cli=true ;; esac
   case "$picked" in *gui=true*) gui=true ;; esac
