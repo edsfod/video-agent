@@ -250,7 +250,7 @@ function gatherPointPictures(article) {
   }
 }
 
-// A unit in the mainline outline links to the unit in the time outline (summary_data.py), which opens; a number in
+// A unit in the argument outline links to the unit in the points outline (summary_data.py), which opens; a number in
 // 主线与单元 links to its entry in 详细内容 (forest.py): the bold number there, after that heading.
 function showEntry(article, number) {
   const unit = /^U\d{6}$/.test(number) ? article.querySelector(`details#${number}`) : null;

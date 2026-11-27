@@ -275,9 +275,10 @@ def whole_problems(units, attach_text, lines, edges):
 
 
 def markdown(data):
-  """The summary as Markdown (ADR-0013): the front, then two outlines over the same units. The time outline lists every
-  unit in time order by its head, folded, and opens to the whole unit; the mainline outline lists each mainline's units
-  by what they give it, each linking to its unit in the time outline. Opened all, either outline gives every unit."""
+  """The summary as Markdown (ADR-0013): the front, then two outlines over the same units. The points outline says what
+  was said: each mainline under its topic, its units in time order, each folded to its head and opening to the whole
+  unit, a side right after the unit it branches from. The argument outline says why and how: the units as a forest
+  along their support, each linking to its unit in the points outline. Every unit is in both."""
   units = {u['id']: u for u in data['units']}
 
   def name(uid):
@@ -299,24 +300,20 @@ def markdown(data):
   out = [f'# {data["title"]}', '', data['video'], '', '## 元信息', '', *listed(data['meta'])]
   if data['notices']:
     out += ['', '### 需留意', '', *listed(data['notices'])]
-  out += ['', '## 概要', '', refs(data['abstract']), '', '## 时间提纲', '']
-  for unit in data['units']:
-    side = ' · 旁支' if 'side' in (unit['attach'] or {}) else ''
-    shown = re.sub(r'`([^`]+)`', r'<code>\1</code>', html.escape(refs(head(unit)), quote=False))
-    summary = (
-      f'<details id="{unit["id"]}"><summary><strong>{html.escape(unit["title"])}</strong> '
-      f'<code>{clock(unit["start"])}–{clock(unit["end"])}</code>{side}：{shown}</summary>'
-    )
-    out += [
-      summary,
-      '',
-      *unit_markdown(unit, data, name, refs),
-      '',
-      '</details>',
-      '',
-    ]
-  out += ['## 主线提纲', '', *mainlines(data, link, refs), '## 需确认', '', *listed(data['unsure'])]
+  out += ['', '## 概要', '', refs(data['abstract']), '', '## 要点提纲', '', *points(data, name, link, refs)]
+  out += ['## 论证提纲', '', *argument(data, link, refs), '## 需确认', '', *listed(data['unsure'])]
   return '\n'.join(out).rstrip() + '\n'
+
+
+def folded(unit, data, name, refs, note=''):
+  """A unit folded to its title, time and head, opening to the whole unit."""
+  shown = re.sub(r'`([^`]+)`', r'<code>\1</code>', html.escape(refs(head(unit)), quote=False))
+  summary = (
+    f'<details id="{unit["id"]}"><summary><strong>{html.escape(unit["title"])}</strong> '
+    f'<code>{clock(unit["start"])}–{clock(unit["end"])}</code>{f" · {html.escape(note)}" if note else ""}：{shown}'
+    '</summary>'
+  )
+  return [summary, '', *unit_markdown(unit, data, name, refs), '', '</details>', '']
 
 
 def head(unit):
@@ -392,97 +389,100 @@ def unit_markdown(unit, data, name, refs):
   return out
 
 
-def mainlines(data, name, refs):
-  """The mainline outline: each mainline under its topic; one with conclusions grows from them along the edges, one
-  without lists its units in time order; sides under what they hang on. A unit is expanded once, where it is
-  highest."""
+def points(data, name, link, refs):
+  """The points outline: each mainline under its topic and conclusions, its units in time order; a side right after
+  what it hangs on (a unit, the first of two, or the end of its mainline)."""
   units = {u['id']: u for u in data['units']}
-  start = lambda uid: units[uid]['start'] if uid in units else 0
-  into = {}
-  for edge in data['edges']:
-    into.setdefault(edge['to'], []).append(edge)
-  member = {u['id']: (u['attach'] or {}).get('line') for u in data['units']}
+  start = lambda uid: units[uid]['start']
   hanging = {}
   for u in data['units']:
     side = (u['attach'] or {}).get('side') or {}
-    key = (
-      ('unit', side['unit'])
-      if 'unit' in side
-      else ('unit', side['between'][0])
-      if 'between' in side
-      else ('line', side.get('line'))
-    )
-    if side:
-      hanging.setdefault(key, []).append(u['id'])
+    if 'unit' in side:
+      hanging.setdefault(('unit', side['unit']), []).append((u['id'], f'旁支，从{name(side["unit"])}岔出'))
+    elif 'between' in side:
+      a, b = side['between']
+      hanging.setdefault(('unit', a), []).append((u['id'], f'旁支，插在{name(a)}和{name(b)}之间'))
+    elif 'line' in side:
+      hanging.setdefault(('line', side['line']), []).append((u['id'], '旁支，给整条主线做背景'))
   out, shown = [], set()
 
-  def sides(key, depth):
-    for uid in sorted(hanging.get(key, []), key=start):
-      if uid in shown:
-        continue
-      shown.add(uid)
-      out.append(f'{"  " * depth}- 旁支 {name(uid)}：{refs(head(units[uid]))}')
-      sides(('unit', uid), depth + 1)
+  def put(uid, note=''):
+    if uid in shown or uid not in units:
+      return
+    shown.add(uid)
+    out.extend(folded(units[uid], data, name, refs, note))
+    for side, why in sorted(hanging.get(('unit', uid), []), key=lambda s: start(s[0])):
+      put(side, why)
 
-  def grow(target, line, depth, level):
+  members = {}
+  for u in data['units']:
+    if line := (u['attach'] or {}).get('line'):
+      members.setdefault(line, []).append(u['id'])
+  first = lambda line: min([start(uid) for uid in members.get(line['id'], [])] or [float('inf')])
+  for line in sorted(data['lines'], key=first):
+    out += [f'### {refs(line["topic"]) or line["id"]}', '']
+    for c in line['conclusions']:
+      if 'unit' in c and c['unit'] in units:
+        out.append(f'- 主结论（{link(c["unit"])}）：{refs(head(units[c["unit"]]))}')
+      elif 'id' in c:
+        out.append(f'- 主结论（总结者归纳）：{refs(c["text"])}')
+    out += [''] if line['conclusions'] else []
+    for uid in sorted(members.get(line['id'], []), key=start):
+      put(uid)
+    for side, why in sorted(hanging.get(('line', line['id']), []), key=lambda s: start(s[0])):
+      put(side, why)
+  if left := [u['id'] for u in data['units'] if u['id'] not in shown]:
+    out += ['### 归属有问题的单元', '']
+    for uid in left:
+      put(uid)
+  return out
+
+
+def argument(data, link, refs):
+  """The argument outline: the units as a forest along 支撑, each unit under what it supports, with what it gives and
+  where that comes from; a unit no other supports and that supports nothing stands alone. A unit is expanded once,
+  where it is first reached."""
+  units = {u['id']: u for u in data['units']}
+  start = lambda uid: units[uid]['start'] if uid in units else 0
+  conclusions = {c['id']: c['text'] for line in data['lines'] for c in line['conclusions'] if 'id' in c}
+  support = [e for e in data['edges'] if e['kind'] == '支撑' and e['from'] in units]
+  support = [e for e in support if e['to'] in units or e['to'] in conclusions]
+  into, supports = {}, set()
+  for edge in support:
+    into.setdefault(edge['to'], []).append(edge)
+    supports.add(edge['from'])
+  out, shown = [], set()
+
+  def grow(target, depth):
     for edge in sorted(into.get(target, []), key=lambda e: start(e['from'])):
       uid, pad = edge['from'], '  ' * depth
-      if member.get(uid) != line['id']:
-        out.append(f'{pad}- {edge["kind"]}：{name(uid)}（另一条主线）')
-        continue
-      if uid in shown or level.get(uid, depth) < depth:
-        out.append(f'{pad}- {edge["kind"]}：{name(uid)}（在别处展开）')
+      if uid in shown:
+        out.append(f'{pad}- 支撑：{link(uid)}（在别处展开）')
         continue
       shown.add(uid)
       source = edge['source'] or {}
       said = (
-        f'（讲者 `{clock(source["time"])}`：{source["said"]}）'
+        f'（讲者 `{clock(source["time"])}`：{refs(source["said"])}）'
         if source.get('by') == '讲者'
         else '（总结者归纳）'
         if source
         else ''
       )
-      out.append(f'{pad}- {edge["kind"]}：{name(uid)}：{refs(edge["contribution"] or head(units[uid]))}{said}')
-      sides(('unit', uid), depth + 1)
-      grow(uid, line, depth + 1, level)
+      out.append(f'{pad}- 支撑：{link(uid)}：{refs(edge["contribution"] or head(units[uid]))}{said}')
+      grow(uid, depth + 1)
 
-  def levels(ends, line):
-    level, frontier, depth = {}, list(ends), 1
-    while frontier:
-      nxt = []
-      for target in frontier:
-        for edge in into.get(target, []):
-          if member.get(edge['from']) == line['id'] and edge['from'] not in level:
-            level[edge['from']] = depth
-            nxt.append(edge['from'])
-      frontier, depth = nxt, depth + 1
-    return level
-
-  first = lambda line: min([start(uid) for uid, l in member.items() if l == line['id']] or [0])
-  for line in sorted(data['lines'], key=first):
-    out += [f'### {refs(line["topic"]) or line["id"]}', '']
-    for c in line['conclusions']:
-      if 'unit' in c and c['unit'] in units:
-        end = c['unit']
-        shown.add(end)
-        out.append(f'- 主结论 {name(end)}：{refs(head(units[end]))}')
-        sides(('unit', end), 1)
-      elif 'id' in c:
-        end = c['id']
-        out.append(f'- 主结论（总结者归纳）：{refs(c["text"])}')
-      else:
-        continue
-      grow(end, line, 1, levels([end], line))
-    rest = [uid for uid, l in member.items() if l == line['id'] and uid not in shown]
-    for uid in sorted(rest, key=start):
+  roots = [uid for uid in units if uid not in supports] + [k for k in conclusions if k in into]
+  order = lambda r: start(r) if r in units else min(start(e['from']) for e in into[r])
+  for root in sorted(roots, key=order):
+    if root in units:
+      shown.add(root)
+      out.append(f'- {link(root)}：{refs(head(units[root]))}')
+    else:
+      out.append(f'- 总结者归纳：{refs(conclusions[root])}')
+    grow(root, 1)
+  for uid, unit in units.items():  # units that only support each other in a ring
+    if uid not in shown:
       shown.add(uid)
-      note = '（没有接到主结论）' if line['conclusions'] else ''
-      out.append(f'- {name(uid)}：{refs(head(units[uid]))}{note}')
-      sides(('unit', uid), 1)
-    sides(('line', line['id']), 0)
-    out.append('')
-  if left := [uid for uid in units if uid not in shown]:
-    out += ['### 归属有问题的单元', ''] + [
-      f'- {name(uid)}：{refs(head(units[uid]))}' for uid in sorted(left, key=start)
-    ]
-  return out
+      out.append(f'- {link(uid)}：{refs(head(unit))}')
+      grow(uid, 1)
+  return out + ['']

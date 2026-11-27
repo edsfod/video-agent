@@ -178,7 +178,7 @@ def test_the_whole_holds_together_or_says_where_not():
   assert problems == ['U000200 属于 L1，但沿推进边走不到它的主结论：漏了推进边，或归属写错了']
 
 
-def test_the_markdown_has_a_time_outline_of_folded_units_and_a_mainline_outline_linking_to_them():
+def test_the_markdown_has_a_points_outline_of_folded_units_and_an_argument_outline_linking_to_them():
   item = lambda key, parent, edge, time, text: {
     'id': key,
     'parent': parent,
@@ -229,17 +229,20 @@ def test_the_markdown_has_a_time_outline_of_folded_units_and_a_mainline_outline_
   }
   text = summary_data.markdown(data)
   assert '讲者用「例子」论证了「结论」S0。' in text
+  # what was said: the mainline under its topic, its units in time order, a side right after the unit it branches from
   assert (
-    '## 主线提纲\n\n### 为什么 Z\n\n- 主结论 [「结论」](#U000100)：所以 Z。\n'
-    '  - 支撑：[「例子」](#U000000)：Y 是 Z 的一例（总结者归纳）\n    - 旁支 [「题外话」](#U000200)：顺便一提。\n'
-    in text
+    '## 要点提纲\n\n### 为什么 Z\n\n- 主结论（[「结论」](#U000100)）：所以 Z。\n\n'
+    '<details id="U000000"><summary><strong>例子</strong> <code>00:00:00–00:01:00</code>：例子说明 Y。</summary>\n\n'
+    '论证 · 主线：为什么 Z\n\n- **S0** `事实` `00:00:30` 例子说明 Y。\n  - **S1** 步骤 · `事实` `00:00:10` 先做 A。\n\n</details>\n\n'
+    '<details id="U000200"><summary><strong>题外话</strong> <code>00:02:00–00:03:00</code> · 旁支，从「例子」岔出：'
+    '顺便一提。</summary>\n\n论证 · 旁支，从「例子」岔出\n' in text
   )
+  assert text.index('id="U000200"') < text.index('id="U000100"')
+  # why: the units as a forest along their support; one in no support stands alone
   assert (
-    '## 时间提纲\n\n<details id="U000000"><summary><strong>例子</strong> <code>00:00:00–00:01:00</code>：例子说明 Y。</summary>\n\n'
-    '论证 · 主线：为什么 Z\n\n- **S0** `事实` `00:00:30` 例子说明 Y。\n  - **S1** 步骤 · `事实` `00:00:10` 先做 A。\n\n</details>\n'
-    in text
+    '## 论证提纲\n\n- [「结论」](#U000100)：所以 Z。\n  - 支撑：[「例子」](#U000000)：Y 是 Z 的一例（总结者归纳）\n'
+    '- [「题外话」](#U000200)：顺便一提。\n' in text
   )
-  assert '论证 · 旁支，从「例子」岔出' in text and '<code>00:02:00–00:03:00</code> · 旁支：顺便一提。</summary>' in text
   # an item left empty is left out; a picture used for two items shows once
   data['meta'] = ['类型：测试', '预设：']
   shown = {'path': 'a.jpg', 'caption': '表格'}
@@ -348,8 +351,9 @@ def test_a_whole_run_writes_each_unit_in_its_own_conversation_and_saves_the_toke
   text = target.read_text(encoding='utf-8')
   assert '- **S0** `事实` `00:00:01`' in text and '- **S0** `事实` `00:00:05`' in text
   assert (
-    '- 主结论 [「图表」](#U000004)：后半段换成' in text
-    and '  - 铺垫：[「开场」](#U000000)：先说明后面的画面是合成的（总结者归纳）' in text
+    '- 主结论（[「图表」](#U000004)）：后半段换成' in text
+    and '## 论证提纲\n\n- [「开场」](#U000000)：开场时' in text
+    and '\n- [「图表」](#U000004)：后半段换成' in text
   )
   assert '讲者用「图表」演示了测试图。' in text
   data = json.loads((run.dir / 'summary.json').read_text(encoding='utf-8'))
