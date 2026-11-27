@@ -75,6 +75,8 @@ function fakeModel() {
     // The model list (video-agent models), which costs no tokens.
     if (request.method === 'GET') return response.end(JSON.stringify({ data: [{ id: 'fake-model' }, { id: 'chosen-model' }] }));
     let body = '';
+    // Decoded across chunks: a character split between two chunks would otherwise come out as two U+FFFD.
+    request.setEncoding('utf8');
     request.on('data', (chunk) => (body += chunk));
     request.on('end', () => {
       requests.push(JSON.parse(body));
@@ -91,6 +93,7 @@ function fakeDeepSeekApi() {
   const messages = [];
   const server = http.createServer((request, response) => {
     let body = '';
+    request.setEncoding('utf8'); // as in fakeModel
     request.on('data', (chunk) => (body += chunk));
     request.on('end', () => {
       const refuse = request.url.includes('refuse');
