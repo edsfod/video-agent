@@ -314,6 +314,130 @@ export interface Inspected {
   streams: Record<string, unknown>[];
 }
 
+export interface ItemPicture {
+  path: string;
+  caption: string;
+}
+
+export interface Item {
+  id: string;
+  parent: string | null;
+  edge: '支撑' | '反驳' | '步骤' | '展开' | null;
+  time: number | null;
+  labels: string[];
+  text: string;
+  details: string;
+  pictures: ItemPicture[];
+}
+
+export interface Side {
+  unit?: string;
+  between?: string[];
+  line?: string;
+}
+
+export interface Attach {
+  line?: string;
+  side?: Side;
+}
+
+export interface Unit {
+  id: string;
+  start: number;
+  end: number | number;
+  title: string;
+  kind: string;
+  attach: Attach | null;
+  items: Item[];
+}
+
+export interface Conclusion {
+  unit?: string;
+  id?: string;
+  text?: string;
+}
+
+export interface Line {
+  id: string;
+  topic: string;
+  conclusions: Conclusion[];
+}
+
+export interface EdgeSource {
+  by: '讲者' | '总结者归纳';
+  time?: number;
+  said?: string;
+}
+
+export interface Edge {
+  from: string;
+  to: string;
+  kind: '支撑' | '铺垫' | '续';
+  source: EdgeSource | null;
+  contribution: string;
+}
+
+export interface SummaryData {
+  format: number;
+  title: string;
+  video: string;
+  meta: string[];
+  notices: string[];
+  abstract: string;
+  unsure: string[];
+  units: Unit[];
+  lines: Line[];
+  edges: Edge[];
+  digest?: string;
+}
+
+export interface PointRow {
+  unit: string;
+  depth: number;
+  side: 'unit' | 'between' | 'line' | null;
+  conclusion: boolean;
+}
+
+export interface PointGroup {
+  line: string | null;
+  topic: string;
+  rows: PointRow[];
+}
+
+export interface ArgumentRow {
+  unit: string | null;
+  text: string;
+  depth: number;
+  kind: '支撑' | '铺垫' | null;
+  contribution: string;
+  source: EdgeSource | null;
+  repeat: boolean;
+}
+
+export interface Placed {
+  item: string;
+  depth: number;
+}
+
+export interface UnitView {
+  points: Placed[];
+  argument: Placed[];
+  points_more: string[];
+  argument_more: string[];
+}
+
+export interface View {
+  points: PointGroup[];
+  argument: ArgumentRow[];
+  units: Record<string, UnitView>;
+}
+
+/** `outlines --json`: a summary's data and its two outlines. */
+export interface Outlines {
+  data: SummaryData;
+  view: View;
+}
+
 /** What each command prints; a command that prints several lines gives the type of one line. */
 export interface CliOutputs {
   tools: Tools;
@@ -330,4 +454,5 @@ export interface CliOutputs {
   collection: Collection | Collection[] | Saved;
   models: string[];
   delete: Deleted[];
+  outlines: Outlines;
 }

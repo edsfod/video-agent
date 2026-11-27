@@ -355,6 +355,138 @@ class Inspected(TypedDict):
 
 
 # What each command prints. A command that prints several lines lists the types a line may have.
+# ---- a summary as data (summary_data.py, ADR-0014) and its two outlines --------------------------------------------
+
+
+class ItemPicture(TypedDict):
+  path: str
+  caption: str
+
+
+class Item(TypedDict):
+  id: str  # S0 is the unit's head
+  parent: str | None
+  edge: Literal['支撑', '反驳', '步骤', '展开'] | None
+  time: int | None
+  labels: list[str]
+  text: str
+  details: str
+  pictures: list[ItemPicture]
+
+
+class Side(TypedDict):
+  unit: NotRequired[str]  # branches off a unit
+  between: NotRequired[list[str]]  # between two units
+  line: NotRequired[str]  # background for a whole mainline
+
+
+class Attach(TypedDict):
+  line: NotRequired[str]
+  side: NotRequired[Side]
+
+
+class Unit(TypedDict):
+  id: str
+  start: int
+  end: int | float  # the last unit ends where the video does
+  title: str
+  kind: str
+  attach: Attach | None
+  items: list[Item]
+
+
+class Conclusion(TypedDict):
+  unit: NotRequired[str]  # the unit whose head it is
+  id: NotRequired[str]  # K1…: drawn by the summarizer
+  text: NotRequired[str]
+
+
+class Line(TypedDict):
+  id: str
+  topic: str
+  conclusions: list[Conclusion]
+
+
+class EdgeSource(TypedDict):
+  by: Literal['讲者', '总结者归纳']
+  time: NotRequired[int]
+  said: NotRequired[str]
+
+
+Edge = TypedDict(
+  'Edge',
+  {
+    'from': str,
+    'to': str,
+    'kind': Literal['支撑', '铺垫', '续'],
+    'source': EdgeSource | None,
+    'contribution': str,
+  },
+)
+
+
+class SummaryData(TypedDict):
+  format: int
+  title: str
+  video: str
+  meta: list[str]
+  notices: list[str]
+  abstract: str
+  unsure: list[str]
+  units: list[Unit]
+  lines: list[Line]
+  edges: list[Edge]
+  digest: NotRequired[str]  # of the 总结.md written from it, when kept with a version
+
+
+class PointRow(TypedDict):
+  unit: str
+  depth: int
+  side: Literal['unit', 'between', 'line'] | None
+  conclusion: bool
+
+
+class PointGroup(TypedDict):
+  line: str | None  # None: the units whose attachment does not hold
+  topic: str
+  rows: list[PointRow]
+
+
+class ArgumentRow(TypedDict):
+  unit: str | None  # None: a conclusion the summarizer drew, in `text`
+  text: str
+  depth: int
+  kind: Literal['支撑', '铺垫'] | None  # the edge to the row above; None for a root
+  contribution: str
+  source: EdgeSource | None
+  repeat: bool  # reached again: expanded where it was first reached
+
+
+class Placed(TypedDict):
+  item: str
+  depth: int
+
+
+class UnitView(TypedDict):
+  points: list[Placed]  # the items as the unit opens from the points outline
+  argument: list[Placed]  # and from the argument outline
+  points_more: list[str]  # the items one level down the points outline shows (展开)
+  argument_more: list[str]  # and the argument outline (支撑, 反驳, 步骤)
+
+
+class View(TypedDict):
+  points: list[PointGroup]
+  argument: list[ArgumentRow]
+  units: dict[str, UnitView]
+
+
+class Outlines(TypedDict):
+  """`outlines --json`: a summary's data and its two outlines."""
+
+  data: SummaryData
+  view: View
+
+
 OUTPUTS: dict[str, Any] = {
   'tools': Tools,
   'config': Config,
@@ -370,6 +502,7 @@ OUTPUTS: dict[str, Any] = {
   'collection': Collection | list[Collection] | Saved,
   'models': list[str],
   'delete': list[Deleted],
+  'outlines': Outlines,
 }
 
 CHECK = False  # set by the tests: every printed value is checked against its type

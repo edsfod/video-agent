@@ -913,7 +913,7 @@ def test_ffmpeg_lists_take_pictures_given_relative_to_the_working_folder(tmp_pat
     + [str(tmp_path / 'in' / 'p-%03d.jpg')],
     check=True,
   )
-  monkeypatch.chdir(tmp_path)  # a workspace given as a relative path, as `-o notes/…` does
+  monkeypatch.chdir(tmp_path)  # a workspace given as a relative path (`-o some/folder`)
   found = media.sheets([Path('in') / f'p-{n:03d}.jpg' for n in range(1, 6)], 2, Path('out') / 'sheets')
   assert len(found) == 2
   # and the grey thumbnails that tell which screen pages to merge, which give nothing when they fail

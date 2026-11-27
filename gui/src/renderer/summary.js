@@ -6,6 +6,7 @@ import { ACTIVE, addTask, logAppend, sameVideo } from './task-panel.js';
 import { STANDARD_TEMPLATE, chosenTemplate } from './templates.js';
 import { when } from './updates.js';
 import { refresh } from './video-list.js';
+import { renderOutlines } from './summary-view.js';
 import { pictureSetLabel, showImage } from './video-view.js';
 
 const ROUTE_NOTES = {
@@ -199,24 +200,41 @@ export async function renderSummary(video) {
   renderVersions(list);
   const version = state.version;
   const shown = (version && list.versions.find((entry) => entry.file === version.file)?.path) || info.summary;
+  const banner = () =>
+    state.version &&
+    article.prepend(element('p', { className: 'version-banner', textContent: '正在看另一个版本；点「设为当前」才会换掉现在的总结。' }));
+  // A text written from data (the staged route) is drawn from the data: two outlines and units that open
+  // (summary-view.js); any other is its Markdown.
+  const entry = (version && list.versions.find((item) => item.file === version.file)) || list.current;
+  if (entry?.data) {
+    const found = await window.va.cliJson(['outlines', entry.data, '--json']);
+    if (!failed(found)) {
+      renderOutlines(article, found, (href) => openTarget(info, href));
+      banner();
+      return;
+    }
+  }
   const text = await window.va.read(shown);
   article.innerHTML = markdown(text || '');
-  if (state.version) {
-    article.prepend(element('p', { className: 'version-banner', textContent: '正在看另一个版本；点「设为当前」才会换掉现在的总结。' }));
-  }
+  banner();
   gatherPointPictures(article);
   for (const link of article.querySelectorAll('a[href]')) {
-    const href = link.getAttribute('href');
-    link.onclick = (event) => {
+    const href = link.getAttribute('href') || '';
+    /** @type {HTMLAnchorElement} */ (link).onclick = (event) => {
       event.preventDefault();
       if (href.startsWith('#')) return showEntry(article, href.slice(1));
-      if (/^https?:/.test(href)) return window.va.external(href);
-      const target = decodeURIComponent(href.replace(/^<|>$/g, ''));
-      const file = /^[a-z]:/i.test(target) ? target.replace(/\//g, '\\') : joinPath(info.folder, target);
-      if (/\.(jpe?g|png)$/i.test(file)) showImage(file, target);
-      else window.va.open(file);
+      openTarget(info, href);
     };
   }
+}
+
+// A link in a summary: a web page, a picture (shown in the app), or a file of the video's folder or an absolute one.
+function openTarget(info, href) {
+  if (/^https?:/.test(href)) return window.va.external(href);
+  const target = decodeURIComponent(href.replace(/^<|>$/g, ''));
+  const file = /^[a-z]:/i.test(target) ? target.replace(/\//g, '\\') : joinPath(info.folder, target);
+  if (/\.(jpe?g|png)$/i.test(file)) showImage(file, target);
+  else window.va.open(file);
 }
 
 // The pictures forest.py puts at the end of a point in 要点, each after ' · ', shown under the point as small chips. Only

@@ -18,6 +18,7 @@ from . import (
   settings,
   staged,
   staged_agy,
+  summary_data,
   summary_review,
   templates,
   transcript,
@@ -488,6 +489,12 @@ def build_parser():
     help='the workspace passed to process (default: video-agent-output)',
   )
 
+  outlining = commands.add_parser(
+    'outlines', help="print a summary's data and its two outlines (the points and the argument) as JSON"
+  )
+  outlining.add_argument('data', type=Path, help='the data beside a summary (总结.json; versions --json gives it)')
+  outlining.add_argument('--json', action='store_true', help='print JSON (the only output)')
+
   removing = commands.add_parser(
     'delete',
     help='delete videos from the workspace: their folders (transcript, pictures, every summary) and their place in '
@@ -535,6 +542,7 @@ def build_parser():
     grouping: _collection,
     fixing: _fix,
     show: _show,
+    outlining: _outlines,
     removing: _delete,
     rules: _template,
   }
@@ -605,6 +613,12 @@ def _delete(args) -> int:
   for entry in done:
     kept = '，视频文件留着（不是本程序下载的）' if entry['video_kept'] else f'，删了 {len(entry["files"])} 个文件'
     print(f'{entry["video"]}：删了 {len(entry["folders"])} 个处理文件夹{kept}')
+  return 0
+
+
+def _outlines(args) -> int:
+  data = json.loads(Path(args.data).read_text(encoding='utf-8'))
+  _emit({'data': data, 'view': summary_data.view(data)}, contract.Outlines)
   return 0
 
 

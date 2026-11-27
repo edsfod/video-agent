@@ -263,6 +263,14 @@ video-agent show VIDEO [-o WORKSPACE]
 
 以 JSON 打印一个视频的处理文件夹的情况，什么都不改：时长、是否处理过、清单、总结、材料和字幕的路径、字幕改正、补截的画面、视频旁边找到的字幕文件、压缩状态，以及是不是本程序下载的（`downloaded`）。桌面程序读它。
 
+### `outlines`
+
+```powershell
+video-agent outlines DATA --json
+```
+
+以 JSON 打印一份总结的数据（分阶段写的总结旁边的 `总结.json`，`versions --json` 的 `data` 给出路径）和由它排出的两个提纲：要点提纲（每条主线一组，单元按时间，旁支挂在它岔出的单元下）、论证提纲（单元按支撑和铺垫排成森林），以及每个单元从两个提纲点开时条目的顺序。桌面程序的总结页读它。
+
 ### `delete`
 
 ```powershell

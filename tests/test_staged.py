@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from video_agent import staged, staged_agy, summary_data, versions
+from video_agent import cli, staged, staged_agy, summary_data, versions
 from video_agent.evidence import SUMMARY_NAME
 from video_agent.processor import process_video
 
@@ -178,8 +178,8 @@ def test_the_whole_holds_together_or_says_where_not():
   assert problems == ['U000200 属于 L1，但沿推进边走不到它的主结论：漏了推进边，或归属写错了']
 
 
-def test_the_markdown_has_a_points_outline_of_folded_units_and_an_argument_outline_linking_to_them():
-  item = lambda key, parent, edge, time, text: {
+def _item(key, parent, edge, time, text):
+  return {
     'id': key,
     'parent': parent,
     'edge': edge,
@@ -189,7 +189,10 @@ def test_the_markdown_has_a_points_outline_of_folded_units_and_an_argument_outli
     'details': '',
     'pictures': [],
   }
-  unit = lambda uid, start, title, attach, items: {
+
+
+def _unit(uid, start, title, attach, items):
+  return {
     'id': uid,
     'start': start,
     'end': start + 60,
@@ -198,25 +201,39 @@ def test_the_markdown_has_a_points_outline_of_folded_units_and_an_argument_outli
     'attach': attach,
     'items': items,
   }
-  data = {
+
+
+def _data():
+  head = lambda text, time: _item('S0', None, None, time, text)
+  return {
+    'format': 1,
     'title': '标题',
     'video': '视频：x',
-    'meta': ['类型：测试'],
+    'meta': ['类型：测试', '预设：'],
     'notices': [],
     'abstract': '讲者用 U000000 论证了 U000100.S0。',
     'unsure': [],
     'units': [
-      unit(
+      _unit(
         'U000000',
         0,
         '例子',
         {'line': 'L1'},
-        [item('S0', None, None, 30, '例子说明 Y。'), item('S1', 'S0', '步骤', 10, '先做 A。')],
+        [
+          head('例子说明 Y。', 30),
+          _item('S1', 'S0', '展开', 5, '例子的背景。'),
+          _item('S2', 'S0', '步骤', 10, '先做 A。'),
+          _item('S3', 'S2', '支撑', 12, '做 A 的理由。'),
+        ],
       ),
-      unit('U000100', 60, '结论', {'line': 'L1'}, [item('S0', None, None, 70, '所以 Z。')]),
-      unit('U000200', 120, '题外话', {'side': {'unit': 'U000000'}}, [item('S0', None, None, 125, '顺便一提。')]),
+      _unit('U000100', 60, '结论', {'line': 'L1'}, [head('所以 Z。', 70)]),
+      _unit('U000200', 120, '题外话', {'side': {'unit': 'U000000'}}, [head('顺便一提。', 125)]),
+      _unit('U000300', 180, '插话', {'side': {'between': ['U000000', 'U000100']}}, [head('插一句。', 185)]),
+      _unit('U000400', 240, '问题', {'line': 'L1'}, [head('问题是 Q。', 245)]),
     ],
-    'lines': [{'id': 'L1', 'topic': '为什么 Z', 'conclusions': [{'unit': 'U000100'}]}],
+    'lines': [
+      {'id': 'L1', 'topic': '为什么 Z', 'conclusions': [{'unit': 'U000100'}, {'id': 'K1', 'text': '归纳的 W。'}]}
+    ],
     'edges': [
       {
         'from': 'U000000',
@@ -224,31 +241,63 @@ def test_the_markdown_has_a_points_outline_of_folded_units_and_an_argument_outli
         'kind': '支撑',
         'source': {'by': '总结者归纳'},
         'contribution': 'Y 是 Z 的一例',
-      }
+      },
+      {'from': 'U000400', 'to': 'U000000', 'kind': '铺垫', 'source': None, 'contribution': 'Q 引出例子'},
+      {'from': 'U000100', 'to': 'K1', 'kind': '支撑', 'source': None, 'contribution': ''},
     ],
   }
-  text = summary_data.markdown(data)
-  assert '讲者用「例子」论证了「结论」S0。' in text
-  # what was said: the mainline under its topic, its units in time order, a side right after the unit it branches from
-  assert (
-    '## 要点提纲\n\n### 为什么 Z\n\n- 主结论（[「结论」](#U000100)）：所以 Z。\n\n'
-    '<details id="U000000"><summary><strong>例子</strong> <code>00:00:00–00:01:00</code>：例子说明 Y。</summary>\n\n'
-    '论证 · 主线：为什么 Z\n\n- **S0** `事实` `00:00:30` 例子说明 Y。\n  - **S1** 步骤 · `事实` `00:00:10` 先做 A。\n\n</details>\n\n'
-    '<details id="U000200"><summary><strong>题外话</strong> <code>00:02:00–00:03:00</code> · 旁支，从「例子」岔出：'
-    '顺便一提。</summary>\n\n论证 · 旁支，从「例子」岔出\n' in text
-  )
-  assert text.index('id="U000200"') < text.index('id="U000100"')
-  # why: the units as a forest along their support; one in no support stands alone
-  assert (
-    '## 论证提纲\n\n- [「结论」](#U000100)：所以 Z。\n  - 支撑：[「例子」](#U000000)：Y 是 Z 的一例（总结者归纳）\n'
-    '- [「题外话」](#U000200)：顺便一提。\n' in text
-  )
-  # an item left empty is left out; a picture used for two items shows once
-  data['meta'] = ['类型：测试', '预设：']
+
+
+def test_the_points_outline_lists_each_mainline_in_time_with_sides_where_they_hang():
+  view = summary_data.view(_data())
+  rows = [(r['unit'], r['depth'], r['side'], r['conclusion']) for r in view['points'][0]['rows']]
+  # a unit's own side under it; a side between two units in its place in time; the conclusion marked on its unit
+  assert rows == [
+    ('U000000', 0, None, False),
+    ('U000200', 1, 'unit', False),
+    ('U000100', 0, None, True),
+    ('U000300', 0, 'between', False),
+    ('U000400', 0, None, False),
+  ]
+  # why: a forest along 支撑 and 铺垫; the summarizer's conclusion is a root here and nowhere in the points outline
+  shown = [(r['unit'] or r['text'], r['depth'], r['kind']) for r in view['argument']]
+  assert shown == [  # roots in time: one drawn by the summarizer at the time of the first unit under it
+    ('归纳的 W。', 0, None),
+    ('U000100', 1, '支撑'),
+    ('U000000', 2, '支撑'),
+    ('U000400', 3, '铺垫'),
+    ('U000200', 0, None),
+    ('U000300', 0, None),
+  ]
+  # opened, a unit is its tree; under one parent the edges the outline is about come first
+  order = lambda outline: [(p['item'], p['depth']) for p in view['units']['U000000'][outline]]
+  assert order('points') == [('S0', 0), ('S1', 1), ('S2', 1), ('S3', 2)]
+  assert order('argument') == [('S0', 0), ('S2', 1), ('S3', 2), ('S1', 1)]
+  assert view['units']['U000000']['points_more'] == ['S1'] and view['units']['U000000']['argument_more'] == ['S2']
+
+
+def test_the_markdown_has_both_outlines_as_lists_of_links_and_every_unit_folded():
+  data = _data()
   shown = {'path': 'a.jpg', 'caption': '表格'}
   data['units'][0]['items'][0]['pictures'] = data['units'][0]['items'][1]['pictures'] = [shown]
   text = summary_data.markdown(data)
-  assert '- 预设：' not in text and text.count('(<a.jpg>)') == 1
+  assert '讲者用「例子」论证了「结论」S0。' in text and '- 预设：' not in text
+  assert (
+    '## 要点提纲\n\n### 为什么 Z\n\n- `00:00:00` [「例子」](#U000000)：例子说明 Y。\n'
+    '  - `00:02:00` [「题外话」](#U000200)【旁支】：顺便一提。\n- `00:01:00` [「结论」](#U000100)【主结论】：所以 Z。\n'
+    '- `00:03:00` [「插话」](#U000300)【旁支，插在两个单元之间】：插一句。\n' in text
+  )
+  assert '归纳的 W' not in text.split('## 论证提纲')[0]
+  assert (
+    '## 论证提纲\n\n- 总结者归纳：归纳的 W。\n  - 支撑：[「结论」](#U000100)：所以 Z。\n'
+    '    - 支撑：[「例子」](#U000000)：Y 是 Z 的一例（总结者归纳）\n      - 铺垫：[「问题」](#U000400)：Q 引出例子\n'
+    '- [「题外话」](#U000200)：顺便一提。\n- [「插话」](#U000300)：插一句。\n' in text
+  )
+  assert (
+    '## 单元\n\n<details id="U000000"><summary><strong>例子</strong> <code>00:00:00–00:01:00</code>：例子说明 Y。</summary>'
+    '\n\n论证 · 主线：为什么 Z\n\n- **S0** `事实` `00:00:30` 例子说明 Y。\n' in text
+  )
+  assert text.count('(<a.jpg>)') == 1  # a picture used for two items shows once
 
 
 def test_a_turns_usage_is_the_sum_of_its_calls_failed_ones_included():
@@ -341,17 +390,17 @@ class Channel:
     }
 
 
-def test_a_whole_run_writes_each_unit_in_its_own_conversation_and_saves_the_tokens(processed, monkeypatch):
+def test_a_whole_run_writes_each_unit_in_its_own_conversation_and_saves_the_tokens(processed, monkeypatch, capsys):
   video, workspace = processed
   channel = Channel()
-  monkeypatch.chdir(workspace.parent)  # the workspace given as a relative path, as `-o video-agent-output` is
+  monkeypatch.chdir(workspace.parent)  # the workspace given as a relative path (`-o some/folder`)
   run = staged.Run(video, Path(workspace.name), status=lambda message: None, channel=channel)
   target = run.go()
   assert target.name == SUMMARY_NAME
   text = target.read_text(encoding='utf-8')
   assert '- **S0** `事实` `00:00:01`' in text and '- **S0** `事实` `00:00:05`' in text
   assert (
-    '- 主结论（[「图表」](#U000004)）：后半段换成' in text
+    '- `00:00:04` [「图表」](#U000004)【主结论】：后半段换成' in text
     and '## 论证提纲\n\n- [「图表」](#U000004)：后半段换成' in text
     and '  - 铺垫：[「开场」](#U000000)：先说明后面的画面是合成的（总结者归纳）' in text  # setup is drawn too
   )
@@ -366,6 +415,11 @@ def test_a_whole_run_writes_each_unit_in_its_own_conversation_and_saves_the_toke
   current = versions.listing(target)['current']
   assert current['source'] == 'fake 分阶段'
   assert current['data'] and versions.data_of(target)['units'][0]['id'] == 'U000000'  # the data is kept with it
+  # the app draws the outlines from `outlines --json`, checked against its type (conftest)
+  capsys.readouterr()
+  assert cli.main(['outlines', current['data'], '--json']) == 0
+  drawn = json.loads(capsys.readouterr().out)
+  assert drawn['data']['units'][0]['id'] == 'U000000' and drawn['view']['points'][0]['line'] == 'L1'
   assert current['usage'] == {'calls': 5, 'input': 50, 'cache_read': 25, 'output': 15, 'thinking': 10}
   assert (run.dir / 'imported').is_file()
   # a run that is done is not gone on with: the next one starts afresh
