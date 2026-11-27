@@ -256,11 +256,18 @@ def test_a_turns_usage_is_the_sum_of_its_calls_failed_ones_included():
     staged_agy.parse(json.dumps({'event': 'result', 'result': {'status': 'ERROR', 'error': 'quota'}}))
 
 
-def test_the_hook_lets_agy_read_only_inside_the_workspace(tmp_path):
+def test_the_hook_lets_agy_read_only_inside_the_workspace(tmp_path, monkeypatch):
   call = lambda name, path: io.StringIO(json.dumps({'toolCall': {'name': name, 'args': {'AbsolutePath': str(path)}}}))
   assert staged_agy.gate(tmp_path, call('view_file', tmp_path / 'a.jpg'))['decision'] == 'allow'
   assert staged_agy.gate(tmp_path, call('view_file', tmp_path.parent / 'b.jpg'))['decision'] == 'deny'
   assert staged_agy.gate(tmp_path, call('run_command', tmp_path / 'a.jpg'))['decision'] == 'deny'
+  # the hook runs in the workspace, so the root it is given is absolute even for a workspace named relatively
+  folder = tmp_path / 'video'
+  folder.mkdir()
+  monkeypatch.chdir(tmp_path)
+  staged_agy.prepare(Path('video'))
+  hooks = (folder / '.agents' / 'hooks.json').read_text(encoding='utf-8')
+  assert json.dumps(str(folder))[1:-1] in hooks
 
 
 SAYS = {

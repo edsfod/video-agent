@@ -61,7 +61,7 @@ def _gate_command(root):
 
 def prepare(workspace):
   """The custom agent and the hook in `workspace/.agents/`, where agy run in `workspace` finds them."""
-  workspace = Path(workspace)
+  workspace = Path(workspace).resolve()  # the hook runs in the workspace, where a relative root would point elsewhere
   hooks = {
     'reader-gate': {
       'PreToolUse': [
