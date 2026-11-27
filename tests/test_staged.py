@@ -352,8 +352,8 @@ def test_a_whole_run_writes_each_unit_in_its_own_conversation_and_saves_the_toke
   assert '- **S0** `事实` `00:00:01`' in text and '- **S0** `事实` `00:00:05`' in text
   assert (
     '- 主结论（[「图表」](#U000004)）：后半段换成' in text
-    and '## 论证提纲\n\n- [「开场」](#U000000)：开场时' in text
-    and '\n- [「图表」](#U000004)：后半段换成' in text
+    and '## 论证提纲\n\n- [「图表」](#U000004)：后半段换成' in text
+    and '  - 铺垫：[「开场」](#U000000)：先说明后面的画面是合成的（总结者归纳）' in text  # setup is drawn too
   )
   assert '讲者用「图表」演示了测试图。' in text
   data = json.loads((run.dir / 'summary.json').read_text(encoding='utf-8'))

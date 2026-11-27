@@ -278,7 +278,7 @@ def markdown(data):
   """The summary as Markdown (ADR-0013): the front, then two outlines over the same units. The points outline says what
   was said: each mainline under its topic, its units in time order, each folded to its head and opening to the whole
   unit, a side right after the unit it branches from. The argument outline says why and how: the units as a forest
-  along their support, each linking to its unit in the points outline. Every unit is in both."""
+  along support and setup, each linking to its unit in the points outline. Every unit is in both."""
   units = {u['id']: u for u in data['units']}
 
   def name(uid):
@@ -439,13 +439,13 @@ def points(data, name, link, refs):
 
 
 def argument(data, link, refs):
-  """The argument outline: the units as a forest along 支撑, each unit under what it supports, with what it gives and
-  where that comes from; a unit no other supports and that supports nothing stands alone. A unit is expanded once,
-  where it is first reached."""
+  """The argument outline: the units as a forest along 支撑 and 铺垫 (why it holds, what to know first), each unit under
+  what it supports or sets up, with what it gives and where that comes from; a unit in neither stands alone. 续, the
+  speaker coming back to a point, is no reason and is left out. A unit is expanded once, where it is first reached."""
   units = {u['id']: u for u in data['units']}
   start = lambda uid: units[uid]['start'] if uid in units else 0
   conclusions = {c['id']: c['text'] for line in data['lines'] for c in line['conclusions'] if 'id' in c}
-  support = [e for e in data['edges'] if e['kind'] == '支撑' and e['from'] in units]
+  support = [e for e in data['edges'] if e['kind'] in ('支撑', '铺垫') and e['from'] in units]
   support = [e for e in support if e['to'] in units or e['to'] in conclusions]
   into, supports = {}, set()
   for edge in support:
@@ -457,7 +457,7 @@ def argument(data, link, refs):
     for edge in sorted(into.get(target, []), key=lambda e: start(e['from'])):
       uid, pad = edge['from'], '  ' * depth
       if uid in shown:
-        out.append(f'{pad}- 支撑：{link(uid)}（在别处展开）')
+        out.append(f'{pad}- {edge["kind"]}：{link(uid)}（在别处展开）')
         continue
       shown.add(uid)
       source = edge['source'] or {}
@@ -468,7 +468,7 @@ def argument(data, link, refs):
         if source
         else ''
       )
-      out.append(f'{pad}- 支撑：{link(uid)}：{refs(edge["contribution"] or head(units[uid]))}{said}')
+      out.append(f'{pad}- {edge["kind"]}：{link(uid)}：{refs(edge["contribution"] or head(units[uid]))}{said}')
       grow(uid, depth + 1)
 
   roots = [uid for uid in units if uid not in supports] + [k for k in conclusions if k in into]
