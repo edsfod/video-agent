@@ -13,3 +13,5 @@ notes/
 
 # 用户亲手写的原始材料，仓库公开，不提交
 docs/user-notes/
+# 理论模型：本地的连贯篇章，不公开
+docs/theory/
