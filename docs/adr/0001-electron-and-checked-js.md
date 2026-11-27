@@ -13,7 +13,7 @@
 ## 决策
 
 1. 用 Electron；终端用 xterm.js 和 node-pty（VS Code 在 Windows 上用的组合，经 ConPTY）。
-2. 代码写 JavaScript，不编译。`tsc` 借 JSDoc 检查主进程和页面的全部代码，开严格模式和空值检查（`npm run typecheck`）。
+2. 代码写 JavaScript，不编译（用户定）。`tsc` 借 JSDoc 检查主进程和页面的全部代码，开严格模式和空值检查（`npm run typecheck`）。
 
 ## 备选方案
 

@@ -12,7 +12,7 @@
 
 ## 决策
 
-1. 用户在桌面程序里登录网站：每个网站一个持久分区，打包后的程序开着 Electron 的 `enableCookieEncryption`，cookie 用 DPAPI 加密保存。
+1. 用户在桌面程序里登录网站（用户定）：每个网站一个持久分区，打包后的程序开着 Electron 的 `enableCookieEncryption`，cookie 用 DPAPI 加密保存。
 2. 每次下载时，主进程把该网站的 cookie 写成 Netscape 格式的临时文件，用 `download --cookies` 交给命令行；任务结束和程序启动时删掉。
 3. 命令行只接受 `--cookies FILE`，从不自己读浏览器。
 4. 「从浏览器导入…」是补充手段：经 yt-dlp 的 `--cookies-from-browser` 读已装的浏览器，或导入 cookies.txt。

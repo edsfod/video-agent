@@ -23,7 +23,7 @@
 
 ## 提交
 
-- 提交只带本次改的路径（`git commit -m "…" -- <路径…>`，新文件先 `git add`）。推送时 `pre-push` 钩子跑这次改动涉及的检查（见 [development.md](development.md)）。
+- 提交只带本次改的路径（`git commit -m "…" -- <路径…>`，新文件先 `git add`）。推送时 `pre-push` 钩子跑这次改动涉及的检查（见 [development.md](development.md)）；推送后不等 GitHub 的运行结果，它发现的问题接着修。发布前要等。
 - 提交信息说改了什么；正文写要点和整理后的决定，用户做的决定写「（用户 YYYY-MM-DD 定）」。
 
 ## 给人看的文字

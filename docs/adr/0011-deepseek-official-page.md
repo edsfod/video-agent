@@ -11,7 +11,7 @@
 
 ## 决策
 
-桌面程序在自己的窗口里像人一样用 chat.deepseek.com：用户在里面登录一次，登录状态存在它自己的会话里；程序附文件、输入、发送，读回答里的代码块。做法见 [routes-design.md](../routes-design.md)「DeepSeek 网页版」。
+桌面程序在自己的窗口里像人一样用 chat.deepseek.com，不用逆向的接口（用户定）：用户在里面登录一次，登录状态存在它自己的会话里；程序附文件、输入、发送，读回答里的代码块。做法见 [routes-design.md](../routes-design.md)「DeepSeek 网页版」。
 
 ## 备选方案
 

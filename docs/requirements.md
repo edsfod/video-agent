@@ -10,7 +10,7 @@
 
 ## 范围与不做什么
 
-- **适用**：只支持 Windows。
+- **适用**：只支持 Windows（用户定）。
 - **许可**：AGPL-3.0-or-later；安装包里的 FFmpeg 按 LGPL，每次发布附上源码。
 - **计划中**：总结文章，见 [roadmap.md](roadmap.md)。
 - **不做**：
@@ -132,7 +132,8 @@
 - **验收**：
   - `PRM-*` 各条在模板或程序里有落点（summary-requirements.md「写在哪里」一列）；
   - `test_the_checks_name_what_a_chat_ais_summary_leaves_out` 通过；
-  - `test_the_checks_ask_that_key_points_leave_nothing_out` 通过。
+  - `test_the_checks_ask_that_key_points_leave_nothing_out` 通过；
+  - 人工评审：办法待定（见「待定」）。上面几条只查格式和覆盖，查不出具体机制被概括成空话这类问题。
 
 ### SUM-02 几种写总结的方式写出同一种总结
 
@@ -333,6 +334,10 @@ API key 存在 Windows 凭据管理器里，任务日志从不记录 API key。
 - **验收**：
   - `test_config_saves_settings_and_key` 通过；
   - 端到端测试「logs record every job and never the API key」通过。
+
+## 待定
+
+- `SUM-01` 的人工评审办法：怎样判断一份总结能代替看视频。要能对照字幕逐段核查，并在不同的写法、模型之间比较。
 
 ## 已废弃编号
 

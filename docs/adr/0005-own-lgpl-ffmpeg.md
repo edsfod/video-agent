@@ -12,7 +12,7 @@
 
 ## 决策
 
-1. 用 `packaging/ffmpeg/build.sh` 按 LGPL 编译 FFmpeg：不开 `--enable-gpl`；所有原生的解码器、编码器、封装和滤镜都保留。具体的版本、依赖和编译选项见 [distribution-design.md](../distribution-design.md)「自带的 FFmpeg」。
+1. 用 `packaging/ffmpeg/build.sh` 按 LGPL 编译 FFmpeg（用户定）：不开 `--enable-gpl`；所有原生的解码器、编码器、封装和滤镜都保留（用户定）。具体的版本、依赖和编译选项见 [distribution-design.md](../distribution-design.md)「自带的 FFmpeg」。
 2. 每次发布附上 FFmpeg 和它的依赖的源码包，以及 `FFmpeg-BUILD.txt`。
 3. 用 pip 或 uv 安装命令行的人，用自己从 PyPI 取得的 `imageio-ffmpeg`，本项目不分发它。
 
