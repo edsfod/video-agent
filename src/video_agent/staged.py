@@ -298,6 +298,8 @@ class Run:
   left."""
 
   def __init__(self, video, workspace, *, model=None, fix_model=None, restart=False, status=print, channel=staged_agy):
+    # absolute: the paths in the prompts are opened by agy, which takes only absolute ones, from the video's folder
+    video, workspace = Path(video).resolve(), Path(workspace).resolve()
     self.video, info, self.asset, self.manifest = evidence.processed(video, workspace)
     self.workspace = Path(workspace)
     self.length = self.manifest.get('duration_s') or media.duration(info)

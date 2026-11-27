@@ -900,3 +900,21 @@ def test_an_agents_draft_is_checked_and_may_be_fixed_once_over_its_own_text(proc
   draft.write_text(first, encoding='utf-8')
   assert cli.main(command) == 0
   assert len(versions.listing(asset / '总结.md')['versions']) == 1 and draft.is_file()
+
+
+def test_ffmpeg_lists_take_pictures_given_relative_to_the_working_folder(tmp_path, monkeypatch):
+  import subprocess
+
+  from video_agent import media
+
+  (tmp_path / 'in').mkdir()
+  subprocess.run(
+    [media.tool('ffmpeg'), '-v', 'error', '-filter_complex', 'testsrc=s=160x90:r=1:d=5[v]', '-map', '[v]']
+    + [str(tmp_path / 'in' / 'p-%03d.jpg')],
+    check=True,
+  )
+  monkeypatch.chdir(tmp_path)  # a workspace given as a relative path, as `-o notes/…` does
+  found = media.sheets([Path('in') / f'p-{n:03d}.jpg' for n in range(1, 6)], 2, Path('out') / 'sheets')
+  assert len(found) == 2
+  # and the grey thumbnails that tell which screen pages to merge, which give nothing when they fail
+  assert len(media.thumbnails([{'path': Path('in') / 'p-001.jpg'}, {'path': Path('in') / 'p-002.jpg'}], 'out')) == 2

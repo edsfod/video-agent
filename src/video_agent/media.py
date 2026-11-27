@@ -370,7 +370,8 @@ def grey_frames(video, start, length):
 def thumbnails(pages, work_dir):
   """Small grey copies of the pages, or None when FFmpeg cannot make them (then nothing is merged)."""
   listing = Path(work_dir) / 'thumbs.txt'
-  listing.write_text(''.join(f"file '{page['path'].as_posix()}'\n" for page in pages), encoding='utf-8')
+  # concat reads a relative path against the listing's folder, not the working folder
+  listing.write_text(''.join(f"file '{Path(page['path']).resolve().as_posix()}'\n" for page in pages), encoding='utf-8')
   width, height = page_rules.THUMB
   command = [tool('ffmpeg'), '-v', 'error', '-f', 'concat', '-safe', '0', '-i', str(listing)]
   command += ['-vf', f'scale={width}:{height}:flags=area,format=gray', '-f', 'rawvideo', 'pipe:1']
@@ -468,7 +469,8 @@ def sheets(paths, side, output_dir, width=SHEET_WIDTH):
   output_dir = Path(output_dir)
   output_dir.mkdir(parents=True, exist_ok=True)
   listing = output_dir / 'sheets.txt'
-  listing.write_text(''.join(f"file '{Path(path).as_posix()}'\n" for path in paths), encoding='utf-8')
+  # concat reads a relative path against the listing's folder, not the working folder
+  listing.write_text(''.join(f"file '{Path(path).resolve().as_posix()}'\n" for path in paths), encoding='utf-8')
   tile = (width - 6 * (side + 1)) // side // 2 * 2
   graph = f'scale={tile}:-2,tile={side}x{side}:padding=6:margin=6:color=white'
   command = [tool('ffmpeg'), '-y', '-v', 'error', '-f', 'concat', '-safe', '0', '-i', str(listing)]

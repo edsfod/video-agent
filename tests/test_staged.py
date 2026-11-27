@@ -4,6 +4,7 @@ scripted channel."""
 import io
 import json
 import re
+from pathlib import Path
 
 import pytest
 
@@ -322,10 +323,11 @@ class Channel:
     }
 
 
-def test_a_whole_run_writes_each_unit_in_its_own_conversation_and_saves_the_tokens(processed):
+def test_a_whole_run_writes_each_unit_in_its_own_conversation_and_saves_the_tokens(processed, monkeypatch):
   video, workspace = processed
   channel = Channel()
-  run = staged.Run(video, workspace, status=lambda message: None, channel=channel)
+  monkeypatch.chdir(workspace.parent)  # the workspace given as a relative path, as `-o video-agent-output` is
+  run = staged.Run(video, Path(workspace.name), status=lambda message: None, channel=channel)
   target = run.go()
   assert target.name == SUMMARY_NAME
   text = target.read_text(encoding='utf-8')
@@ -348,6 +350,9 @@ def test_a_whole_run_writes_each_unit_in_its_own_conversation_and_saves_the_toke
   assert (run.dir / 'imported').is_file()
   # a run that is done is not gone on with: the next one starts afresh
   assert staged.Run(video, workspace, status=lambda message: None, channel=channel).dir != run.dir
+  # the pictures a unit is told to open have absolute paths, which agy needs
+  shown = re.findall(r'打开这些总图（每格左下角印着编号和时间）：(\S+?)。', channel.prompts[1][0])
+  assert shown and all(Path(path).is_absolute() for path in shown[0].split('、'))
 
 
 def test_what_the_model_copies_from_the_prompt_is_taken_out_of_the_body():
